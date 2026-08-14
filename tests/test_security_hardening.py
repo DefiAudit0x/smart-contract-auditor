@@ -9,13 +9,13 @@ import pytest
 
 from env_check import EnvChecker
 from github_loader import extract_repo_info
-from web_ui import _safe_report_path
 from security_utils import (
     extract_zip_safely,
     normalize_relative_member,
     validate_github_repository_url,
     validate_zip_infos,
 )
+from web_ui import _safe_report_path
 
 
 def test_github_url_accepts_only_canonical_https_repositories():

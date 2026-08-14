@@ -9,7 +9,6 @@ import zipfile
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlsplit
 
-
 MAX_ZIP_MEMBERS = 1000
 MAX_ZIP_UNCOMPRESSED_BYTES = 50 * 1024 * 1024
 _GITHUB_NAME = re.compile(r"^[A-Za-z0-9_.-]+$")
