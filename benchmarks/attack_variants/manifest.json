@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "description": "Executable attack variants that exercise distinct source patterns within already-covered vulnerability families.",
+  "variants": [
+    {
+      "name": "cross_function_reentrancy",
+      "source": "cross_function_reentrancy.sol",
+      "poc_file": "cross_function_reentrancy.t.sol",
+      "expected_detectors": ["Reentrancy (AST)"],
+      "rationale": "The attacker re-enters a second state-changing function during an unguarded withdrawal callback."
+    },
+    {
+      "name": "mutable_delegatecall_proxy",
+      "source": "mutable_delegatecall_proxy.sol",
+      "poc_file": "mutable_delegatecall_proxy.t.sol",
+      "expected_detectors": ["DELEGATECALL Usage (AST)", "Storage Collision (Delegatecall)"],
+      "rationale": "A caller-controlled implementation address executes delegatecall against structured proxy storage."
+    },
+    {
+      "name": "callback_flash_loan",
+      "source": "callback_flash_loan.sol",
+      "poc_file": "callback_flash_loan.t.sol",
+      "expected_detectors": ["Flash Loan Attack Vector", "Reentrancy (AST)"],
+      "rationale": "An unguarded flash-loan callback can re-enter the reserve-sensitive withdrawal path."
+    },
+    {
+      "name": "batch_dos_loop",
+      "source": "batch_dos_loop.sol",
+      "poc_file": "batch_dos_loop.t.sol",
+      "expected_detectors": ["Unbounded Loop (AST)"],
+      "rationale": "A caller-triggered distribution loop scales with an attacker-inflatable recipient list."
+    },
+    {
+      "name": "timestamp_claim_gate",
+      "source": "timestamp_claim_gate.sol",
+      "poc_file": "timestamp_claim_gate.t.sol",
+      "expected_detectors": ["block.timestamp Usage (AST)"],
+      "rationale": "A claim gate uses block.timestamp as a timing-sensitive authorization condition."
+    }
+  ]
+}

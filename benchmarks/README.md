@@ -31,7 +31,7 @@ Every `metadata.json` file uses this schema:
 | `expected_detectors` | Detector names that must appear for `vulnerable.sol`. |
 | `expected_clean` | Whether `fixed.sol` is expected to avoid every detector in `expected_detectors`. |
 
-The current benchmark covers reentrancy, delegatecall, selfdestruct, unrestricted minting, and `tx.origin` authentication. The expected detector names are taken directly from `analyzers/solidity_analyzer.py`.
+The current primary benchmark covers ten categories: reentrancy, delegatecall, selfdestruct, unrestricted minting, `tx.origin` authentication, flash loans, storage collision, unchecked transfers, unbounded loops, and timestamp-dependent gates. The expected detector names are taken directly from `analyzers/solidity_analyzer.py`. Supplementary safe controls live under `negative_controls/`, while attack variants live under `attack_variants/`; neither directory is discovered by the primary runner.
 
 ## Running the benchmark
 
@@ -44,6 +44,17 @@ pytest -q tests/test_benchmark.py
 ```
 
 The runner reports per-case true positives, false positives, and false negatives. For this benchmark, a true positive means an expected detector is present in the vulnerable contract, a false positive means an expected detector is present in the fixed contract, and a false negative means an expected detector is absent from the vulnerable contract. The metrics are scoped to the primary expected detectors in each metadata file; they do not represent full analyzer precision or recall across all Solidity vulnerabilities. The default command reports PoC execution as `Inconclusive` when Foundry is unavailable; `--require-poc` turns that unavailable runtime into a failing gate.
+
+The supplementary suites can be run with:
+
+```bash
+PYTHONPATH=. pytest -q tests/test_negative_controls.py tests/test_attack_variants.py tests/test_adversarial_comparator.py
+export PATH="$HOME/.foundry/bin:$PATH"
+PYTHONPATH=. python benchmarks/run_extended_benchmark.py --json-out extended-benchmark.json
+PYTHONPATH=. python benchmarks/run_llm_comparison.py --model gpt-5-mini --json-out llm-comparison.json
+```
+
+`run_extended_benchmark.py` reports control false-positive checks and attack-variant coverage without changing the primary benchmark denominator. `run_llm_comparison.py` is a separate structured-output experiment and records model, rationale, errors, and metrics; it is not used by the deterministic benchmark gate.
 
 ## Deterministic comparator
 
@@ -66,7 +77,7 @@ Each case includes a repository-owned `poc.t.sol` fixture. The PoC runner copies
 
 ## Metrics
 
-`verification/metrics.py` computes a machine-readable metrics object from the runner's case records. Detector metrics use the primary expected detectors only:
+`verification/metrics.py` computes a machine-readable metrics object from the runner's case records. It reports aggregate detector metrics and a `per_detector` breakdown. Detector metrics use the primary expected detectors only:
 
 | Metric | Definition |
 |---|---|

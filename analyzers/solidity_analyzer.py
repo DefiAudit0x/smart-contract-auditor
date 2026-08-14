@@ -285,14 +285,29 @@ class SolidityAnalyzer(LanguageAnalyzer):
         return findings
 
     def _check_public_mint(self, fname, code):
-        if has_pattern(code, r"function\s+mint\s*\(") and has_pattern(code, r"public\s+"):
+        """Detect externally visible mint functions without an authorization guard."""
+        pattern = re.compile(
+            r"function\s+mint\s*\([^)]*\)(?P<tail>[^{}]*)\{",
+            re.IGNORECASE | re.DOTALL,
+        )
+        for match in pattern.finditer(code):
+            tail = match.group("tail")
+            if not re.search(r"\b(public|external)\b", tail, re.IGNORECASE):
+                continue
+            body = code[match.end():match.end() + 1200]
+            if re.search(
+                r"\bonlyOwner\b|msg\.sender\s*==\s*owner|owner\s*==\s*msg\.sender",
+                tail + body,
+                re.IGNORECASE,
+            ):
+                continue
             return [Finding("Public Mint/Burn", "High", "Access Control",
                     fname, "", "mint() function is public — anyone can create tokens", "", 0,
                     "Add onlyOwner or specific permission")]
         return []
 
     def _check_storage_collision(self, fname, code):
-        if has_pattern(code, r"delegatecall") and has_pattern(code, r"struct|mapping\s*\("):
+        if has_pattern(code, r"\bdelegatecall\s*\(") and has_pattern(code, r"struct|mapping\s*\("):
             return [Finding("Storage Collision (Delegatecall)", "High", "Storage",
                     fname, "", "delegatecall with struct/mapping — slot collision risk", "", 0,
                     "Ensure layout matches the called contract")]

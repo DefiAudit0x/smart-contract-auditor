@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "description": "Safe Solidity controls used to measure detector false positives outside the positive ground-truth cases.",
+  "controls": [
+    {
+      "file": "SafeReentrancyPattern.sol",
+      "category": "reentrancy",
+      "expected_absent_detectors": ["Reentrancy (AST)"],
+      "rationale": "The value call is protected by a nonReentrant modifier."
+    },
+    {
+      "file": "SafeDelegatecallLayout.sol",
+      "category": "delegatecall",
+      "expected_absent_detectors": ["DELEGATECALL Usage (AST)", "Storage Collision (Delegatecall)"],
+      "rationale": "Structured storage exists without any delegatecall execution path."
+    },
+    {
+      "file": "SafeDestruction.sol",
+      "category": "selfdestruct",
+      "expected_absent_detectors": ["Selfdestruct"],
+      "rationale": "The contract has an ordinary close flag and no selfdestruct opcode."
+    },
+    {
+      "file": "OwnerMint.sol",
+      "category": "public_mint",
+      "expected_absent_detectors": ["Public Mint/Burn"],
+      "rationale": "The externally callable mint path enforces onlyOwner authorization."
+    },
+    {
+      "file": "MsgSenderAuth.sol",
+      "category": "tx_origin",
+      "expected_absent_detectors": ["tx.origin Auth (AST)"],
+      "rationale": "Authorization compares msg.sender and never reads tx.origin."
+    },
+    {
+      "file": "GuardedFlashLoan.sol",
+      "category": "flash_loan",
+      "expected_absent_detectors": ["Flash Loan Attack Vector"],
+      "rationale": "The callback-sensitive entry point is protected by nonReentrant."
+    },
+    {
+      "file": "NoDelegatecallStorageRisk.sol",
+      "category": "storage_collision",
+      "expected_absent_detectors": ["Storage Collision (Delegatecall)"],
+      "rationale": "The mapping and struct layout are present, but delegatecall is absent."
+    },
+    {
+      "file": "CheckedValueCall.sol",
+      "category": "unchecked_transfer",
+      "expected_absent_detectors": ["Unchecked Transfer"],
+      "rationale": "The low-level value call checks its success return value."
+    },
+    {
+      "file": "BoundedDistribution.sol",
+      "category": "unbounded_loop",
+      "expected_absent_detectors": ["Unbounded Loop (AST)"],
+      "rationale": "Distribution processes one explicitly selected recipient per call."
+    },
+    {
+      "file": "BlockNumberGate.sol",
+      "category": "timestamp",
+      "expected_absent_detectors": ["block.timestamp Usage (AST)"],
+      "rationale": "The timing gate uses block.number rather than block.timestamp."
+    }
+  ]
+}

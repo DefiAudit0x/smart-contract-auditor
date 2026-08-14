@@ -105,22 +105,25 @@ Copy `.env.example` to `.env` and fill in your values.
 
 ## Ground-Truth Benchmark
 
-The repository includes a deterministic five-case benchmark covering reentrancy, delegatecall, selfdestruct, unauthorised public minting, and `tx.origin` authentication. Each case pairs `vulnerable.sol` with `fixed.sol` and includes metadata, a comparator evidence path, a declared invariant, and a Foundry PoC fixture.
+The repository includes a deterministic ten-case benchmark covering reentrancy, delegatecall, selfdestruct, unauthorised public minting, `tx.origin` authentication, flash loans, storage collision, unchecked transfers, unbounded loops, and timestamp-dependent gates. Each case pairs `vulnerable.sol` with `fixed.sol` and includes metadata, a comparator evidence path, a declared invariant, and a Foundry PoC fixture. Supplementary negative controls, attack variants, and adversarial comparator fixtures are maintained separately.
 
 The latest run with Solidity `0.8.25` and Foundry `v1.7.1` reports:
 
 | Metric | Result |
 |---|---:|
-| Full Python suite | 252 passed |
-| True positives | 5 |
+| Full Python suite | 286 passed |
+| Primary benchmark cases | 10 |
+| True positives | 10 |
 | False positives | 0 |
 | False negatives | 0 |
 | Precision / Recall / F1 | 1.0 / 1.0 / 1.0 |
-| Comparator | 5 Confirmed |
-| Invariants | 5 vulnerable Violated; 5 fixed Satisfied |
-| PoCs | 5 Passed; 0 Failed; 0 Inconclusive |
+| Comparator | 10 Confirmed |
+| Invariants | 10 vulnerable Violated; 10 fixed Satisfied |
+| PoCs | 10 Passed; 0 Failed; 0 Inconclusive |
+| Negative controls | 10 cases; 11 absence checks; 0 FP |
+| Attack variants | 5 cases; 7 expected detectors; 5 PoCs Passed |
 
-These are corpus-specific regression measurements, not a guarantee of complete vulnerability coverage. See [`BENCHMARK_METHODOLOGY.md`](BENCHMARK_METHODOLOGY.md) and [`LIMITATIONS.md`](LIMITATIONS.md).
+These are corpus-specific regression measurements, not a guarantee of complete vulnerability coverage. The LLM comparison is separate from the deterministic gate and is documented in [`BENCHMARK_METHODOLOGY.md`](BENCHMARK_METHODOLOGY.md). See [`BENCHMARK_METHODOLOGY.md`](BENCHMARK_METHODOLOGY.md) and [`LIMITATIONS.md`](LIMITATIONS.md).
 
 To reproduce the strict benchmark locally:
 
@@ -128,6 +131,8 @@ To reproduce the strict benchmark locally:
 export PATH="$HOME/.foundry/bin:$PATH"
 PYTHONPATH=. python benchmarks/run_benchmark.py --require-poc
 python -m pytest -q
+PYTHONPATH=. pytest -q tests/test_negative_controls.py tests/test_attack_variants.py tests/test_adversarial_comparator.py
+PYTHONPATH=. python benchmarks/run_extended_benchmark.py --json-out extended-benchmark.json
 ```
 
 ## Reproducible Build and Security

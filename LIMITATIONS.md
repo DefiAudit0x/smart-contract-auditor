@@ -4,7 +4,7 @@ This project is an analysis and verification tool, not a substitute for a comple
 
 ## Detector coverage
 
-The current ground-truth benchmark contains five primary categories: reentrancy, delegatecall, selfdestruct, public mint, and `tx.origin` authentication. The reported precision, recall, F1, false-positive rate, and false-negative rate are therefore measurements on this finite corpus and on the detector named in each case's metadata. They are not estimates for all Solidity vulnerabilities, all compiler versions, or all production contracts.
+The current primary ground-truth benchmark contains ten categories: reentrancy, delegatecall, selfdestruct, public mint, `tx.origin` authentication, flash loans, storage collision, unchecked transfers, unbounded loops, and timestamp-dependent gates. The reported precision, recall, F1, false-positive rate, and false-negative rate are measurements on this finite corpus and on the detector named in each case's metadata. They are not estimates for all Solidity vulnerabilities, all compiler versions, or all production contracts. The separate negative-control and attack-variant suites broaden regression coverage but do not turn these numbers into universal analyzer metrics.
 
 The benchmark uses a vulnerable/fixed pair. The fixed file is a controlled comparison fixture, not a proof that every possible repair is safe. A detector may correctly identify additional secondary patterns in either file; those findings are not automatically part of the primary TP/FP/FN denominator.
 
@@ -22,13 +22,13 @@ Foundry execution is isolated as far as the configured runner permits. Docker ex
 
 ## Metrics limits
 
-`Inconclusive` results are kept separate from FP, FN, and Passed counts. A zero FP/FN result on the five-case benchmark means that no mismatch was observed under this methodology; it does not mean that false positives or false negatives cannot occur outside the corpus. Runtime coverage is also a property of the available fixtures and environment, not a claim of production-chain coverage.
+`Inconclusive` results are kept separate from FP, FN, and Passed counts. A zero FP/FN result on the ten-case benchmark and zero false positives across the current negative controls mean that no mismatch was observed under this methodology; they do not mean that false positives or false negatives cannot occur outside the corpus. Attack variants test coverage of additional source patterns but are not a complete recall estimate. Runtime coverage is also a property of the available fixtures and environment, not a claim of production-chain coverage.
 
 ## Operational limits
 
 The web application accepts source code, archives, repository URLs, and optional external API requests. Upload and archive controls enforce size, path, member-count, and file-type boundaries, while GitHub loading accepts only canonical HTTPS `github.com` repository URLs. The application still requires deployment-level controls such as secret management, TLS termination, authentication configuration, rate-limit storage, dependency patching, logging policy, and network egress policy.
 
-The project should not be deployed with development secrets, unrestricted filesystem access, unrestricted Docker privileges, or a production database exposed to untrusted users. Operators remain responsible for reviewing generated reports and for validating every finding before acting on it.
+The project should not be deployed with development secrets, unrestricted filesystem access, unrestricted Docker privileges, or a production database exposed to untrusted users. The optional LLM comparison is an experiment whose result depends on model, prompt, and model-version behavior; it is not part of the deterministic CI gate. Operators remain responsible for reviewing generated reports and for validating every finding before acting on it.
 
 ## Reproducibility limits
 
