@@ -40,3 +40,14 @@ pytest -q tests/test_benchmark.py
 ```
 
 The runner reports per-case true positives, false positives, and false negatives. For this benchmark, a true positive means an expected detector is present in the vulnerable contract, a false positive means an expected detector is present in the fixed contract, and a false negative means an expected detector is absent from the vulnerable contract. The metrics are scoped to the primary expected detectors in each metadata file; they do not represent full analyzer precision or recall across all Solidity vulnerabilities.
+
+## Deterministic comparator
+
+For every expected detector finding, `verification/comparator.py` applies a deterministic four-stage workflow:
+
+1. **Hypothesis** — normalize the analyzer finding into detector, severity, category, file, function, and description fields.
+2. **Verification** — check whether a rule exists for the detector and evaluate its source-level predicate.
+3. **Evidence** — record a short source excerpt and one-based line location for the matching pattern.
+4. **Classification** — return `Confirmed` when evidence supports the finding, `Rejected` when a known rule has no supporting evidence, or `Inconclusive` when no deterministic rule is registered.
+
+The comparator is intentionally local and reproducible: it does not call an LLM, access the network, or claim that source evidence alone proves exploitability. The benchmark runner includes per-case comparator statuses and fails in strict mode when a primary finding is rejected or inconclusive.

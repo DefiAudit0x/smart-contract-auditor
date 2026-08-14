@@ -47,6 +47,21 @@ def test_benchmark_metadata_schema_is_complete():
         assert (case_dir / "fixed.sol").is_file()
 
 
+def test_benchmark_comparator_statuses_are_confirmed():
+    report = run_benchmark()
+    assert report["comparator_totals"] == {
+        "Confirmed": len(report["cases"]),
+        "Rejected": 0,
+        "Inconclusive": 0,
+    }
+    for case in report["cases"]:
+        assert case["comparison_statuses"] == {
+            "Confirmed": 1,
+            "Rejected": 0,
+            "Inconclusive": 0,
+        }
+
+
 def test_benchmark_totals_are_clean():
     report = run_benchmark()
     assert report["totals"] == {

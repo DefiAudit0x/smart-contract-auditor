@@ -13,6 +13,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from analyzers.solidity_analyzer import SolidityAnalyzer
+from verification.comparator import ComparisonStatus, compare_finding
 
 
 REQUIRED_METADATA_FIELDS = {
@@ -56,16 +57,42 @@ def analyze_contract(path: Path) -> tuple[set[str], list[Any]]:
     return {finding.agent_name for finding in findings}, findings
 
 
+def _serialize_comparison(result: Any) -> dict[str, Any]:
+    return {
+        "detector": result.hypothesis.detector,
+        "function": result.hypothesis.function,
+        "status": result.status.value,
+        "reason": result.reason,
+        "evidence": [
+            {
+                "kind": item.kind,
+                "location": item.location,
+                "excerpt": item.excerpt,
+            }
+            for item in result.evidence
+        ],
+    }
+
+
 def evaluate_case(case_dir: Path) -> dict[str, Any]:
-    """Compute detector-level TP, FP, and FN for one benchmark pair."""
+    """Compute detector-level metrics and comparator results for one case."""
     metadata = load_metadata(case_dir)
     expected = set(metadata["expected_detectors"])
-    vulnerable_names, vulnerable_findings = analyze_contract(case_dir / "vulnerable.sol")
-    fixed_names, fixed_findings = analyze_contract(case_dir / "fixed.sol")
+    vulnerable_path = case_dir / "vulnerable.sol"
+    fixed_path = case_dir / "fixed.sol"
+    vulnerable_source = vulnerable_path.read_text(encoding="utf-8")
+    vulnerable_names, vulnerable_findings = analyze_contract(vulnerable_path)
+    fixed_names, fixed_findings = analyze_contract(fixed_path)
 
     true_positives = sorted(expected & vulnerable_names)
     false_negatives = sorted(expected - vulnerable_names)
     false_positives = sorted(expected & fixed_names) if metadata["expected_clean"] else []
+    comparisons = [
+        compare_finding(finding, vulnerable_source)
+        for finding in vulnerable_findings
+        if finding.agent_name in expected
+    ]
+    comparison_payload = [_serialize_comparison(result) for result in comparisons]
 
     return {
         "case": case_dir.name,
@@ -78,6 +105,13 @@ def evaluate_case(case_dir: Path) -> dict[str, Any]:
         "false_negatives": false_negatives,
         "vulnerable_finding_count": len(vulnerable_findings),
         "fixed_finding_count": len(fixed_findings),
+        "comparisons": comparison_payload,
+        "comparison_statuses": {
+            status.value: sum(
+                item.status == status for item in comparisons
+            )
+            for status in ComparisonStatus
+        },
     }
 
 
@@ -89,7 +123,18 @@ def run_benchmark() -> dict[str, Any]:
         "false_positives": sum(len(case["false_positives"]) for case in cases),
         "false_negatives": sum(len(case["false_negatives"]) for case in cases),
     }
-    return {"cases": cases, "totals": totals}
+    comparator_totals = {
+        status.value: sum(
+            case["comparison_statuses"][status.value]
+            for case in cases
+        )
+        for status in ComparisonStatus
+    }
+    return {
+        "cases": cases,
+        "totals": totals,
+        "comparator_totals": comparator_totals,
+    }
 
 
 def _format_names(names: list[str]) -> str:
@@ -107,18 +152,27 @@ def print_report(report: dict[str, Any]) -> None:
         print(f"  FN: {_format_names(case['false_negatives'])}")
         print(f"  vulnerable findings: {case['vulnerable_finding_count']}")
         print(f"  fixed findings: {case['fixed_finding_count']}")
+        print(f"  comparator: {case['comparison_statuses']}")
     print("\nTotals")
     print("------")
     for metric, value in report["totals"].items():
         print(f"{metric}: {value}")
+    print("comparator_statuses:")
+    for status, value in report["comparator_totals"].items():
+        print(f"  {status}: {value}")
 
 
 def main() -> int:
     report = run_benchmark()
     print_report(report)
+    comparator_failed = (
+        report["comparator_totals"][ComparisonStatus.REJECTED.value]
+        or report["comparator_totals"][ComparisonStatus.INCONCLUSIVE.value]
+    )
     return 1 if (
         report["totals"]["false_positives"]
         or report["totals"]["false_negatives"]
+        or comparator_failed
     ) else 0
 
 
