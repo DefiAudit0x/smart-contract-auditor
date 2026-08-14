@@ -4,6 +4,7 @@
   "severity": "High",
   "category": "Delegatecall",
   "invariant_id": "no_untrusted_delegatecall",
+  "poc_file": "poc.t.sol",
   "expected_detectors": [
     "DELEGATECALL Usage (AST)"
   ],

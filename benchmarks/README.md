@@ -26,6 +26,7 @@ Every `metadata.json` file uses this schema:
 | `severity` | Expected severity of the primary vulnerability. |
 | `category` | Stable benchmark category identifier. |
 | `invariant_id` | Deterministic invariant evaluated for the pair. |
+| `poc_file` | Repository-owned Foundry test fixture for executable verification. |
 | `expected_detectors` | Detector names that must appear for `vulnerable.sol`. |
 | `expected_clean` | Whether `fixed.sol` is expected to avoid every detector in `expected_detectors`. |
 
@@ -37,10 +38,11 @@ From the repository root:
 
 ```bash
 python benchmarks/run_benchmark.py
+python benchmarks/run_benchmark.py --require-poc
 pytest -q tests/test_benchmark.py
 ```
 
-The runner reports per-case true positives, false positives, and false negatives. For this benchmark, a true positive means an expected detector is present in the vulnerable contract, a false positive means an expected detector is present in the fixed contract, and a false negative means an expected detector is absent from the vulnerable contract. The metrics are scoped to the primary expected detectors in each metadata file; they do not represent full analyzer precision or recall across all Solidity vulnerabilities.
+The runner reports per-case true positives, false positives, and false negatives. For this benchmark, a true positive means an expected detector is present in the vulnerable contract, a false positive means an expected detector is present in the fixed contract, and a false negative means an expected detector is absent from the vulnerable contract. The metrics are scoped to the primary expected detectors in each metadata file; they do not represent full analyzer precision or recall across all Solidity vulnerabilities. The default command reports PoC execution as `Inconclusive` when Foundry is unavailable; `--require-poc` turns that unavailable runtime into a failing gate.
 
 ## Deterministic comparator
 
@@ -56,3 +58,7 @@ The comparator is intentionally local and reproducible: it does not call an LLM,
 ## Invariant engine
 
 Each metadata file also identifies one deterministic invariant. The runner evaluates that invariant against both files: the vulnerable fixture must return `Violated`, while the fixed fixture must return `Satisfied`. An invalid source or an unknown invariant id returns `Inconclusive` and causes strict benchmark execution to fail. The invariant engine records the same kind of line-based evidence used by the comparator, but it remains a source-level regression check rather than a proof of runtime exploitability.
+
+## Executable PoCs
+
+Each case includes a repository-owned `poc.t.sol` fixture. The PoC runner copies only that file into a temporary Foundry project and invokes `forge test --offline` with a bounded timeout. It rejects paths outside the repository, requires the `.t.sol` suffix, does not use a shell, and never enables broadcast, FFI, filesystem, or network cheatcodes. A successful runtime test is `Passed`; a failing test is `Failed`; missing Foundry or an unavailable runtime is `Inconclusive`. No claim of runtime confirmation is made when the status is `Inconclusive`.

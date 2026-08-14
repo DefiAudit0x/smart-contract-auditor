@@ -4,6 +4,7 @@
   "severity": "Critical",
   "category": "Selfdestruct",
   "invariant_id": "no_selfdestruct",
+  "poc_file": "poc.t.sol",
   "expected_detectors": [
     "Selfdestruct"
   ],

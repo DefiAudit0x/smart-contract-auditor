@@ -43,6 +43,7 @@ def test_benchmark_metadata_schema_is_complete():
         assert REQUIRED_METADATA_FIELDS <= metadata.keys()
         assert metadata["expected_detectors"]
         assert metadata["expected_clean"] is True
+        assert metadata["poc_file"].endswith(".t.sol")
         assert (case_dir / "vulnerable.sol").is_file()
         assert (case_dir / "fixed.sol").is_file()
 
@@ -87,6 +88,15 @@ def test_benchmark_invariant_statuses_are_expected():
             "Violated": 0,
             "Inconclusive": 0,
         }
+
+
+def test_benchmark_poc_results_are_reported():
+    report = run_benchmark()
+    assert set(report["poc_totals"]) == {"Passed", "Failed", "Inconclusive"}
+    assert sum(report["poc_totals"].values()) == len(report["cases"])
+    for case in report["cases"]:
+        assert case["poc"]["file"].endswith(".t.sol")
+        assert case["poc"]["status"] in {"Passed", "Failed", "Inconclusive"}
 
 
 def test_benchmark_totals_are_clean():

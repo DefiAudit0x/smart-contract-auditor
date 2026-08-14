@@ -4,6 +4,7 @@
   "severity": "High",
   "category": "Public Mint",
   "invariant_id": "authorized_mint",
+  "poc_file": "poc.t.sol",
   "expected_detectors": [
     "Public Mint/Burn"
   ],

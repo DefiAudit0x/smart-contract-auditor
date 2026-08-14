@@ -4,6 +4,7 @@
   "severity": "High",
   "category": "tx.origin",
   "invariant_id": "no_tx_origin_auth",
+  "poc_file": "poc.t.sol",
   "expected_detectors": [
     "tx.origin Auth (AST)"
   ],

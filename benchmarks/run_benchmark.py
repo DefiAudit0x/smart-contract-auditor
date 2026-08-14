@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -19,6 +20,7 @@ from verification.invariants import (
     evaluate_invariants,
     summarize_invariants,
 )
+from verification.poc import PocStatus, run_foundry_poc
 
 
 REQUIRED_METADATA_FIELDS = {
@@ -27,6 +29,7 @@ REQUIRED_METADATA_FIELDS = {
     "severity",
     "category",
     "invariant_id",
+    "poc_file",
     "expected_detectors",
     "expected_clean",
 }
@@ -53,6 +56,10 @@ def load_metadata(case_dir: Path) -> dict[str, Any]:
         raise ValueError(f"{metadata_path}: expected_detectors must be a list")
     if not isinstance(metadata["expected_clean"], bool):
         raise ValueError(f"{metadata_path}: expected_clean must be boolean")
+    if not isinstance(metadata["poc_file"], str) or not metadata["poc_file"]:
+        raise ValueError(f"{metadata_path}: poc_file must be a non-empty string")
+    if not (case_dir / metadata["poc_file"]).is_file():
+        raise ValueError(f"{metadata_path}: PoC file does not exist")
     return metadata
 
 
@@ -119,6 +126,7 @@ def evaluate_case(case_dir: Path) -> dict[str, Any]:
     invariant_id = metadata["invariant_id"]
     vulnerable_invariants = evaluate_invariants(vulnerable_source, [invariant_id])
     fixed_invariants = evaluate_invariants(fixed_path.read_text(encoding="utf-8"), [invariant_id])
+    poc_result = run_foundry_poc(case_dir / metadata["poc_file"], ROOT)
 
     return {
         "case": case_dir.name,
@@ -146,6 +154,11 @@ def evaluate_case(case_dir: Path) -> dict[str, Any]:
         "invariant_statuses": {
             "vulnerable": summarize_invariants(vulnerable_invariants),
             "fixed": summarize_invariants(fixed_invariants),
+        },
+        "poc": {
+            "file": metadata["poc_file"],
+            "status": poc_result.status.value,
+            "reason": poc_result.reason,
         },
     }
 
@@ -175,11 +188,16 @@ def run_benchmark() -> dict[str, Any]:
         }
         for side in ("vulnerable", "fixed")
     }
+    poc_totals = {
+        status.value: sum(case["poc"]["status"] == status.value for case in cases)
+        for status in PocStatus
+    }
     return {
         "cases": cases,
         "totals": totals,
         "comparator_totals": comparator_totals,
         "invariant_totals": invariant_totals,
+        "poc_totals": poc_totals,
     }
 
 
@@ -201,6 +219,7 @@ def print_report(report: dict[str, Any]) -> None:
         print(f"  comparator: {case['comparison_statuses']}")
         print(f"  invariants vulnerable: {case['invariant_statuses']['vulnerable']}")
         print(f"  invariants fixed: {case['invariant_statuses']['fixed']}")
+        print(f"  poc: {case['poc']['status']} ({case['poc']['reason']})")
     print("\nTotals")
     print("------")
     for metric, value in report["totals"].items():
@@ -211,9 +230,12 @@ def print_report(report: dict[str, Any]) -> None:
     print("invariant_statuses:")
     for side, values in report["invariant_totals"].items():
         print(f"  {side}: {values}")
+    print("poc_statuses:")
+    for status, value in report["poc_totals"].items():
+        print(f"  {status}: {value}")
 
 
-def main() -> int:
+def main(require_poc: bool = False) -> int:
     report = run_benchmark()
     print_report(report)
     comparator_failed = (
@@ -225,13 +247,23 @@ def main() -> int:
         or case["invariant_statuses"]["fixed"][InvariantStatus.SATISFIED.value] != 1
         for case in report["cases"]
     )
+    poc_failed = report["poc_totals"][PocStatus.FAILED.value]
+    poc_inconclusive = report["poc_totals"][PocStatus.INCONCLUSIVE.value]
     return 1 if (
         report["totals"]["false_positives"]
         or report["totals"]["false_negatives"]
         or comparator_failed
         or invariant_failed
+        or poc_failed
+        or (require_poc and poc_inconclusive)
     ) else 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    parser = argparse.ArgumentParser(description="Run the Solidity ground-truth benchmark")
+    parser.add_argument(
+        "--require-poc",
+        action="store_true",
+        help="Fail when Foundry is unavailable instead of reporting PoC as Inconclusive",
+    )
+    raise SystemExit(main(require_poc=parser.parse_args().require_poc))

@@ -4,6 +4,7 @@
   "severity": "Critical",
   "category": "Reentrancy",
   "invariant_id": "reentrancy.external_calls_guarded",
+  "poc_file": "poc.t.sol",
   "expected_detectors": [
     "Reentrancy (AST)"
   ],
