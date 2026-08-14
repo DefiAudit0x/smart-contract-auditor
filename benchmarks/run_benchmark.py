@@ -20,6 +20,7 @@ from verification.invariants import (
     evaluate_invariants,
     summarize_invariants,
 )
+from verification.metrics import calculate_metrics
 from verification.poc import PocStatus, run_foundry_poc
 
 
@@ -202,6 +203,7 @@ def run_benchmark() -> dict[str, Any]:
         "comparator_totals": comparator_totals,
         "invariant_totals": invariant_totals,
         "poc_totals": poc_totals,
+        "metrics": calculate_metrics(cases),
     }
 
 
@@ -237,6 +239,13 @@ def print_report(report: dict[str, Any]) -> None:
     print("poc_statuses:")
     for status, value in report["poc_totals"].items():
         print(f"  {status}: {value}")
+    detector_metrics = report["metrics"]["detector"]
+    print("metrics:")
+    print(f"  precision: {detector_metrics['precision']}")
+    print(f"  recall: {detector_metrics['recall']}")
+    print(f"  f1: {detector_metrics['f1']}")
+    print(f"  fp_rate: {detector_metrics['fp_rate']}")
+    print(f"  fn_rate: {detector_metrics['fn_rate']}")
 
 
 def main(require_poc: bool = False) -> int:

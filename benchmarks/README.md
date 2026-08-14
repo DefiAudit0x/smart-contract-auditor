@@ -63,3 +63,17 @@ Each metadata file also identifies one deterministic invariant. The runner evalu
 ## Executable PoCs
 
 Each case includes a repository-owned `poc.t.sol` fixture. The PoC runner copies only that file into a temporary Foundry project and invokes `forge test --offline` with a bounded timeout. It rejects paths outside the repository, requires the `.t.sol` suffix, does not use a shell, and never enables broadcast, FFI, filesystem, or network cheatcodes. A successful runtime test is `Passed`; a failing test is `Failed`; missing Foundry or an unavailable runtime is `Inconclusive`. `poc_mode: exploit` identifies a positive reproduction, while `poc_mode: negative_control` identifies an expected blocked attempt. No claim of runtime confirmation is made when the status is `Inconclusive`.
+
+## Metrics
+
+`verification/metrics.py` computes a machine-readable metrics object from the runner's case records. Detector metrics use the primary expected detectors only:
+
+| Metric | Definition |
+|---|---|
+| Precision | `TP / (TP + FP)` |
+| Recall | `TP / (TP + FN)` |
+| F1 | harmonic mean of precision and recall |
+| FP rate | `FP / (FP + TN)` |
+| FN rate | `FN / (FN + TP)` |
+
+Comparator `Confirmed`, `Rejected`, and `Inconclusive` counts are reported separately from detector metrics. Invariant statuses are split between vulnerable and fixed fixtures. PoC metrics are split by `poc_mode`, and runtime coverage excludes `Inconclusive` results from the denominator. A missing runtime is never converted into a false positive, false negative, or successful exploit reproduction.
