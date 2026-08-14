@@ -14,6 +14,11 @@ if str(ROOT) not in sys.path:
 
 from analyzers.solidity_analyzer import SolidityAnalyzer
 from verification.comparator import ComparisonStatus, compare_finding
+from verification.invariants import (
+    InvariantStatus,
+    evaluate_invariants,
+    summarize_invariants,
+)
 
 
 REQUIRED_METADATA_FIELDS = {
@@ -21,6 +26,7 @@ REQUIRED_METADATA_FIELDS = {
     "location",
     "severity",
     "category",
+    "invariant_id",
     "expected_detectors",
     "expected_clean",
 }
@@ -55,6 +61,23 @@ def analyze_contract(path: Path) -> tuple[set[str], list[Any]]:
     analyzer = SolidityAnalyzer()
     findings = analyzer.analyze_file(path.name, path.read_text(encoding="utf-8"))
     return {finding.agent_name for finding in findings}, findings
+
+
+def _serialize_invariant(result: Any) -> dict[str, Any]:
+    return {
+        "invariant_id": result.invariant_id,
+        "description": result.description,
+        "status": result.status.value,
+        "reason": result.reason,
+        "evidence": [
+            {
+                "kind": item.kind,
+                "location": item.location,
+                "excerpt": item.excerpt,
+            }
+            for item in result.evidence
+        ],
+    }
 
 
 def _serialize_comparison(result: Any) -> dict[str, Any]:
@@ -93,6 +116,9 @@ def evaluate_case(case_dir: Path) -> dict[str, Any]:
         if finding.agent_name in expected
     ]
     comparison_payload = [_serialize_comparison(result) for result in comparisons]
+    invariant_id = metadata["invariant_id"]
+    vulnerable_invariants = evaluate_invariants(vulnerable_source, [invariant_id])
+    fixed_invariants = evaluate_invariants(fixed_path.read_text(encoding="utf-8"), [invariant_id])
 
     return {
         "case": case_dir.name,
@@ -112,6 +138,15 @@ def evaluate_case(case_dir: Path) -> dict[str, Any]:
             )
             for status in ComparisonStatus
         },
+        "invariant_id": invariant_id,
+        "invariant_results": {
+            "vulnerable": [_serialize_invariant(item) for item in vulnerable_invariants],
+            "fixed": [_serialize_invariant(item) for item in fixed_invariants],
+        },
+        "invariant_statuses": {
+            "vulnerable": summarize_invariants(vulnerable_invariants),
+            "fixed": summarize_invariants(fixed_invariants),
+        },
     }
 
 
@@ -130,10 +165,21 @@ def run_benchmark() -> dict[str, Any]:
         )
         for status in ComparisonStatus
     }
+    invariant_totals = {
+        side: {
+            status.value: sum(
+                case["invariant_statuses"][side][status.value]
+                for case in cases
+            )
+            for status in InvariantStatus
+        }
+        for side in ("vulnerable", "fixed")
+    }
     return {
         "cases": cases,
         "totals": totals,
         "comparator_totals": comparator_totals,
+        "invariant_totals": invariant_totals,
     }
 
 
@@ -153,6 +199,8 @@ def print_report(report: dict[str, Any]) -> None:
         print(f"  vulnerable findings: {case['vulnerable_finding_count']}")
         print(f"  fixed findings: {case['fixed_finding_count']}")
         print(f"  comparator: {case['comparison_statuses']}")
+        print(f"  invariants vulnerable: {case['invariant_statuses']['vulnerable']}")
+        print(f"  invariants fixed: {case['invariant_statuses']['fixed']}")
     print("\nTotals")
     print("------")
     for metric, value in report["totals"].items():
@@ -160,6 +208,9 @@ def print_report(report: dict[str, Any]) -> None:
     print("comparator_statuses:")
     for status, value in report["comparator_totals"].items():
         print(f"  {status}: {value}")
+    print("invariant_statuses:")
+    for side, values in report["invariant_totals"].items():
+        print(f"  {side}: {values}")
 
 
 def main() -> int:
@@ -169,10 +220,16 @@ def main() -> int:
         report["comparator_totals"][ComparisonStatus.REJECTED.value]
         or report["comparator_totals"][ComparisonStatus.INCONCLUSIVE.value]
     )
+    invariant_failed = any(
+        case["invariant_statuses"]["vulnerable"][InvariantStatus.VIOLATED.value] != 1
+        or case["invariant_statuses"]["fixed"][InvariantStatus.SATISFIED.value] != 1
+        for case in report["cases"]
+    )
     return 1 if (
         report["totals"]["false_positives"]
         or report["totals"]["false_negatives"]
         or comparator_failed
+        or invariant_failed
     ) else 0
 
 

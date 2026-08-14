@@ -62,6 +62,33 @@ def test_benchmark_comparator_statuses_are_confirmed():
         }
 
 
+def test_benchmark_invariant_statuses_are_expected():
+    report = run_benchmark()
+    assert report["invariant_totals"] == {
+        "vulnerable": {
+            "Satisfied": 0,
+            "Violated": len(report["cases"]),
+            "Inconclusive": 0,
+        },
+        "fixed": {
+            "Satisfied": len(report["cases"]),
+            "Violated": 0,
+            "Inconclusive": 0,
+        },
+    }
+    for case in report["cases"]:
+        assert case["invariant_statuses"]["vulnerable"] == {
+            "Satisfied": 0,
+            "Violated": 1,
+            "Inconclusive": 0,
+        }
+        assert case["invariant_statuses"]["fixed"] == {
+            "Satisfied": 1,
+            "Violated": 0,
+            "Inconclusive": 0,
+        }
+
+
 def test_benchmark_totals_are_clean():
     report = run_benchmark()
     assert report["totals"] == {

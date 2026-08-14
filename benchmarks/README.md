@@ -25,6 +25,7 @@ Every `metadata.json` file uses this schema:
 | `location` | Function or Solidity construct containing the primary pattern. |
 | `severity` | Expected severity of the primary vulnerability. |
 | `category` | Stable benchmark category identifier. |
+| `invariant_id` | Deterministic invariant evaluated for the pair. |
 | `expected_detectors` | Detector names that must appear for `vulnerable.sol`. |
 | `expected_clean` | Whether `fixed.sol` is expected to avoid every detector in `expected_detectors`. |
 
@@ -51,3 +52,7 @@ For every expected detector finding, `verification/comparator.py` applies a dete
 4. **Classification** — return `Confirmed` when evidence supports the finding, `Rejected` when a known rule has no supporting evidence, or `Inconclusive` when no deterministic rule is registered.
 
 The comparator is intentionally local and reproducible: it does not call an LLM, access the network, or claim that source evidence alone proves exploitability. The benchmark runner includes per-case comparator statuses and fails in strict mode when a primary finding is rejected or inconclusive.
+
+## Invariant engine
+
+Each metadata file also identifies one deterministic invariant. The runner evaluates that invariant against both files: the vulnerable fixture must return `Violated`, while the fixed fixture must return `Satisfied`. An invalid source or an unknown invariant id returns `Inconclusive` and causes strict benchmark execution to fail. The invariant engine records the same kind of line-based evidence used by the comparator, but it remains a source-level regression check rather than a proof of runtime exploitability.

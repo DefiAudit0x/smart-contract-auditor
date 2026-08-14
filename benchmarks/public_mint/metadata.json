@@ -3,6 +3,7 @@
   "location": "mint(address,uint256)",
   "severity": "High",
   "category": "Public Mint",
+  "invariant_id": "authorized_mint",
   "expected_detectors": [
     "Public Mint/Burn"
   ],

@@ -3,6 +3,7 @@
   "location": "destroy()",
   "severity": "Critical",
   "category": "Selfdestruct",
+  "invariant_id": "no_selfdestruct",
   "expected_detectors": [
     "Selfdestruct"
   ],
