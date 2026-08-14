@@ -66,7 +66,23 @@
         "https://medium.com/nomad-xyz-blog/nomad-bridge-hack-root-cause-analysis-875ad2e5aacd",
         "https://www.certik.com/resources/blog/28fMavD63CpZJOKOjb9DX3-nomad-bridge-exploit-incident-analysis",
         "https://github.com/nomad-xyz/docs/blob/1ff0c55dba2a842c811468c57793ff9a6542ef0f/docs/public/Nomad-Audit.pdf"
-      ]
+      ],
+      "implementation_source": {
+        "repository_url": "https://github.com/nomad-xyz/monorepo",
+        "commit": "7510d54a5cd334d283d84fdff59827abfceb2da7",
+        "path": "packages/contracts-core/contracts/Replica.sol",
+        "sha256": "3b6439fe258ffeeec58586e6d21ae3286903409b10b28f46b4b8cb64b4a773d6",
+        "role": "official historical implementation source",
+        "line_ranges": ["initialize:103-116", "proveAndProcess:162-172", "process:186-207", "acceptableRoot:262-273"]
+      },
+      "owned_reproduction": {
+        "source_path": "benchmarks/real_world/owned_reproductions/nomad/NomadReplicaVulnerable.sol",
+        "fixed_path": "benchmarks/real_world/owned_reproductions/nomad/NomadReplicaFixed.sol",
+        "poc_path": "benchmarks/real_world/owned_reproductions/nomad/nomad_zero_root_poc.t.sol",
+        "invariant_id": "nomad.zero_root_not_accepted",
+        "status": "passed"
+      },
+      "adjudication_path": "benchmarks/real_world/adjudications/rw-003-nomad-bridge.json"
     },
     {
       "id": "rw-004-bonqdao",

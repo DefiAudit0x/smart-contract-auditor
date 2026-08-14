@@ -53,7 +53,33 @@
           "expected_detectors": {"type": "array", "items": {"type": "string"}},
           "status": {"type": "string", "pattern": "^(candidate_pending_|admitted$)"},
           "references": {"type": "array", "items": {"type": "string", "format": "uri"}},
-          "notes": {"type": "string"}
+          "notes": {"type": "string"},
+          "implementation_source": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["repository_url", "commit", "path", "sha256", "role"],
+            "properties": {
+              "repository_url": {"type": "string", "format": "uri"},
+              "commit": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+              "path": {"type": "string", "minLength": 1},
+              "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+              "role": {"type": "string", "minLength": 1},
+              "line_ranges": {"type": "array", "items": {"type": "string"}}
+            }
+          },
+          "owned_reproduction": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["source_path", "fixed_path", "poc_path", "invariant_id", "status"],
+            "properties": {
+              "source_path": {"type": "string", "minLength": 1},
+              "fixed_path": {"type": "string", "minLength": 1},
+              "poc_path": {"type": "string", "minLength": 1},
+              "invariant_id": {"type": "string", "minLength": 1},
+              "status": {"type": "string", "enum": ["passed", "failed", "inconclusive"]}
+            }
+          },
+          "adjudication_path": {"type": "string", "minLength": 1}
         }
       }
     }

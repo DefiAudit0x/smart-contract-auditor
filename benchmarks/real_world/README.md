@@ -26,6 +26,12 @@ A candidate may become an admitted Real-World case only when all required fields
 
 Cases that fail one or more gates remain `candidate_pending_*` in `registry.json`. They must not enter metrics. Disputed or incomplete cases should be moved to a future quarantine file rather than labeled clean.
 
+## First adjudication: Nomad Bridge
+
+`rw-003-nomad-bridge` is the first candidate processed through the full adjudication workflow. Its official `Replica.sol` implementation is pinned to commit `7510d54a5cd334d283d84fdff59827abfceb2da7`, the source SHA-256 and exact line ranges are recorded in the registry, and Etherscan independently verifies the cited `process(bytes)` transaction at block `15259101`. The project-owned zero-root reproduction passes its vulnerable/fixed contrast and its narrow invariant returns `Violated/Satisfied`.
+
+The case remains **quarantined**. The existing detector taxonomy has no semantically valid detector for zero-root message-proof validation, the owned PoC is a minimal model rather than a historical mainnet fork, and a second independent adjudication is still required. The detailed record is [`adjudications/rw-003-nomad-bridge.json`](adjudications/rw-003-nomad-bridge.json), the stage-by-stage observation is [`adjudications/rw-003-nomad-pipeline.json`](adjudications/rw-003-nomad-pipeline.json), and the readable report is [`adjudications/rw-003-nomad-report.md`](adjudications/rw-003-nomad-report.md).
+
 ## Current candidate scope
 
 The initial ten candidates span access control and initialization, price/oracle manipulation, business logic and accounting, read-only reentrancy, precision/rounding, and unchecked external calls. The current analyzer does not cover every family. Candidates with an empty `expected_detectors` list are intentionally marked as `not_yet_mapped`; they are useful for coverage planning but cannot contribute to detector metrics until a detector mapping is independently justified.

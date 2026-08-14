@@ -38,14 +38,20 @@ def test_real_world_registry_schema_is_valid_json():
 
 def test_all_real_world_adjudications_are_quarantined_and_metric_neutral():
     adjudication_dir = ROOT / "benchmarks" / "real_world" / "adjudications"
-    records = sorted(adjudication_dir.glob("rw-*.json"))
+    records = sorted(
+        path for path in adjudication_dir.glob("rw-*.json")
+        if not path.name.endswith("-pipeline.json")
+    )
     assert len(records) == 10
     for path in records:
         record = json.loads(path.read_text(encoding="utf-8"))
         assert record["review_status"] == "quarantined"
         assert record["review"]["ground_truth_decision"] == "quarantine"
         assert record["detector_mapping"]["covered_by_existing_detector"] is False
-        assert record["reproduction"]["execution_status"] == "not_started"
+        if record["case_id"] == "rw-003-nomad-bridge":
+            assert record["reproduction"]["execution_status"] == "passed"
+        else:
+            assert record["reproduction"]["execution_status"] == "not_started"
 
 
 def test_real_world_negative_controls_have_zero_expected_false_positive_checks():
@@ -54,3 +60,27 @@ def test_real_world_negative_controls_have_zero_expected_false_positive_checks()
     assert report["metrics"]["controls"] == 5
     assert report["metrics"]["false_positive_checks"] == 0
     assert report["metrics"]["false_positive_rate"] == 0.0
+
+
+def test_nomad_has_pinned_implementation_and_remains_quarantined():
+    registry = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
+    nomad = next(case for case in registry["cases"] if case["id"] == "rw-003-nomad-bridge")
+    assert nomad["status"].startswith("candidate_pending_")
+    assert nomad["expected_detectors"] == []
+    assert nomad["implementation_source"]["commit"] == "7510d54a5cd334d283d84fdff59827abfceb2da7"
+    assert nomad["implementation_source"]["sha256"] == "3b6439fe258ffeeec58586e6d21ae3286903409b10b28f46b4b8cb64b4a773d6"
+    assert nomad["owned_reproduction"]["status"] == "passed"
+
+
+def test_nomad_adjudication_keeps_ground_truth_independent():
+    path = ROOT / "benchmarks" / "real_world" / "adjudications" / "rw-003-nomad-bridge.json"
+    record = json.loads(path.read_text(encoding="utf-8"))
+    assert record["review_status"] == "quarantined"
+    assert record["review"]["ground_truth_decision"] == "quarantine"
+    assert record["detector_mapping"]["covered_by_existing_detector"] is False
+    assert record["reproduction"]["execution_status"] == "passed"
+    pipeline = record["pipeline_observations"]
+    assert pipeline["ground_truth_unchanged"] is True
+    assert pipeline["stage_statuses"]["comparator"] == "NotApplicable"
+    assert pipeline["stage_statuses"]["full_pipeline"] == "Quarantined"
+    assert (ROOT / pipeline["report_path"]).is_file()

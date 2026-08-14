@@ -29,7 +29,11 @@ def _candidate_summary() -> dict[str, Any]:
     registry_path = BENCHMARK_ROOT / "real_world" / "registry.json"
     adjudication_dir = BENCHMARK_ROOT / "real_world" / "adjudications"
     registry = json.loads(registry_path.read_text(encoding="utf-8"))
-    records = [json.loads(path.read_text(encoding="utf-8")) for path in sorted(adjudication_dir.glob("rw-*.json"))]
+    records = [
+        json.loads(path.read_text(encoding="utf-8"))
+        for path in sorted(adjudication_dir.glob("rw-*.json"))
+        if not path.name.endswith("-pipeline.json")
+    ]
     admitted = sum(record["review_status"] == "admitted" for record in records)
     quarantined = sum(record["review_status"] == "quarantined" for record in records)
     return {

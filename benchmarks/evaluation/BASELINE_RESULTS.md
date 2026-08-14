@@ -25,6 +25,12 @@ The registry at [`benchmarks/real_world/registry.json`](../real_world/registry.j
 
 The first candidate set was discovered from [DeFiHackLabs](https://github.com/SunWeb3Sec/DeFiHackLabs) and cross-checked against incident analyses. The selected references include the official Nomad root-cause analysis [1], the Bonq Protocol post-mortem [2], Sturdy's exploit post-mortem [3], Conic's post-mortem [4], Euler's incident analysis [5], BlockSec's KyberSwap analysis [6], the Seneca incident analysis [7], and CertiK's Dough Finance analysis [8]. These sources are evidence for curation and source mapping; they are not silently copied into the analyzer or treated as automatically executable dependencies.
 
+## First adjudication result: Nomad Bridge
+
+Nomad is the first candidate processed through the complete stage-by-stage workflow. The official `Replica.sol` source is pinned, its relevant source ranges are recorded, the cited `process(bytes)` transaction is independently anchored to Ethereum mainnet block `15259101`, and the owned minimal reproduction passes its vulnerable/fixed contrast. The narrow invariant returns `Violated` for the vulnerable model and `Satisfied` for the fixed model. The current analyzer does not have a semantically valid detector mapping for this root-cause family, so the comparator is `NotApplicable` rather than forced into a false detector label. The LLM observed `block.timestamp Usage (AST)` on both sides, which is recorded as an observation only.
+
+Nomad remains quarantined because the owned reproduction is not a historical mainnet fork, the current detector taxonomy does not cover zero-root message-proof validation, and a second independent adjudication is pending. See [`rw-003-nomad-report.md`](../real_world/adjudications/rw-003-nomad-report.md) and [`rw-003-nomad-pipeline.json`](../real_world/adjudications/rw-003-nomad-pipeline.json).
+
 ## Reproduction
 
 From the repository root, the deterministic cross-track report can be regenerated with:

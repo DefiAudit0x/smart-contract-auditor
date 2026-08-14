@@ -1,0 +1,128 @@
+{
+  "case_id": "rw-003-nomad-bridge",
+  "ground_truth_status": "quarantined",
+  "run_id": "2026-08-14T20:22:05Z",
+  "schema_version": 1,
+  "stages": {
+    "comparator": {
+      "expected_detectors": [],
+      "reason": "The existing detector taxonomy has no semantically valid mapping for Nomad zero-root message-proof validation.",
+      "status": "NotApplicable"
+    },
+    "full_pipeline": {
+      "acceptance_gate": false,
+      "reason": "Source mapping and owned reproduction are present, but independent block verification, second adjudication, and detector-family decision remain open.",
+      "status": "Quarantined"
+    },
+    "invariant": {
+      "fixed": {
+        "evidence_lines": [
+          14,
+          15
+        ],
+        "reason": "Initialization rejects a zero committed root before pre-approval can authorize it.",
+        "status": "Satisfied"
+      },
+      "id": "nomad.zero_root_not_accepted",
+      "vulnerable": {
+        "evidence_lines": [
+          14
+        ],
+        "reason": "Initialization pre-approves a zero committed root without rejecting zero-root state.",
+        "status": "Violated"
+      }
+    },
+    "llm": {
+      "fixed": {
+        "allowed_detectors": [
+          "Reentrancy (AST)",
+          "DELEGATECALL Usage (AST)",
+          "Selfdestruct",
+          "Public Mint/Burn",
+          "tx.origin Auth (AST)",
+          "Flash Loan Attack Vector",
+          "Storage Collision (Delegatecall)",
+          "Unchecked Transfer",
+          "Unbounded Loop (AST)",
+          "block.timestamp Usage (AST)"
+        ],
+        "catalog_checked": true,
+        "model": "gpt-5-mini",
+        "predictions": [
+          "block.timestamp Usage (AST)"
+        ],
+        "rationale": "The function acceptableRoot uses the global block.timestamp in the comparison 'return block.timestamp >= time;' (acceptableRoot function). This explicit use of block.timestamp in contract logic matches the block.timestamp Usage (AST) pattern.",
+        "status": "Completed",
+        "usage": {
+          "completion_tokens": 468,
+          "prompt_tokens": 521
+        }
+      },
+      "vulnerable": {
+        "allowed_detectors": [
+          "Reentrancy (AST)",
+          "DELEGATECALL Usage (AST)",
+          "Selfdestruct",
+          "Public Mint/Burn",
+          "tx.origin Auth (AST)",
+          "Flash Loan Attack Vector",
+          "Storage Collision (Delegatecall)",
+          "Unchecked Transfer",
+          "Unbounded Loop (AST)",
+          "block.timestamp Usage (AST)"
+        ],
+        "catalog_checked": true,
+        "model": "gpt-5-mini",
+        "predictions": [
+          "block.timestamp Usage (AST)"
+        ],
+        "rationale": "The function acceptableRoot uses the global timestamp in a comparison: `uint256 time = confirmAt[root]; ... return block.timestamp >= time;`. This is an explicit use of block.timestamp in contract logic (comparison against a stored mapping value).",
+        "status": "Completed",
+        "usage": {
+          "completion_tokens": 538,
+          "prompt_tokens": 511
+        }
+      }
+    },
+    "poc": {
+      "output": "Compiling 1 files with Solc 0.8.25\nSolc 0.8.25 finished in 20.42ms\nCompiler run successful!\n\nRan 2 tests for test/nomad_zero_root_poc.t.sol:NomadZeroRootPoC\n[PASS] testZeroRootAcceptedByVulnerableFixture() (gas: 284453)\n[PASS] testZeroRootRejectedByFixedContrast() (gas: 267000)\nSuite result: ok. 2 passed; 0 failed; 0 skipped; finished in 514.63µs (380.69µs CPU time)\n\nRan 1 test suite in 2.60ms (514.63µs CPU time): 2 tests passed, 0 failed, 0 skipped (2 total tests)\n",
+      "reason": "Foundry test passed",
+      "status": "Passed"
+    },
+    "static": {
+      "fixed": {
+        "finding_count": 3,
+        "observed_detectors": [
+          "Event Emission",
+          "Pragma Fixed",
+          "block.timestamp Usage (AST)"
+        ],
+        "source": "benchmarks/real_world/owned_reproductions/nomad/NomadReplicaFixed.sol",
+        "status": "Completed"
+      },
+      "vulnerable": {
+        "finding_count": 3,
+        "observed_detectors": [
+          "Event Emission",
+          "Pragma Fixed",
+          "block.timestamp Usage (AST)"
+        ],
+        "source": "benchmarks/real_world/owned_reproductions/nomad/NomadReplicaVulnerable.sol",
+        "status": "Completed"
+      }
+    },
+    "static_plus_llm": {
+      "llm_vulnerable": [
+        "block.timestamp Usage (AST)"
+      ],
+      "reason": "No expected detector is assigned; predictions are recorded but cannot create Ground Truth.",
+      "static_vulnerable": [
+        "Event Emission",
+        "Pragma Fixed",
+        "block.timestamp Usage (AST)"
+      ],
+      "status": "ObservationalOnly"
+    }
+  },
+  "track": "real_world_adjudication"
+}

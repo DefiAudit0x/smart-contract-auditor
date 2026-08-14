@@ -59,6 +59,29 @@
         "not_covered_reason": {"type": "string"}
       }
     },
+    "pipeline_observations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["report_path", "stage_statuses", "ground_truth_unchanged"],
+      "properties": {
+        "report_path": {"type": "string", "minLength": 1},
+        "stage_statuses": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["static", "llm", "static_plus_llm", "comparator", "invariant", "poc", "full_pipeline"],
+          "properties": {
+            "static": {"type": "string"},
+            "llm": {"type": "string"},
+            "static_plus_llm": {"type": "string"},
+            "comparator": {"type": "string"},
+            "invariant": {"type": "string"},
+            "poc": {"type": "string"},
+            "full_pipeline": {"type": "string"}
+          }
+        },
+        "ground_truth_unchanged": {"type": "boolean"}
+      }
+    },
     "review": {
       "type": "object",
       "additionalProperties": false,
