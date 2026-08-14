@@ -71,26 +71,40 @@ def build_hypothesis(finding: Any) -> Hypothesis:
     )
 
 
+def _mask_non_code(source: str) -> str:
+    """Mask comments and string literals while preserving source offsets."""
+    pattern = re.compile(
+        r"//[^\n]*|/\*.*?\*/|\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'",
+        re.DOTALL,
+    )
+
+    def mask(match: re.Match[str]) -> str:
+        return "".join("\n" if char == "\n" else " " for char in match.group(0))
+
+    return pattern.sub(mask, source)
+
+
 def _function_span(source: str, function_name: str) -> tuple[str, int, int] | None:
-    """Return a function signature/body span and its start/end offsets."""
+    """Return a masked function signature/body span and its original offsets."""
+    code = _mask_non_code(source)
     if not function_name:
-        return source, 0, len(source)
+        return code, 0, len(code)
     pattern = re.compile(
         rf"function\s+{re.escape(function_name)}\s*\([^)]*\)[^{{;]*\{{",
         re.IGNORECASE | re.DOTALL,
     )
-    match = pattern.search(source)
+    match = pattern.search(code)
     if not match:
         return None
-    opening = source.find("{", match.start(), match.end())
+    opening = code.find("{", match.start(), match.end())
     depth = 0
-    for index in range(opening, len(source)):
-        if source[index] == "{":
+    for index in range(opening, len(code)):
+        if code[index] == "{":
             depth += 1
-        elif source[index] == "}":
+        elif code[index] == "}":
             depth -= 1
             if depth == 0:
-                return source[match.start() : index + 1], match.start(), index + 1
+                return code[match.start() : index + 1], match.start(), index + 1
     return None
 
 
@@ -176,8 +190,9 @@ def _match_flash_loan(source: str, function_name: str) -> list[Evidence]:
 
 
 def _match_storage_collision(source: str, function_name: str) -> list[Evidence]:
-    delegate = re.search(r"\bdelegatecall\s*\(", source, re.IGNORECASE)
-    layout = re.search(r"\bstruct\b|\bmapping\s*\(", source, re.IGNORECASE)
+    code = _mask_non_code(source)
+    delegate = re.search(r"\bdelegatecall\s*\(", code, re.IGNORECASE)
+    layout = re.search(r"\bstruct\b|\bmapping\s*\(", code, re.IGNORECASE)
     if not delegate or not layout:
         return []
     return _evidence("delegatecall_storage_layout", source, delegate.start(), delegate.group())
