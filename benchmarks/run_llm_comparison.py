@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +18,10 @@ ROOT = Path(__file__).resolve().parents[1]
 BENCHMARK_ROOT = Path(__file__).resolve().parent
 CONTROL_MANIFEST = BENCHMARK_ROOT / "negative_controls" / "manifest.json"
 VARIANT_MANIFEST = BENCHMARK_ROOT / "attack_variants" / "manifest.json"
+PROMPT_PATH = BENCHMARK_ROOT / "evaluation" / "prompt_v1.txt"
+PROMPT_VERSION = "prompt_v1"
+RESPONSE_SCHEMA_VERSION = "targeted_solidity_findings-v1"
+MAX_COMPLETION_TOKENS = 800
 
 ALLOWED_DETECTORS = [
     "Reentrancy (AST)",
@@ -53,6 +59,10 @@ RESPONSE_SCHEMA = {
 
 def _load(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _items() -> list[dict[str, Any]]:
@@ -98,7 +108,13 @@ def _available_models(session: requests.Session) -> list[str]:
     return [item["id"] for item in items if isinstance(item, dict) and item.get("id")]
 
 
-def _call_llm(session: requests.Session, source: str, name: str, model: str) -> dict[str, Any]:
+def _call_llm(
+    session: requests.Session,
+    source: str,
+    name: str,
+    model: str,
+    system_prompt: str,
+) -> dict[str, Any]:
     response = session.post(
         f"{os.environ['OPENAI_API_BASE'].rstrip('/')}/chat/completions",
         headers={
@@ -110,12 +126,7 @@ def _call_llm(session: requests.Session, source: str, name: str, model: str) -> 
             "messages": [
             {
                 "role": "system",
-                "content": (
-                    "You are evaluating Solidity source for a controlled benchmark. "
-                    "Return only high-confidence detector names from the supplied enum. "
-                    "Do not infer vulnerabilities from identifiers, comments, or strings. "
-                    "The rationale must cite concrete source patterns."
-                ),
+                "content": system_prompt,
             },
             {
                 "role": "user",
@@ -126,7 +137,7 @@ def _call_llm(session: requests.Session, source: str, name: str, model: str) -> 
             },
             ],
             "response_format": RESPONSE_SCHEMA,
-            "max_completion_tokens": 800,
+            "max_completion_tokens": MAX_COMPLETION_TOKENS,
         },
         timeout=180,
     )
@@ -151,6 +162,9 @@ def run(model: str) -> dict[str, Any]:
     available_models = _available_models(session)
     if model not in available_models:
         raise ValueError(f"Model {model!r} is not present in live catalog")
+    system_prompt = PROMPT_PATH.read_text(encoding="utf-8").strip()
+    prompt_sha256 = _sha256(PROMPT_PATH)
+    timestamp_utc = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     cases = []
     true_positives = false_positives = false_negatives = 0
     deterministic_true_positives = deterministic_false_positives = deterministic_false_negatives = 0
@@ -164,7 +178,7 @@ def run(model: str) -> dict[str, Any]:
         deterministic_false_positives += len(deterministic & expected_absent)
         deterministic_false_negatives += len(expected_present - deterministic)
         try:
-            llm = _call_llm(session, source, item["name"], model)
+            llm = _call_llm(session, source, item["name"], model, system_prompt)
             predicted = set(llm["findings"])
             error = None
         except Exception as exc:
@@ -182,7 +196,36 @@ def run(model: str) -> dict[str, Any]:
             "usage": llm["usage"],
             "error": error,
         })
+    source_sha256 = {
+        item["source"]: _sha256(ROOT / item["source"])
+        for item in _items()
+    }
     return {
+        "schema_version": 1,
+        "run_id": f"{timestamp_utc}-{model}",
+        "timestamp_utc": timestamp_utc,
+        "track": "adversarial",
+        "corpus": {
+            "manifest_paths": [
+                "benchmarks/negative_controls/manifest.json",
+                "benchmarks/attack_variants/manifest.json",
+            ],
+            "case_count": len(cases),
+            "source_sha256": source_sha256,
+        },
+        "ground_truth": {
+            "definition": "Expected detector presence comes from repository manifests; expected absence comes from negative-control manifests.",
+            "provenance_policy": "Ground truth is fixture metadata and must not be inferred from the LLM output or the analyzer output.",
+        },
+        "llm": {
+            "model": model,
+            "catalog_checked": True,
+            "prompt_version": PROMPT_VERSION,
+            "prompt_sha256": prompt_sha256,
+            "temperature": None,
+            "max_completion_tokens": MAX_COMPLETION_TOKENS,
+            "response_schema_version": RESPONSE_SCHEMA_VERSION,
+        },
         "model": model,
         "live_catalog_checked": True,
         "scope": "targeted detector assertions on 10 controls and 5 attack variants",

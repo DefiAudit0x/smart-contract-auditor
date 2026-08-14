@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/DefiAudit0x/smart-contract-auditor/blob/main/benchmarks/evaluation/evaluation_run.schema.json",
+  "title": "Smart Contract Auditor Evaluation Run",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "timestamp_utc",
+    "track",
+    "corpus",
+    "ground_truth",
+    "llm",
+    "deterministic_metrics",
+    "llm_metrics",
+    "cases"
+  ],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "run_id": {"type": "string", "minLength": 1},
+    "timestamp_utc": {"type": "string", "format": "date-time"},
+    "track": {"type": "string", "enum": ["synthetic", "adversarial", "real_world"]},
+    "corpus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifest_paths", "case_count", "source_sha256"],
+      "properties": {
+        "manifest_paths": {"type": "array", "items": {"type": "string"}},
+        "case_count": {"type": "integer", "minimum": 0},
+        "source_sha256": {
+          "type": "object",
+          "additionalProperties": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+        }
+      }
+    },
+    "ground_truth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["definition", "provenance_policy"],
+      "properties": {
+        "definition": {"type": "string", "minLength": 1},
+        "provenance_policy": {"type": "string", "minLength": 1}
+      }
+    },
+    "llm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "catalog_checked", "prompt_version", "prompt_sha256", "temperature", "max_completion_tokens", "response_schema_version"],
+      "properties": {
+        "model": {"type": "string", "minLength": 1},
+        "catalog_checked": {"type": "boolean"},
+        "prompt_version": {"type": "string", "minLength": 1},
+        "prompt_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "temperature": {"type": ["number", "null"]},
+        "max_completion_tokens": {"type": "integer", "minimum": 1},
+        "response_schema_version": {"type": "string", "minLength": 1}
+      }
+    },
+    "deterministic_metrics": {"$ref": "#/$defs/metrics"},
+    "llm_metrics": {"$ref": "#/$defs/metrics"},
+    "cases": {"type": "array", "items": {"$ref": "#/$defs/case"}},
+    "model": {"type": "string"},
+    "live_catalog_checked": {"type": "boolean"},
+    "scope": {"type": "string"},
+    "failed_calls": {"type": "integer", "minimum": 0}
+  },
+  "$defs": {
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["true_positives", "false_positives", "false_negatives", "precision", "recall"],
+      "properties": {
+        "true_positives": {"type": "integer", "minimum": 0},
+        "false_positives": {"type": "integer", "minimum": 0},
+        "false_negatives": {"type": "integer", "minimum": 0},
+        "precision": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "recall": {"type": ["number", "null"], "minimum": 0, "maximum": 1}
+      }
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "kind", "source", "expected_present", "expected_absent", "deterministic_predictions", "llm_predictions"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "kind": {"type": "string", "enum": ["negative_control", "attack_variant", "primary_case", "real_world"]},
+        "source": {"type": "string", "minLength": 1},
+        "expected_present": {"type": "array", "items": {"type": "string"}},
+        "expected_absent": {"type": "array", "items": {"type": "string"}},
+        "deterministic_predictions": {"type": "array", "items": {"type": "string"}},
+        "llm_predictions": {"type": "array", "items": {"type": "string"}},
+        "llm_rationale": {"type": "string"},
+        "usage": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "prompt_tokens": {"type": ["integer", "null"], "minimum": 0},
+            "completion_tokens": {"type": ["integer", "null"], "minimum": 0}
+          }
+        },
+        "error": {"type": ["string", "null"]}
+      }
+    }
+  }
+}

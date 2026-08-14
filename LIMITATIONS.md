@@ -4,7 +4,7 @@ This project is an analysis and verification tool, not a substitute for a comple
 
 ## Detector coverage
 
-The current primary ground-truth benchmark contains ten categories: reentrancy, delegatecall, selfdestruct, public mint, `tx.origin` authentication, flash loans, storage collision, unchecked transfers, unbounded loops, and timestamp-dependent gates. The reported precision, recall, F1, false-positive rate, and false-negative rate are measurements on this finite corpus and on the detector named in each case's metadata. They are not estimates for all Solidity vulnerabilities, all compiler versions, or all production contracts. The separate negative-control and attack-variant suites broaden regression coverage but do not turn these numbers into universal analyzer metrics.
+The current primary ground-truth benchmark contains ten categories: reentrancy, delegatecall, selfdestruct, public mint, `tx.origin` authentication, flash loans, storage collision, unchecked transfers, unbounded loops, and timestamp-dependent gates. The reported precision, recall, F1, false-positive rate, and false-negative rate are measurements on this finite corpus and on the detector named in each case's metadata. They are not estimates for all Solidity vulnerabilities, all compiler versions, or all production contracts. The separate negative-control and attack-variant suites broaden regression coverage but do not turn these numbers into universal analyzer metrics. The Real-World registry is a separate discovery and curation track; its ten current candidates are quarantined and excluded from all primary metrics until source-version pinning, affected-location mapping, independent reproduction, and adjudication are complete.
 
 The benchmark uses a vulnerable/fixed pair. The fixed file is a controlled comparison fixture, not a proof that every possible repair is safe. A detector may correctly identify additional secondary patterns in either file; those findings are not automatically part of the primary TP/FP/FN denominator.
 
@@ -28,7 +28,9 @@ Foundry execution is isolated as far as the configured runner permits. Docker ex
 
 The web application accepts source code, archives, repository URLs, and optional external API requests. Upload and archive controls enforce size, path, member-count, and file-type boundaries, while GitHub loading accepts only canonical HTTPS `github.com` repository URLs. The application still requires deployment-level controls such as secret management, TLS termination, authentication configuration, rate-limit storage, dependency patching, logging policy, and network egress policy.
 
-The project should not be deployed with development secrets, unrestricted filesystem access, unrestricted Docker privileges, or a production database exposed to untrusted users. The optional LLM comparison is an experiment whose result depends on model, prompt, and model-version behavior; it is not part of the deterministic CI gate. Operators remain responsible for reviewing generated reports and for validating every finding before acting on it.
+The project should not be deployed with development secrets, unrestricted filesystem access, unrestricted Docker privileges, or a production database exposed to untrusted users. The optional LLM comparison is an experiment whose result depends on model, prompt, model-version behavior, endpoint availability, and structured-output compliance; it is not part of the deterministic CI gate. The current recorded run is a comparison on ten controls and five attack variants, not a general LLM benchmark. Operators remain responsible for reviewing generated reports and for validating every finding before acting on it.
+
+The Real-World-inspired negative controls are small repository-owned fixtures derived from incident themes. They test whether selected known detectors remain quiet on bounded safe patterns; they do not establish that the corresponding production protocols were safe or that an incident can be reproduced from a metadata record alone. Third-party PoCs are treated as untrusted research material and are not copied or executed automatically.
 
 ## Reproducibility limits
 
@@ -41,3 +43,7 @@ Python dependencies are resolved into `requirements.lock` with hashes for the de
 [2]: BENCHMARK_METHODOLOGY.md "Benchmark methodology"
 
 [3]: THREAT_MODEL.md "Application threat model"
+
+[4]: benchmarks/evaluation/BASELINE_RESULTS.md "Isolated cross-track baseline results"
+
+[5]: benchmarks/real_world/README.md "Real-World corpus admission and provenance policy"

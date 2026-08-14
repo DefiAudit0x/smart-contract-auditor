@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "case_id": "rw-010-dough-finance",
+  "review_status": "quarantined",
+  "independent_evidence": {
+    "incident_reference_urls": [
+      "https://www.certik.com/resources/blog/3SMOuGMCSttY4pQW6I49W2-dough-finance-incident-analysis",
+      "https://medium.com/@dehacker_security/dough-finance-incident-analysis-04db15c22552",
+      "https://app.blocksec.com/explorer/tx/eth/0x92cdcc732eebf47200ea56123716e337f6ef7d5ad714a2295794fdc6031ebb2e"
+    ],
+    "source_repository_url": "https://github.com/SunWeb3Sec/DeFiHackLabs",
+    "source_repository_commit": "97df63d8a33c18e3e8c926879b1d05dc4de8286d",
+    "source_file_path": "src/test/2024-07/DoughFina_exp.sol",
+    "source_sha256": "710af6252e2ced7ed27d74f810b9087e36164d8156cd24bd760b0034b5635177",
+    "onchain_transaction_urls": [
+      "https://etherscan.io/tx/0x92cdcc732eebf47200ea56123716e337f6ef7d5ad714a2295794fdc6031ebb2e"
+    ],
+    "chain_and_block": "requires independent verification"
+  },
+  "root_cause": {
+    "family": "input_validation, unchecked_external_call, access_control",
+    "affected_contract": "0x9f54e8eAa9658316Bb8006E03FFF1cb191AafBE6",
+    "affected_functions": [
+      "flashloanReq",
+      "attack",
+      "executeAction"
+    ],
+    "source_line_ranges": [],
+    "mechanism_summary": "",
+    "external_evidence_quotes_or_paraphrases": []
+  },
+  "reproduction": {
+    "owned_fixture_path": null,
+    "fork_block": null,
+    "poc_source_provenance": "Third-party discovery PoC is not executed or copied automatically.",
+    "execution_status": "not_started",
+    "limitations": [
+      "Pinned contract implementation source and line mapping are not yet stored in an owned fixture."
+    ]
+  },
+  "detector_mapping": {
+    "covered_by_existing_detector": false,
+    "detector_names": [],
+    "mapping_rationale": "No detector mapping is admitted before source-level review.",
+    "not_covered_reason": "Pending independent source mapping and detector coverage review."
+  },
+  "review": {
+    "ground_truth_decision": "quarantine",
+    "decision_rationale": "Candidate is documented for discovery but excluded from all metrics until admission gates are complete.",
+    "reviewer_independence": "separate_from_analyzer_and_llm",
+    "reviewed_at": "",
+    "admission_requirements_remaining": [
+      "Pin the affected implementation source and exact version.",
+      "Map the incident to source line ranges independently.",
+      "Verify chain and block metadata from immutable on-chain evidence.",
+      "Create and review an owned reproduction or document why reproduction is infeasible.",
+      "Adjudicate detector coverage without using analyzer or LLM output as Ground Truth."
+    ]
+  }
+}

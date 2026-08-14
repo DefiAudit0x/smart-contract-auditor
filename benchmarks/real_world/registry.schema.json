@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/DefiAudit0x/smart-contract-auditor/blob/main/benchmarks/real_world/registry.schema.json",
+  "title": "Real-World Candidate Registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "track", "corpus_status", "ground_truth_policy", "discovery_source", "cases"],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "track": {"type": "string", "const": "real_world"},
+    "corpus_status": {"type": "string", "enum": ["candidate_registry_not_admitted", "admitted"]},
+    "ground_truth_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["definition", "independence", "quarantine_rule"],
+      "properties": {
+        "definition": {"type": "string", "minLength": 1},
+        "independence": {"type": "string", "minLength": 1},
+        "quarantine_rule": {"type": "string", "minLength": 1}
+      }
+    },
+    "discovery_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "repository_url", "repository_commit", "role"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "repository_url": {"type": "string", "format": "uri"},
+        "repository_commit": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+        "role": {"type": "string", "minLength": 1}
+      }
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "incident", "families", "affected_functions", "source_path", "source_repository_commit", "source_sha256", "expected_detectors", "status", "references"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^rw-[0-9]{3}-[a-z0-9-]+$"},
+          "incident": {"type": "string", "minLength": 1},
+          "date": {"type": "string"},
+          "families": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+          "affected_functions": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+          "affected_function_confidence": {"type": "string"},
+          "source_path": {"type": "string", "minLength": 1},
+          "source_repository_commit": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+          "source_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+          "attack_transaction": {"type": ["string", "null"]},
+          "attack_transactions": {"type": "array", "items": {"type": "string"}},
+          "vulnerable_contract": {"type": ["string", "null"]},
+          "expected_detectors": {"type": "array", "items": {"type": "string"}},
+          "status": {"type": "string", "pattern": "^(candidate_pending_|admitted$)"},
+          "references": {"type": "array", "items": {"type": "string", "format": "uri"}},
+          "notes": {"type": "string"}
+        }
+      }
+    }
+  }
+}

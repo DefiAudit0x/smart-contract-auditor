@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "case_id": "rw-008-kyberswap",
+  "review_status": "quarantined",
+  "independent_evidence": {
+    "incident_reference_urls": [
+      "https://blocksec.com/blog/yet-another-tragedy-of-precision-loss-an-in-depth-analysis-of-the-kyber-swap-incident-1",
+      "https://blog.solidityscan.com/kyberswap-hack-analysis-25e25f2e4a7b",
+      "https://slowmist.medium.com/a-deep-dive-into-the-kyberswap-hack-3e13f3305d3a",
+      "https://app.blocksec.com/explorer/tx/eth/0x485e08dc2b6a4b3aeadcb89c3d18a37666dc7d9424961a2091d6b3696792f0f3"
+    ],
+    "source_repository_url": "https://github.com/SunWeb3Sec/DeFiHackLabs",
+    "source_repository_commit": "6af208c2f11a8e520af7b9a31916e5537127a601",
+    "source_file_path": "src/test/2023-11/KyberSwap_exp.eth.1.sol",
+    "source_sha256": "2fd48ccea621d1a715896cac342a7249e1802832a350688d02f1cde37d92db15",
+    "onchain_transaction_urls": [
+      "https://etherscan.io/tx/0x485e08dc2b6a4b3aeadcb89c3d18a37666dc7d9424961a2091d6b3696792f0f3"
+    ],
+    "chain_and_block": "requires independent verification"
+  },
+  "root_cause": {
+    "family": "precision_rounding, business_logic, price_manipulation",
+    "affected_contract": "0xFd7B111AA83b9b6F547E617C7601EfD997F64703",
+    "affected_functions": [
+      "swapCallback",
+      "uniswapV3FlashCallback",
+      "trigger"
+    ],
+    "source_line_ranges": [],
+    "mechanism_summary": "",
+    "external_evidence_quotes_or_paraphrases": []
+  },
+  "reproduction": {
+    "owned_fixture_path": null,
+    "fork_block": null,
+    "poc_source_provenance": "Third-party discovery PoC is not executed or copied automatically.",
+    "execution_status": "not_started",
+    "limitations": [
+      "Pinned contract implementation source and line mapping are not yet stored in an owned fixture."
+    ]
+  },
+  "detector_mapping": {
+    "covered_by_existing_detector": false,
+    "detector_names": [],
+    "mapping_rationale": "No detector mapping is admitted before source-level review.",
+    "not_covered_reason": "Pending independent source mapping and detector coverage review."
+  },
+  "review": {
+    "ground_truth_decision": "quarantine",
+    "decision_rationale": "Candidate is documented for discovery but excluded from all metrics until admission gates are complete.",
+    "reviewer_independence": "separate_from_analyzer_and_llm",
+    "reviewed_at": "",
+    "admission_requirements_remaining": [
+      "Pin the affected implementation source and exact version.",
+      "Map the incident to source line ranges independently.",
+      "Verify chain and block metadata from immutable on-chain evidence.",
+      "Create and review an owned reproduction or document why reproduction is infeasible.",
+      "Adjudicate detector coverage without using analyzer or LLM output as Ground Truth."
+    ]
+  }
+}

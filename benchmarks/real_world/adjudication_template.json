@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "case_id": "rw-000-placeholder",
+  "review_status": "pending",
+  "independent_evidence": {
+    "incident_reference_urls": [],
+    "source_repository_url": "",
+    "source_repository_commit": "",
+    "source_file_path": "",
+    "source_sha256": "",
+    "onchain_transaction_urls": [],
+    "chain_and_block": ""
+  },
+  "root_cause": {
+    "family": "",
+    "affected_contract": "",
+    "affected_functions": [],
+    "source_line_ranges": [],
+    "mechanism_summary": "",
+    "external_evidence_quotes_or_paraphrases": []
+  },
+  "reproduction": {
+    "owned_fixture_path": null,
+    "fork_block": null,
+    "poc_source_provenance": "",
+    "execution_status": "not_started",
+    "limitations": []
+  },
+  "detector_mapping": {
+    "covered_by_existing_detector": false,
+    "detector_names": [],
+    "mapping_rationale": "",
+    "not_covered_reason": ""
+  },
+  "review": {
+    "ground_truth_decision": "quarantine",
+    "decision_rationale": "",
+    "reviewer_independence": "separate_from_analyzer_and_llm",
+    "reviewed_at": "",
+    "admission_requirements_remaining": []
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "case_id": "rw-005-euler",
+  "review_status": "quarantined",
+  "independent_evidence": {
+    "incident_reference_urls": [
+      "https://rekt.news/euler-rekt",
+      "https://immunebytes.com/blog/euler-finance-hack-mar-13-2023-detailed-hack-analysis/",
+      "https://slowmist.medium.com/slowmist-an-analysis-of-the-attack-on-euler-finance-5143abc0d5ad"
+    ],
+    "source_repository_url": "https://github.com/SunWeb3Sec/DeFiHackLabs",
+    "source_repository_commit": "2baf1a43c44d6cb3ce17a678701784fbe7edabad",
+    "source_file_path": "src/test/2023-03/Euler_exp.sol",
+    "source_sha256": "7ece83371eb2b97718f6b9cc7d11594767926fe1333a3a189c10f1560e3cb2cf",
+    "onchain_transaction_urls": [
+      "https://etherscan.io/tx/0xc310a0affe2169d1f6feec1c63dbc7f7c62a887fa48795d327d4d2da2d6b111d"
+    ],
+    "chain_and_block": "requires independent verification"
+  },
+  "root_cause": {
+    "family": "business_logic, access_control, flash_loan, accounting",
+    "affected_contract": "requires source/address mapping",
+    "affected_functions": [
+      "donateToReserves",
+      "mint",
+      "liquidate",
+      "withdraw"
+    ],
+    "source_line_ranges": [],
+    "mechanism_summary": "",
+    "external_evidence_quotes_or_paraphrases": []
+  },
+  "reproduction": {
+    "owned_fixture_path": null,
+    "fork_block": null,
+    "poc_source_provenance": "Third-party discovery PoC is not executed or copied automatically.",
+    "execution_status": "not_started",
+    "limitations": [
+      "Pinned contract implementation source and line mapping are not yet stored in an owned fixture."
+    ]
+  },
+  "detector_mapping": {
+    "covered_by_existing_detector": false,
+    "detector_names": [],
+    "mapping_rationale": "No detector mapping is admitted before source-level review.",
+    "not_covered_reason": "Pending independent source mapping and detector coverage review."
+  },
+  "review": {
+    "ground_truth_decision": "quarantine",
+    "decision_rationale": "Candidate is documented for discovery but excluded from all metrics until admission gates are complete.",
+    "reviewer_independence": "separate_from_analyzer_and_llm",
+    "reviewed_at": "",
+    "admission_requirements_remaining": [
+      "Pin the affected implementation source and exact version.",
+      "Map the incident to source line ranges independently.",
+      "Verify chain and block metadata from immutable on-chain evidence.",
+      "Create and review an owned reproduction or document why reproduction is infeasible.",
+      "Adjudicate detector coverage without using analyzer or LLM output as Ground Truth."
+    ]
+  }
+}

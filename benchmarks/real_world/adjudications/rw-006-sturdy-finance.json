@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "case_id": "rw-006-sturdy-finance",
+  "review_status": "quarantined",
+  "independent_evidence": {
+    "incident_reference_urls": [
+      "https://sturdyfinance.medium.com/exploit-post-mortem-49261493307a",
+      "https://etherscan.io/address/0x46bea99d977f269399fb3a4637077bb35f075516#code"
+    ],
+    "source_repository_url": "https://github.com/SunWeb3Sec/DeFiHackLabs",
+    "source_repository_commit": "2baf1a43c44d6cb3ce17a678701784fbe7edabad",
+    "source_file_path": "src/test/2023-06/Sturdy_exp.sol",
+    "source_sha256": "f14e57c68f3693f7cb367839fe60c60be703bc7dfec09f4fbe74f23f20efe82b",
+    "onchain_transaction_urls": [
+      "https://etherscan.io/tx/0xeb87ebc0a18aca7d2a9ffcabf61aa69c9e8d3c6efade9e2303f8857717fb9eb7"
+    ],
+    "chain_and_block": "requires independent verification"
+  },
+  "root_cause": {
+    "family": "read_only_reentrancy, oracle, price_manipulation, flash_loan",
+    "affected_contract": "0x9f72dc67cec672bb99e3d02cbea0a21536a2b657",
+    "affected_functions": [
+      "getAssetPrice",
+      "withdrawCollateral",
+      "depositCollateralFrom"
+    ],
+    "source_line_ranges": [],
+    "mechanism_summary": "",
+    "external_evidence_quotes_or_paraphrases": []
+  },
+  "reproduction": {
+    "owned_fixture_path": null,
+    "fork_block": null,
+    "poc_source_provenance": "Third-party discovery PoC is not executed or copied automatically.",
+    "execution_status": "not_started",
+    "limitations": [
+      "Pinned contract implementation source and line mapping are not yet stored in an owned fixture."
+    ]
+  },
+  "detector_mapping": {
+    "covered_by_existing_detector": false,
+    "detector_names": [],
+    "mapping_rationale": "No detector mapping is admitted before source-level review.",
+    "not_covered_reason": "Pending independent source mapping and detector coverage review."
+  },
+  "review": {
+    "ground_truth_decision": "quarantine",
+    "decision_rationale": "Candidate is documented for discovery but excluded from all metrics until admission gates are complete.",
+    "reviewer_independence": "separate_from_analyzer_and_llm",
+    "reviewed_at": "",
+    "admission_requirements_remaining": [
+      "Pin the affected implementation source and exact version.",
+      "Map the incident to source line ranges independently.",
+      "Verify chain and block metadata from immutable on-chain evidence.",
+      "Create and review an owned reproduction or document why reproduction is infeasible.",
+      "Adjudicate detector coverage without using analyzer or LLM output as Ground Truth."
+    ]
+  }
+}

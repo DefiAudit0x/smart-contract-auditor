@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/DefiAudit0x/smart-contract-auditor/blob/main/benchmarks/real_world/adjudication.schema.json",
+  "title": "Real-World Case Adjudication",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "case_id", "review_status", "independent_evidence", "root_cause", "reproduction", "detector_mapping", "review"],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "case_id": {"type": "string", "pattern": "^rw-[0-9]{3}-[a-z0-9-]+$"},
+    "review_status": {"type": "string", "enum": ["pending", "quarantined", "admitted"]},
+    "independent_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["incident_reference_urls", "source_repository_url", "source_repository_commit", "source_file_path", "source_sha256", "onchain_transaction_urls", "chain_and_block"],
+      "properties": {
+        "incident_reference_urls": {"type": "array", "items": {"type": "string", "format": "uri"}},
+        "source_repository_url": {"type": "string"},
+        "source_repository_commit": {"type": "string"},
+        "source_file_path": {"type": "string"},
+        "source_sha256": {"type": "string"},
+        "onchain_transaction_urls": {"type": "array", "items": {"type": "string", "format": "uri"}},
+        "chain_and_block": {"type": "string"}
+      }
+    },
+    "root_cause": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["family", "affected_contract", "affected_functions", "source_line_ranges", "mechanism_summary", "external_evidence_quotes_or_paraphrases"],
+      "properties": {
+        "family": {"type": "string"},
+        "affected_contract": {"type": "string"},
+        "affected_functions": {"type": "array", "items": {"type": "string"}},
+        "source_line_ranges": {"type": "array", "items": {"type": "string"}},
+        "mechanism_summary": {"type": "string"},
+        "external_evidence_quotes_or_paraphrases": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "reproduction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["owned_fixture_path", "fork_block", "poc_source_provenance", "execution_status", "limitations"],
+      "properties": {
+        "owned_fixture_path": {"type": ["string", "null"]},
+        "fork_block": {"type": ["integer", "null"]},
+        "poc_source_provenance": {"type": "string"},
+        "execution_status": {"type": "string", "enum": ["not_started", "passed", "failed", "inconclusive"]},
+        "limitations": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "detector_mapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["covered_by_existing_detector", "detector_names", "mapping_rationale", "not_covered_reason"],
+      "properties": {
+        "covered_by_existing_detector": {"type": "boolean"},
+        "detector_names": {"type": "array", "items": {"type": "string"}},
+        "mapping_rationale": {"type": "string"},
+        "not_covered_reason": {"type": "string"}
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ground_truth_decision", "decision_rationale", "reviewer_independence", "reviewed_at", "admission_requirements_remaining"],
+      "properties": {
+        "ground_truth_decision": {"type": "string", "enum": ["admit", "quarantine"]},
+        "decision_rationale": {"type": "string"},
+        "reviewer_independence": {"type": "string", "const": "separate_from_analyzer_and_llm"},
+        "reviewed_at": {"type": "string"},
+        "admission_requirements_remaining": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

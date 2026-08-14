@@ -56,6 +56,16 @@ PYTHONPATH=. python benchmarks/run_llm_comparison.py --model gpt-5-mini --json-o
 
 `run_extended_benchmark.py` reports control false-positive checks and attack-variant coverage without changing the primary benchmark denominator. `run_llm_comparison.py` is a separate structured-output experiment and records model, rationale, errors, and metrics; it is not used by the deterministic benchmark gate.
 
+The Real-World track is maintained separately under [`real_world/`](real_world/). Its [`registry.json`](real_world/registry.json) currently contains ten quarantined candidates discovered from publicly documented incidents. The registry stores source commits, file hashes, transaction anchors, external references, and affected-function hypotheses, but it does not admit a case into metrics until the adjudication gates in [`real_world/README.md`](real_world/README.md) are complete. The Real-World-inspired negative-control suite is run with:
+
+```bash
+PYTHONPATH=. python benchmarks/real_world/run_negative_controls.py
+PYTHONPATH=. pytest -q tests/test_real_world_registry.py tests/test_track_baseline.py
+PYTHONPATH=. python benchmarks/run_track_baseline.py --llm-report /path/to/evaluation_run.json
+```
+
+`run_track_baseline.py` reports the primary benchmark, supplementary suites, Real-World negative controls, quarantined candidates, and LLM comparison as isolated tracks. It never merges quarantined candidates into the primary denominator.
+
 ## Deterministic comparator
 
 For every expected detector finding, `verification/comparator.py` applies a deterministic four-stage workflow:

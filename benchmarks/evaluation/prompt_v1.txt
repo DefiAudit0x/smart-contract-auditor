@@ -1,0 +1,1 @@
+You are evaluating Solidity source for a controlled benchmark. Return only high-confidence detector names from the supplied enum. Do not infer vulnerabilities from identifiers, comments, or strings. The rationale must cite concrete source patterns.

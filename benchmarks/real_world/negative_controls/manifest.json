@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "track": "real_world_negative_controls",
+  "metric_role": "supplementary_false_positive_suite",
+  "controls": [
+    {
+      "id": "rwnc-001-nomad-validated-root",
+      "source": "Nomad-style message root validation pattern",
+      "file": "NomadValidatedRoot.sol",
+      "expected_absent_detectors": ["Uninitialized Proxy", "Arbitrary External Call", "Selfdestruct"],
+      "expected_clean": true
+    },
+    {
+      "id": "rwnc-002-bonq-dispute-window",
+      "source": "Bonq-style oracle consumption with an explicit dispute window",
+      "file": "BonqDisputeWindowOracle.sol",
+      "expected_absent_detectors": ["Uninitialized Proxy", "Arbitrary External Call", "Selfdestruct"],
+      "contextual_findings_allowed": ["block.timestamp Usage (AST)"],
+      "expected_clean": true
+    },
+    {
+      "id": "rwnc-003-sturdy-oracle-guard",
+      "source": "Sturdy-style validation before collateral-state mutation",
+      "file": "SturdyOracleGuard.sol",
+      "expected_absent_detectors": ["Reentrancy (AST)", "Arbitrary External Call", "Selfdestruct"],
+      "expected_clean": true
+    },
+    {
+      "id": "rwnc-004-kyber-rounded-math",
+      "source": "Kyber-style explicit round-up helper for bounded arithmetic",
+      "file": "KyberRoundedMath.sol",
+      "expected_absent_detectors": ["Reentrancy (AST)", "Arbitrary External Call", "Selfdestruct"],
+      "expected_clean": true
+    },
+    {
+      "id": "rwnc-005-dough-checked-calldata",
+      "source": "Dough-style allowlisted external call with selector validation",
+      "file": "DoughCheckedCalldata.sol",
+      "expected_absent_detectors": ["Arbitrary External Call", "Selfdestruct", "Unchecked Transfer"],
+      "contextual_findings_allowed": ["Reentrancy (AST)"],
+      "expected_clean": true
+    }
+  ]
+}

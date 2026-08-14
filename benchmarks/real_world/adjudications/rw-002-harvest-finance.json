@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "case_id": "rw-002-harvest-finance",
+  "review_status": "quarantined",
+  "independent_evidence": {
+    "incident_reference_urls": [],
+    "source_repository_url": "https://github.com/SunWeb3Sec/DeFiHackLabs",
+    "source_repository_commit": "4b55dffe3e9fd35099c95af728b4af58b75c6b2b",
+    "source_file_path": "src/test/2020-10/HarvestFinance_exp.sol",
+    "source_sha256": "9a090685437a2537b2da8635facaf05de391204571769370df9df6b4e18f14f5",
+    "onchain_transaction_urls": [],
+    "chain_and_block": "requires independent verification"
+  },
+  "root_cause": {
+    "family": "price_manipulation, oracle, flash_loan",
+    "affected_contract": "requires source/address mapping",
+    "affected_functions": [
+      "uniswapV2Call",
+      "theSwap"
+    ],
+    "source_line_ranges": [],
+    "mechanism_summary": "The case is retained as a discovery candidate; the current analyzer has no dedicated price-manipulation detector, so no expected detector is assigned yet.",
+    "external_evidence_quotes_or_paraphrases": []
+  },
+  "reproduction": {
+    "owned_fixture_path": null,
+    "fork_block": null,
+    "poc_source_provenance": "Third-party discovery PoC is not executed or copied automatically.",
+    "execution_status": "not_started",
+    "limitations": [
+      "Pinned contract implementation source and line mapping are not yet stored in an owned fixture."
+    ]
+  },
+  "detector_mapping": {
+    "covered_by_existing_detector": false,
+    "detector_names": [],
+    "mapping_rationale": "No detector mapping is admitted before source-level review.",
+    "not_covered_reason": "Pending independent source mapping and detector coverage review."
+  },
+  "review": {
+    "ground_truth_decision": "quarantine",
+    "decision_rationale": "Candidate is documented for discovery but excluded from all metrics until admission gates are complete.",
+    "reviewer_independence": "separate_from_analyzer_and_llm",
+    "reviewed_at": "",
+    "admission_requirements_remaining": [
+      "Pin the affected implementation source and exact version.",
+      "Map the incident to source line ranges independently.",
+      "Verify chain and block metadata from immutable on-chain evidence.",
+      "Create and review an owned reproduction or document why reproduction is infeasible.",
+      "Adjudicate detector coverage without using analyzer or LLM output as Ground Truth."
+    ]
+  }
+}

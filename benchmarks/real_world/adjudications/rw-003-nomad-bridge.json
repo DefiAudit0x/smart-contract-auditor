@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "case_id": "rw-003-nomad-bridge",
+  "review_status": "quarantined",
+  "independent_evidence": {
+    "incident_reference_urls": [
+      "https://medium.com/nomad-xyz-blog/nomad-bridge-hack-root-cause-analysis-875ad2e5aacd",
+      "https://www.certik.com/resources/blog/28fMavD63CpZJOKOjb9DX3-nomad-bridge-exploit-incident-analysis",
+      "https://github.com/nomad-xyz/docs/blob/1ff0c55dba2a842c811468c57793ff9a6542ef0f/docs/public/Nomad-Audit.pdf"
+    ],
+    "source_repository_url": "https://github.com/SunWeb3Sec/DeFiHackLabs",
+    "source_repository_commit": "2baf1a43c44d6cb3ce17a678701784fbe7edabad",
+    "source_file_path": "src/test/2022-08/NomadBridge_exp.sol",
+    "source_sha256": "6d18e0ae0f31569b695279bd4f1cf5d1a46ee3385e9a720dec12b2f354c9121b",
+    "onchain_transaction_urls": [
+      "https://etherscan.io/tx/0xa5fe9d044e4f3e5aa5bc4c0709333cd2190cba0f4e7f16bcf73f49f83e4a5460"
+    ],
+    "chain_and_block": "requires independent verification"
+  },
+  "root_cause": {
+    "family": "access_control, initialization, bridge_message_validation",
+    "affected_contract": "0xb92336759618f55bd0f8313bd843604592e27bd8",
+    "affected_functions": [
+      "process"
+    ],
+    "source_line_ranges": [],
+    "mechanism_summary": "",
+    "external_evidence_quotes_or_paraphrases": []
+  },
+  "reproduction": {
+    "owned_fixture_path": null,
+    "fork_block": null,
+    "poc_source_provenance": "Third-party discovery PoC is not executed or copied automatically.",
+    "execution_status": "not_started",
+    "limitations": [
+      "Pinned contract implementation source and line mapping are not yet stored in an owned fixture."
+    ]
+  },
+  "detector_mapping": {
+    "covered_by_existing_detector": false,
+    "detector_names": [],
+    "mapping_rationale": "No detector mapping is admitted before source-level review.",
+    "not_covered_reason": "Pending independent source mapping and detector coverage review."
+  },
+  "review": {
+    "ground_truth_decision": "quarantine",
+    "decision_rationale": "Candidate is documented for discovery but excluded from all metrics until admission gates are complete.",
+    "reviewer_independence": "separate_from_analyzer_and_llm",
+    "reviewed_at": "",
+    "admission_requirements_remaining": [
+      "Pin the affected implementation source and exact version.",
+      "Map the incident to source line ranges independently.",
+      "Verify chain and block metadata from immutable on-chain evidence.",
+      "Create and review an owned reproduction or document why reproduction is infeasible.",
+      "Adjudicate detector coverage without using analyzer or LLM output as Ground Truth."
+    ]
+  }
+}

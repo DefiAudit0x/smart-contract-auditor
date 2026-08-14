@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "case_id": "rw-001-parity-kill",
+  "review_status": "quarantined",
+  "independent_evidence": {
+    "incident_reference_urls": [],
+    "source_repository_url": "https://github.com/SunWeb3Sec/DeFiHackLabs",
+    "source_repository_commit": "97df63d8a33c18e3e8c926879b1d05dc4de8286d",
+    "source_file_path": "src/test/2017-11/Parity_kill_exp.sol",
+    "source_sha256": "d19520035888d00275947fe1d0ab6e35f49d04341aba1d439ecab0d674ee636d",
+    "onchain_transaction_urls": [],
+    "chain_and_block": "requires independent verification"
+  },
+  "root_cause": {
+    "family": "access_control, initialization, selfdestruct",
+    "affected_contract": "requires source/address mapping",
+    "affected_functions": [
+      "initWallet",
+      "kill"
+    ],
+    "source_line_ranges": [],
+    "mechanism_summary": "The PoC exposes initWallet and kill, but the current file does not carry an incident URL or transaction hash; do not admit until an independent primary reference is attached.",
+    "external_evidence_quotes_or_paraphrases": []
+  },
+  "reproduction": {
+    "owned_fixture_path": null,
+    "fork_block": null,
+    "poc_source_provenance": "Third-party discovery PoC is not executed or copied automatically.",
+    "execution_status": "not_started",
+    "limitations": [
+      "Pinned contract implementation source and line mapping are not yet stored in an owned fixture."
+    ]
+  },
+  "detector_mapping": {
+    "covered_by_existing_detector": false,
+    "detector_names": [],
+    "mapping_rationale": "No detector mapping is admitted before source-level review.",
+    "not_covered_reason": "Pending independent source mapping and detector coverage review."
+  },
+  "review": {
+    "ground_truth_decision": "quarantine",
+    "decision_rationale": "Candidate is documented for discovery but excluded from all metrics until admission gates are complete.",
+    "reviewer_independence": "separate_from_analyzer_and_llm",
+    "reviewed_at": "",
+    "admission_requirements_remaining": [
+      "Pin the affected implementation source and exact version.",
+      "Map the incident to source line ranges independently.",
+      "Verify chain and block metadata from immutable on-chain evidence.",
+      "Create and review an owned reproduction or document why reproduction is infeasible.",
+      "Adjudicate detector coverage without using analyzer or LLM output as Ground Truth."
+    ]
+  }
+}

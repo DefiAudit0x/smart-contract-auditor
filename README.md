@@ -123,7 +123,7 @@ The latest run with Solidity `0.8.25` and Foundry `v1.7.1` reports:
 | Negative controls | 10 cases; 11 absence checks; 0 FP |
 | Attack variants | 5 cases; 7 expected detectors; 5 PoCs Passed |
 
-These are corpus-specific regression measurements, not a guarantee of complete vulnerability coverage. The LLM comparison is separate from the deterministic gate and is documented in [`BENCHMARK_METHODOLOGY.md`](BENCHMARK_METHODOLOGY.md). See [`BENCHMARK_METHODOLOGY.md`](BENCHMARK_METHODOLOGY.md) and [`LIMITATIONS.md`](LIMITATIONS.md).
+These are corpus-specific regression measurements, not a guarantee of complete vulnerability coverage. The LLM comparison is separate from the deterministic gate and is documented in [`benchmarks/evaluation/BASELINE_RESULTS.md`](benchmarks/evaluation/BASELINE_RESULTS.md). The Real-World registry currently contains 10 quarantined candidates and 5 incident-inspired negative controls; neither track changes the primary denominator. See [`benchmarks/evaluation/README.md`](benchmarks/evaluation/README.md), [`benchmarks/real_world/README.md`](benchmarks/real_world/README.md), [`BENCHMARK_METHODOLOGY.md`](BENCHMARK_METHODOLOGY.md), and [`LIMITATIONS.md`](LIMITATIONS.md).
 
 To reproduce the strict benchmark locally:
 
@@ -133,6 +133,8 @@ PYTHONPATH=. python benchmarks/run_benchmark.py --require-poc
 python -m pytest -q
 PYTHONPATH=. pytest -q tests/test_negative_controls.py tests/test_attack_variants.py tests/test_adversarial_comparator.py
 PYTHONPATH=. python benchmarks/run_extended_benchmark.py --json-out extended-benchmark.json
+PYTHONPATH=. python benchmarks/real_world/run_negative_controls.py
+PYTHONPATH=. python benchmarks/run_track_baseline.py --llm-report /path/to/evaluation_run.json --json-out track-baseline.json
 ```
 
 ## Reproducible Build and Security
