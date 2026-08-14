@@ -139,6 +139,13 @@ def run_foundry_test(poc_path: str, project_dir: str = ".", use_docker: bool = T
             poc_basename = os.path.basename(abs_poc)
             proc = subprocess.run(
                 ["docker", "run", "--rm",
+                 "--network", "none",
+                 "--read-only",
+                 "--cap-drop", "ALL",
+                 "--security-opt", "no-new-privileges",
+                 "--pids-limit", "128",
+                 "--memory", "512m",
+                 "--cpus", "1",
                  "-v", f"{poc_dir}:/poc:ro",
                  "ghcr.io/foundry-rs/foundry:latest",
                  "forge", "test", "--match-path", f"/poc/{poc_basename}",
@@ -186,14 +193,8 @@ def run_foundry_test_docker(code: str, proof_dir: str) -> str:
         Combined stdout/stderr output as a string.
     """
     if not _has_docker():
-        logger.info("Docker not available, falling back to subprocess")
-        os.makedirs(proof_dir, exist_ok=True)
-        safe_name = f"PoC_fallback_{int(time.time())}.t.sol"
-        poc_path = os.path.join(proof_dir, safe_name)
-        with open(poc_path, "w", encoding="utf-8") as f:
-            f.write(code)
-        result = run_foundry_test(poc_path, proof_dir)
-        return result.get("output", "") or result.get("error", "")
+        logger.warning("Docker is not available; refusing unisolated PoC execution")
+        return "Inconclusive: Docker is not available; PoC was not executed"
 
     tmpdir = tempfile.mkdtemp(prefix="foundry_poc_")
     try:
@@ -218,8 +219,16 @@ def run_foundry_test_docker(code: str, proof_dir: str) -> str:
             raise RuntimeError(f"Docker build failed: {build_proc.stderr}")
 
         run_proc = subprocess.run(
-            ["docker", "run", "--rm",
+            [            "docker", "run", "--rm",
+             "--network", "none",
+             "--read-only",
+             "--cap-drop", "ALL",
+             "--security-opt", "no-new-privileges",
+             "--pids-limit", "128",
+             "--memory", "512m",
+             "--cpus", "1",
              "-v", f"{tmpdir}:/app",
+
              "-w", "/app",
              "foundry-test",
              "forge", "test", "--match-path", "test/PoC.t.sol", "-vvv"],

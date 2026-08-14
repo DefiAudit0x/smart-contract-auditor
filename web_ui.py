@@ -38,6 +38,7 @@ from custom_rules import get_rules_engine, CustomRule
 from chain_loader import load_from_explorer, list_supported_chains
 from external_analyzers import TOOL_AVAILABLE
 from _shared import _has_gas_profiler as _has_gas_profiler_local
+from security_utils import extract_zip_safely
 from _shared import compile_estimate_gas
 from auth import (
     verify_code, requires_auth, create_access_code, list_codes, deactivate_code,
@@ -54,6 +55,23 @@ except ImportError:
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
+
+
+def _safe_report_path(filename):
+    """Resolve a report filename only when it is a single safe child path."""
+    if not isinstance(filename, str) or filename != os.path.basename(filename) or filename in {".", ".."}:
+        return None
+    safe = secure_filename(filename)
+    if filename.startswith("_") and safe == filename[1:]:
+        safe = filename
+    elif safe != filename or not safe:
+        return None
+    root = os.path.realpath(REPORT_DIR)
+    candidate = os.path.realpath(os.path.join(root, safe))
+    if os.path.commonpath((root, candidate)) != root:
+        return None
+    return candidate
+
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
@@ -271,12 +289,9 @@ def api_revoke_key(key_id):
 
 @app.route('/report/interactive/<filename>')
 def report_interactive(filename):
-    safe = secure_filename(filename)
-    if not safe:
+    fpath = _safe_report_path(filename)
+    if not fpath:
         return "Invalid filename", 400
-    fpath = os.path.realpath(os.path.join(REPORT_DIR, safe))
-    if not fpath.startswith(os.path.realpath(REPORT_DIR)):
-        return "Access denied", 403
     if not os.path.isfile(fpath):
         return "Report not found", 404
     with open(fpath, "r", encoding="utf-8") as f:
@@ -396,34 +411,42 @@ def batch_page():
     result = None
     if request.method == 'POST':
         path = request.form.get('path', '').strip()
-        if path and os.path.isdir(path):
-            result = batch_audit(path)
+        if path:
+            allowed_root = os.environ.get("BATCH_INPUT_ROOT", "").strip()
+            if not allowed_root:
+                result = {"error": "Local batch paths are disabled; upload a ZIP archive instead"}
+            else:
+                requested = os.path.realpath(path)
+                root_path = os.path.realpath(allowed_root)
+                if os.path.isdir(requested) and os.path.commonpath((root_path, requested)) == root_path:
+                    result = batch_audit(requested)
+                else:
+                    result = {"error": "Batch path is outside the configured input root"}
         elif 'zipfile' in request.files and request.files['zipfile'].filename:
             import tempfile, zipfile, shutil
             f = request.files['zipfile']
             tmpdir = tempfile.mkdtemp(prefix="batch_upload_")
-            zippath = os.path.join(tmpdir, f.filename)
+            zippath = os.path.join(tmpdir, "upload.zip")
             f.save(zippath)
             try:
                 with zipfile.ZipFile(zippath, 'r') as zf:
-                    for member in zf.infolist():
-                        target = os.path.realpath(os.path.join(tmpdir, member.filename))
-                        if not target.startswith(os.path.realpath(tmpdir)):
-                            continue
-                        zf.extract(member, tmpdir)
-                items = os.listdir(tmpdir)
-                root = tmpdir
+                    extract_root = os.path.join(tmpdir, "extracted")
+                    extract_zip_safely(zf, extract_root)
+                items = os.listdir(extract_root)
+                root = extract_root
                 for item in items:
-                    item_path = os.path.join(tmpdir, item)
+                    item_path = os.path.join(extract_root, item)
                     if os.path.isdir(item_path) and item != '__MACOSX':
                         root = item_path
                         break
                 result = batch_audit(root)
             except zipfile.BadZipFile:
                 result = {"error": "Invalid zip file"}
-            except Exception as e:
+            except ValueError as e:
+                result = {"error": f"Unsafe ZIP archive: {e}"}
+            except Exception:
                 logger.exception("Batch zip upload failed")
-                result = {"error": str(e)}
+                result = {"error": "Batch ZIP analysis failed"}
             finally:
                 try: shutil.rmtree(tmpdir)
                 except: pass
@@ -551,20 +574,9 @@ def rules_page():
 
 @app.route('/report/view/<filename>')
 def report_view(filename):
-    safe = secure_filename(filename)
-    if filename != os.path.basename(filename) or filename in {'.', '..'}:
+    fpath = _safe_report_path(filename)
+    if not fpath:
         return "Invalid filename", 400
-    if not safe:
-        return "Invalid filename", 400
-    # secure_filename strips a leading underscore, but report names may use it
-    # for internal/test reports; preserve it only for an otherwise safe name.
-    if filename.startswith('_') and safe == filename[1:]:
-        safe = filename
-    elif safe != filename:
-        return "Invalid filename", 400
-    fpath = os.path.realpath(os.path.join(REPORT_DIR, safe))
-    if not fpath.startswith(os.path.realpath(REPORT_DIR)):
-        return "Access denied", 403
     if not os.path.isfile(fpath):
         return "Report not found", 404
     with open(fpath, "r", encoding="utf-8") as f:
@@ -574,12 +586,9 @@ def report_view(filename):
 
 @app.route('/report/hackerone/<filename>')
 def report_hackerone(filename):
-    safe = secure_filename(filename)
-    if not safe:
+    fpath = _safe_report_path(filename)
+    if not fpath:
         return "Invalid filename", 400
-    fpath = os.path.realpath(os.path.join(REPORT_DIR, safe))
-    if not fpath.startswith(os.path.realpath(REPORT_DIR)):
-        return "Access denied", 403
     if not os.path.isfile(fpath):
         return "Report not found", 404
     with open(fpath, "r", encoding="utf-8") as f:

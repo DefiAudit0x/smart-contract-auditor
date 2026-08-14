@@ -3,6 +3,7 @@ import sys
 import json
 import time
 import html
+import secrets
 import logging
 from flask import Blueprint, request, jsonify, Response, stream_with_context, session
 
@@ -24,6 +25,7 @@ from agents.prompts import SYSTEM_PROMPT
 from agents.pre_scan import run_pre_scan
 from werkzeug.utils import secure_filename
 from orchestrator import dispatch_analysis
+from security_utils import validate_zip_infos
 from auth import save_history, get_history, get_history_item, check_quota, requires_auth, deduct_credit, reset_credits_if_needed, MONTHLY_FREE_CREDITS
 from flask_login import current_user
 
@@ -53,9 +55,18 @@ def api_analyze():
         if ext not in _CODE_EXTS:
             return jsonify({"error": f"Unsupported file type '{ext}'. Only {', '.join(_CODE_EXTS)} files are allowed."}), 400
         safe_name = secure_filename(f.filename)
-        path = os.path.join(UPLOAD_DIR, safe_name)
-        f.save(path)
-        code = load_local_contract(path)
+        if not safe_name:
+            return jsonify({"error": "Invalid filename"}), 400
+        stored_name = f"{secrets.token_hex(16)}_{safe_name}"
+        path = os.path.join(UPLOAD_DIR, stored_name)
+        try:
+            f.save(path)
+            code = load_local_contract(path)
+        finally:
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
         label = os.path.splitext(safe_name)[0]
     else:
         return jsonify({"error": "No file was uploaded"}), 400
@@ -471,9 +482,13 @@ def api_analyze_project():
         tmp.close()
         sol_files = []
         with zipfile.ZipFile(tmp.name, 'r') as zf:
-            for name in zf.namelist():
+            try:
+                members = validate_zip_infos(zf)
+            except ValueError as exc:
+                return jsonify({"error": f"Unsafe ZIP archive: {exc}"}), 400
+            for info, name in members:
                 if name.lower().endswith(('.sol', '.vy', '.move')):
-                    raw = zf.read(name)
+                    raw = zf.read(info)
                     code = raw[:8000].decode('utf-8', errors='replace')
                     sol_files.append((name, code))
         if not sol_files:
@@ -745,9 +760,9 @@ def api_generate_poc():
 
     except ImportError as e:
         return jsonify({"error": f"PoC generator not available: {e}"}), 500
-    except Exception as e:
+    except Exception:
         logger.exception("PoC generation failed")
-        return jsonify({"error": f"PoC generation failed: {e}"}), 500
+        return jsonify({"error": "PoC generation failed"}), 500
 
 
 @api_bp.route('/sarif', methods=['POST'])

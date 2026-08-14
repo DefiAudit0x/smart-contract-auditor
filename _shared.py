@@ -11,6 +11,7 @@ from flask import request, jsonify, session
 from config import REPORT_DIR
 from orchestrator import dispatch_analysis
 from project_detector import analyze_project
+from security_utils import extract_zip_safely
 
 logger = logging.getLogger(__name__)
 
@@ -268,49 +269,29 @@ def _fmt_size(size: int) -> str:
 def _handle_zip_upload(file_storage):
     import tempfile, zipfile, shutil
     tmpdir = tempfile.mkdtemp(prefix="project_upload_")
-    zippath = os.path.join(tmpdir, file_storage.filename)
+    zippath = os.path.join(tmpdir, "upload.zip")
     file_storage.save(zippath)
     try:
         with zipfile.ZipFile(zippath, 'r') as zf:
             file_size = os.path.getsize(zippath)
             if file_size > 50 * 1024 * 1024:
                 return {"error": "Zip file exceeds maximum size of 50 MB"}
-            rejected = []
-            for name in zf.namelist():
-                # Path traversal check via realpath
-                extracted_path = os.path.realpath(os.path.join(tmpdir, name))
-                if not extracted_path.startswith(os.path.realpath(tmpdir)):
-                    rejected.append(name + " (path traversal)")
-                    continue
-                parts = name.replace('\\', '/').split('/')
-                if '__pycache__' in parts or 'node_modules' in parts:
-                    rejected.append(name)
-                    continue
-                ext = os.path.splitext(name)[1].lower()
-                if ext in ('.exe', '.sh', '.bat', '.cmd', '.dll', '.so', '.dylib', '.ps1'):
-                    rejected.append(name)
-                    continue
-            if rejected:
-                return {"error": f"Zip contains rejected files: {', '.join(rejected[:3])}" + (f" and {len(rejected)-3} more" if len(rejected) > 3 else "")}
             try:
-                zf.extractall(tmpdir, filter='data')
-            except TypeError:
-                for member in zf.infolist():
-                    target = os.path.realpath(os.path.join(tmpdir, member.filename))
-                    if not target.startswith(os.path.realpath(tmpdir)):
-                        continue
-                    zf.extract(member, tmpdir)
-        items = os.listdir(tmpdir)
-        root = tmpdir
+                extract_root = os.path.join(tmpdir, "extracted")
+                extract_zip_safely(zf, extract_root)
+            except ValueError as exc:
+                return {"error": f"Unsafe ZIP archive: {exc}"}
+        items = os.listdir(extract_root)
+        root = extract_root
         for item in items:
-            item_path = os.path.join(tmpdir, item)
+            item_path = os.path.join(extract_root, item)
             if os.path.isdir(item_path) and item != '__MACOSX':
                 root = item_path
                 break
         return analyze_project(root, "english")
     except zipfile.BadZipFile:
         return {"error": "Invalid or corrupted zip file"}
-    except Exception as e:
+    except Exception:
         logger.exception("Zip upload analysis failed")
         return {"error": "Analysis failed"}
     finally:

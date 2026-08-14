@@ -8,6 +8,7 @@ import os
 import shutil
 import subprocess
 import sys
+import shlex
 import warnings
 from dataclasses import dataclass, field
 from typing import List
@@ -57,7 +58,10 @@ class EnvChecker:
 
     def _cmd(self, cmd: str) -> tuple:
         try:
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=8, shell=True)
+            args = shlex.split(cmd)
+            if not args:
+                return False, "empty command"
+            r = subprocess.run(args, capture_output=True, text=True, timeout=8, shell=False)
             out = (r.stdout or "").strip().split("\n")[0][:60] or (r.stderr or "").strip().split("\n")[0][:60]
             return r.returncode == 0, out
         except FileNotFoundError:

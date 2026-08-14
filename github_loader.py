@@ -3,16 +3,17 @@ import re
 import requests
 from typing import List, Dict, Optional, Tuple
 
+from security_utils import validate_github_repository_url
+
 if not logging.getLogger().hasHandlers():
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 
 def extract_repo_info(repo_url: str) -> Tuple[Optional[str], Optional[str]]:
-    pattern: str = r"github\.com/([^/]+)/([^/]+)"
-    match = re.search(pattern, repo_url)
-    if match:
-        return match.group(1), match.group(2).replace('.git', '')
+    parsed = validate_github_repository_url(repo_url)
+    if parsed:
+        return parsed
     return None, None
 
 
