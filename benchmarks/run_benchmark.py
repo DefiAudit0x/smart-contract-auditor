@@ -30,6 +30,7 @@ REQUIRED_METADATA_FIELDS = {
     "category",
     "invariant_id",
     "poc_file",
+    "poc_mode",
     "expected_detectors",
     "expected_clean",
 }
@@ -60,6 +61,8 @@ def load_metadata(case_dir: Path) -> dict[str, Any]:
         raise ValueError(f"{metadata_path}: poc_file must be a non-empty string")
     if not (case_dir / metadata["poc_file"]).is_file():
         raise ValueError(f"{metadata_path}: PoC file does not exist")
+    if metadata["poc_mode"] not in {"exploit", "negative_control"}:
+        raise ValueError(f"{metadata_path}: unsupported poc_mode")
     return metadata
 
 
@@ -157,6 +160,7 @@ def evaluate_case(case_dir: Path) -> dict[str, Any]:
         },
         "poc": {
             "file": metadata["poc_file"],
+            "mode": metadata["poc_mode"],
             "status": poc_result.status.value,
             "reason": poc_result.reason,
         },

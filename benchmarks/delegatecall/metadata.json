@@ -5,6 +5,7 @@
   "category": "Delegatecall",
   "invariant_id": "no_untrusted_delegatecall",
   "poc_file": "poc.t.sol",
+  "poc_mode": "exploit",
   "expected_detectors": [
     "DELEGATECALL Usage (AST)"
   ],

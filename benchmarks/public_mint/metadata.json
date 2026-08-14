@@ -5,6 +5,7 @@
   "category": "Public Mint",
   "invariant_id": "authorized_mint",
   "poc_file": "poc.t.sol",
+  "poc_mode": "exploit",
   "expected_detectors": [
     "Public Mint/Burn"
   ],

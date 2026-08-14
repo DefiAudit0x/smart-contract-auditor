@@ -27,6 +27,7 @@ Every `metadata.json` file uses this schema:
 | `category` | Stable benchmark category identifier. |
 | `invariant_id` | Deterministic invariant evaluated for the pair. |
 | `poc_file` | Repository-owned Foundry test fixture for executable verification. |
+| `poc_mode` | `exploit` for positive reproduction or `negative_control` for an expected blocked path. |
 | `expected_detectors` | Detector names that must appear for `vulnerable.sol`. |
 | `expected_clean` | Whether `fixed.sol` is expected to avoid every detector in `expected_detectors`. |
 
@@ -61,4 +62,4 @@ Each metadata file also identifies one deterministic invariant. The runner evalu
 
 ## Executable PoCs
 
-Each case includes a repository-owned `poc.t.sol` fixture. The PoC runner copies only that file into a temporary Foundry project and invokes `forge test --offline` with a bounded timeout. It rejects paths outside the repository, requires the `.t.sol` suffix, does not use a shell, and never enables broadcast, FFI, filesystem, or network cheatcodes. A successful runtime test is `Passed`; a failing test is `Failed`; missing Foundry or an unavailable runtime is `Inconclusive`. No claim of runtime confirmation is made when the status is `Inconclusive`.
+Each case includes a repository-owned `poc.t.sol` fixture. The PoC runner copies only that file into a temporary Foundry project and invokes `forge test --offline` with a bounded timeout. It rejects paths outside the repository, requires the `.t.sol` suffix, does not use a shell, and never enables broadcast, FFI, filesystem, or network cheatcodes. A successful runtime test is `Passed`; a failing test is `Failed`; missing Foundry or an unavailable runtime is `Inconclusive`. `poc_mode: exploit` identifies a positive reproduction, while `poc_mode: negative_control` identifies an expected blocked attempt. No claim of runtime confirmation is made when the status is `Inconclusive`.

@@ -5,6 +5,7 @@
   "category": "Selfdestruct",
   "invariant_id": "no_selfdestruct",
   "poc_file": "poc.t.sol",
+  "poc_mode": "exploit",
   "expected_detectors": [
     "Selfdestruct"
   ],

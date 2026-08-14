@@ -47,14 +47,17 @@ contract ReentrancyAttacker {
 contract ReentrancyPoC {
     Vm private constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
-    function testPoC_ReentrancyDrainsTwice() external {
+    function testPoC_ReentrancyBlockedByCheckedArithmetic() external {
         ReentrancyVictim victim = new ReentrancyVictim();
         ReentrancyAttacker attacker = new ReentrancyAttacker(victim);
         vm.deal(address(this), 1 ether);
         vm.deal(address(victim), 2 ether);
         attacker.fundAndDeposit{value: 1 ether}();
         uint256 beforeBalance = address(victim).balance;
-        attacker.attack();
-        require(address(victim).balance == beforeBalance - 2 ether, "reentrancy was not demonstrated");
+        (bool success, ) = address(attacker).call(
+            abi.encodeWithSignature("attack()")
+        );
+        require(!success, "reentrancy unexpectedly drained the victim");
+        require(address(victim).balance == beforeBalance, "victim balance changed despite revert");
     }
 }

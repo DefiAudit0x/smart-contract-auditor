@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import tempfile
@@ -32,6 +33,21 @@ def _safe_poc_path(poc_path: Path, project_root: Path) -> Path:
     if not resolved_poc.name.endswith(".t.sol"):
         raise ValueError("PoC file must use the .t.sol suffix")
     return resolved_poc
+
+
+def _find_local_solc() -> Path | None:
+    candidates = []
+    configured = os.environ.get("DEFI_AUDIT_SOLC")
+    if configured:
+        candidates.append(Path(configured))
+    discovered = shutil.which("solc")
+    if discovered:
+        candidates.append(Path(discovered))
+    candidates.append(Path.home() / ".solcx" / "solc-v0.8.25")
+    for candidate in candidates:
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return candidate.resolve()
+    return None
 
 
 def run_foundry_poc(
@@ -74,8 +90,10 @@ def run_foundry_poc(
             "--match-path",
             f"test/{safe_poc.name}",
             "--offline",
-            "--no-match-coverage",
         ]
+        local_solc = _find_local_solc()
+        if local_solc:
+            command.extend(["--use", str(local_solc)])
         try:
             process = subprocess.run(
                 command,
@@ -93,6 +111,8 @@ def run_foundry_poc(
     output = (process.stdout + process.stderr)[-4000:]
     if process.returncode == 0:
         return PocResult(str(safe_poc), PocStatus.PASSED, "Foundry test passed", output)
+    if "can't install missing solc" in output.lower() or "offline mode" in output.lower():
+        return PocResult(str(safe_poc), PocStatus.INCONCLUSIVE, "Required solc compiler is unavailable", output)
     return PocResult(str(safe_poc), PocStatus.FAILED, "Foundry test failed", output)
 
 
