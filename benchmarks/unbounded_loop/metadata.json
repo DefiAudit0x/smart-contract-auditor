@@ -1,0 +1,13 @@
+{
+  "vulnerability": "Unbounded Distribution Loop",
+  "location": "distribute(uint256)",
+  "severity": "High",
+  "category": "DoS",
+  "invariant_id": "dos.distribution_bounded",
+  "poc_file": "poc.t.sol",
+  "poc_mode": "exploit",
+  "expected_detectors": [
+    "Unbounded Loop (AST)"
+  ],
+  "expected_clean": true
+}

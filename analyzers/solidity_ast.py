@@ -263,8 +263,6 @@ def _extract_function(func_node) -> ASTFunction:
         elif nt == 'Identifier':
             if name == 'tx':
                 fn.uses_tx_origin = True
-            elif name == 'block':
-                fn.uses_block_timestamp = True
             elif name in ('require', 'assert'):
                 if name == 'require':
                     fn.has_require = True

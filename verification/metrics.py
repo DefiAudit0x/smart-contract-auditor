@@ -54,6 +54,47 @@ def _poc_metrics(cases: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _per_detector_metrics(cases: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Return ground-truth metrics grouped by expected detector name."""
+    detector_names = sorted({
+        detector
+        for case in cases
+        for detector in (
+            case["expected_detectors"]
+            + case["true_positives"]
+            + case["false_positives"]
+            + case["false_negatives"]
+        )
+    })
+    results: dict[str, dict[str, Any]] = {}
+    for detector in detector_names:
+        expected_support = sum(detector in case["expected_detectors"] for case in cases)
+        true_positives = sum(detector in case["true_positives"] for case in cases)
+        false_positives = sum(detector in case["false_positives"] for case in cases)
+        false_negatives = sum(detector in case["false_negatives"] for case in cases)
+        true_negatives = sum(
+            detector in case["expected_detectors"]
+            for case in cases
+            if case["metadata"].get("expected_clean") is True
+        ) - false_positives
+        precision = _rate(true_positives, true_positives + false_positives)
+        recall = _rate(true_positives, true_positives + false_negatives)
+        results[detector] = {
+            "case_count": expected_support,
+            "expected_support": expected_support,
+            "true_positives": true_positives,
+            "false_positives": false_positives,
+            "false_negatives": false_negatives,
+            "true_negatives": true_negatives,
+            "precision": precision,
+            "recall": recall,
+            "f1": _f1(precision, recall),
+            "fp_rate": _rate(false_positives, false_positives + true_negatives),
+            "fn_rate": _rate(false_negatives, false_negatives + true_positives),
+        }
+    return results
+
+
 def calculate_metrics(cases: list[dict[str, Any]]) -> dict[str, Any]:
     """Calculate all benchmark metrics from runner case records."""
     true_positives = sum(len(case["true_positives"]) for case in cases)
@@ -79,6 +120,7 @@ def calculate_metrics(cases: list[dict[str, Any]]) -> dict[str, Any]:
     invariant_fixed = _status_counts(cases, "fixed")
 
     return {
+        "per_detector": _per_detector_metrics(cases),
         "detector": {
             "case_count": len(cases),
             "expected_support": expected_support,

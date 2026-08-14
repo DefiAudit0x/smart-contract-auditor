@@ -1,0 +1,13 @@
+{
+  "vulnerability": "Unprotected Flash Loan Callback",
+  "location": "flashLoan(uint256)",
+  "severity": "Critical",
+  "category": "Flash Loan",
+  "invariant_id": "flash_loan.callback_guarded",
+  "poc_file": "poc.t.sol",
+  "poc_mode": "exploit",
+  "expected_detectors": [
+    "Flash Loan Attack Vector"
+  ],
+  "expected_clean": true
+}

@@ -1,0 +1,13 @@
+{
+  "vulnerability": "Storage Collision via Delegatecall",
+  "location": "fallback()",
+  "severity": "High",
+  "category": "Storage Collision",
+  "invariant_id": "storage_collision.no_delegatecall_layout_risk",
+  "poc_file": "poc.t.sol",
+  "poc_mode": "exploit",
+  "expected_detectors": [
+    "Storage Collision (Delegatecall)"
+  ],
+  "expected_clean": true
+}

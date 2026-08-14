@@ -146,6 +146,70 @@ def _check_authorized_mint(source: str) -> tuple[InvariantStatus, str, tuple[Evi
     return InvariantStatus.SATISFIED, "All exposed mint functions have an owner guard", ()
 
 
+def _check_flash_loan_guarded(source: str) -> tuple[InvariantStatus, str, tuple[Evidence, ...]]:
+    clean = _strip_comments(source)
+    for name, body, start in _function_spans(clean):
+        if re.search(r"flashLoan|flash_loan|flashloan", name, re.IGNORECASE):
+            if "nonReentrant" not in body:
+                match = re.search(r"function\s+\w+", clean[start:], re.IGNORECASE)
+                offset = start + (match.start() if match else 0)
+                return (
+                    InvariantStatus.VIOLATED,
+                    f"Function {name} exposes a flash-loan callback without a reentrancy guard",
+                    _evidence("unguarded_flash_loan", source, offset, body[:160]),
+                )
+    return InvariantStatus.SATISFIED, "Flash-loan entry points are guarded or absent", ()
+
+
+def _check_storage_collision_safe(source: str) -> tuple[InvariantStatus, str, tuple[Evidence, ...]]:
+    clean = _strip_comments(source)
+    delegate = re.search(r"\bdelegatecall\s*\(", clean, re.IGNORECASE)
+    layout = re.search(r"\bstruct\b|\bmapping\s*\(", clean, re.IGNORECASE)
+    if delegate and layout:
+        return (
+            InvariantStatus.VIOLATED,
+            "Source combines delegatecall with structured storage layout",
+            _evidence("delegatecall_storage_layout", source, delegate.start(), delegate.group()),
+        )
+    return InvariantStatus.SATISFIED, "No delegatecall storage collision pattern is present", ()
+
+
+def _check_transfer_result_checked(source: str) -> tuple[InvariantStatus, str, tuple[Evidence, ...]]:
+    clean = _strip_comments(source)
+    match = re.search(r"\.(?:send|transfer)\s*\(", clean, re.IGNORECASE)
+    if match:
+        return (
+            InvariantStatus.VIOLATED,
+            "Source uses send/transfer without an explicit return-value check",
+            _evidence("unchecked_transfer", source, match.start(), match.group()),
+        )
+    return InvariantStatus.SATISFIED, "No unchecked send/transfer call is present", ()
+
+
+def _check_distribution_bounded(source: str) -> tuple[InvariantStatus, str, tuple[Evidence, ...]]:
+    clean = _strip_comments(source)
+    match = re.search(r"\bfor\s*\(", clean, re.IGNORECASE)
+    if match:
+        return (
+            InvariantStatus.VIOLATED,
+            "Source contains a loop without a benchmark-declared batch bound",
+            _evidence("unbounded_loop", source, match.start(), match.group()),
+        )
+    return InvariantStatus.SATISFIED, "No unbounded distribution loop is present", ()
+
+
+def _check_no_block_timestamp_gate(source: str) -> tuple[InvariantStatus, str, tuple[Evidence, ...]]:
+    clean = _strip_comments(source)
+    match = re.search(r"\bblock\.timestamp\b", clean, re.IGNORECASE)
+    if match:
+        return (
+            InvariantStatus.VIOLATED,
+            "Source uses block.timestamp in a timing-sensitive path",
+            _evidence("block_timestamp", source, match.start(), match.group()),
+        )
+    return InvariantStatus.SATISFIED, "Source contains no block.timestamp gate", ()
+
+
 def _check_no_tx_origin_auth(source: str) -> tuple[InvariantStatus, str, tuple[Evidence, ...]]:
     clean = _strip_comments(source)
     match = re.search(r"\btx\.origin\b", clean, re.IGNORECASE)
@@ -183,6 +247,31 @@ INVARIANTS: tuple[InvariantSpec, ...] = (
         "no_tx_origin_auth",
         "Authentication must not rely on tx.origin",
         _check_no_tx_origin_auth,
+    ),
+    InvariantSpec(
+        "flash_loan.callback_guarded",
+        "Flash-loan entry points must guard callback-sensitive state",
+        _check_flash_loan_guarded,
+    ),
+    InvariantSpec(
+        "storage_collision.no_delegatecall_layout_risk",
+        "Structured storage must not be combined with mutable delegatecall",
+        _check_storage_collision_safe,
+    ),
+    InvariantSpec(
+        "unchecked_transfer.return_value_checked",
+        "External payment results must be checked",
+        _check_transfer_result_checked,
+    ),
+    InvariantSpec(
+        "dos.distribution_bounded",
+        "Distribution loops must be bounded or batchable",
+        _check_distribution_bounded,
+    ),
+    InvariantSpec(
+        "timestamp.no_block_timestamp_gate",
+        "Timing-sensitive gates must not rely on block.timestamp",
+        _check_no_block_timestamp_gate,
     ),
 )
 

@@ -259,10 +259,8 @@ class SolidityAnalyzer(LanguageAnalyzer):
         return findings
 
     def _check_flash_loan(self, fname, code):
-        if has_pattern(code, r"flashLoan|flash_loan|flashloan") and has_pattern(code, r"nonReentrant"):
-            return [Finding("Flash Loan Attack Vector", "Critical", "Economic",
-                    fname, "", "flashLoan with nonReentrant — check for callback attacks", "", 0)]
-        if has_pattern(code, r"flashLoan|flash_loan"):
+        """Report callback-sensitive flash-loan entry points lacking a guard."""
+        if has_pattern(code, r"flashLoan|flash_loan|flashloan") and not has_pattern(code, r"nonReentrant"):
             return [Finding("Flash Loan Attack Vector", "Critical", "Economic",
                     fname, "", "flashLoan without nonReentrant — very dangerous", "", 0,
                     "Add nonReentrant modifier")]

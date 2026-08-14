@@ -1,0 +1,13 @@
+{
+  "vulnerability": "Timestamp-Dependent Gate",
+  "location": "claim()",
+  "severity": "Medium",
+  "category": "Timing",
+  "invariant_id": "timestamp.no_block_timestamp_gate",
+  "poc_file": "poc.t.sol",
+  "poc_mode": "negative_control",
+  "expected_detectors": [
+    "block.timestamp Usage (AST)"
+  ],
+  "expected_clean": true
+}

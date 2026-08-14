@@ -264,6 +264,12 @@ class TestSolidityAnalyzerAST:
         results = a.analyze_file("test.sol", code)
         assert not any("tx.origin" in r.agent_name for r in results)
 
+    def test_block_number_is_not_timestamp(self):
+        code = "contract C { function f() external view returns (uint) { return block.number; } }"
+        a = SolidityAnalyzer()
+        results = a.analyze_file("test.sol", code)
+        assert not any("block.timestamp" in r.agent_name for r in results)
+
 
 # ════════════════════════════════════════════
 # 2. Chialisp Parser Tests

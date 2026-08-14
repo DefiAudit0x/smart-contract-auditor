@@ -160,12 +160,67 @@ def _match_tx_origin(source: str, function_name: str) -> list[Evidence]:
     return _evidence("tx_origin", source, start + match.start(), match.group())
 
 
+def _match_flash_loan(source: str, function_name: str) -> list[Evidence]:
+    span = _function_span(source, "flashLoan")
+    if not span:
+        span = _function_span(source, "flash_loan")
+    if not span:
+        return []
+    text, start, _ = span
+    if "nonReentrant" in text:
+        return []
+    match = re.search(r"function\s+flash[_]?Loan\b", text, re.IGNORECASE)
+    if not match:
+        return []
+    return _evidence("unguarded_flash_loan", source, start + match.start(), match.group())
+
+
+def _match_storage_collision(source: str, function_name: str) -> list[Evidence]:
+    delegate = re.search(r"\bdelegatecall\s*\(", source, re.IGNORECASE)
+    layout = re.search(r"\bstruct\b|\bmapping\s*\(", source, re.IGNORECASE)
+    if not delegate or not layout:
+        return []
+    return _evidence("delegatecall_storage_layout", source, delegate.start(), delegate.group())
+
+
+def _match_unchecked_transfer(source: str, function_name: str) -> list[Evidence]:
+    span = _function_span(source, function_name)
+    text, start, _ = span or (source, 0, len(source))
+    match = re.search(r"\.(?:send|transfer)\s*\(", text, re.IGNORECASE)
+    if not match:
+        return []
+    return _evidence("unchecked_transfer", source, start + match.start(), match.group())
+
+
+def _match_unbounded_loop(source: str, function_name: str) -> list[Evidence]:
+    span = _function_span(source, function_name)
+    text, start, _ = span or (source, 0, len(source))
+    match = re.search(r"\bfor\s*\(", text, re.IGNORECASE)
+    if not match:
+        return []
+    return _evidence("unbounded_loop", source, start + match.start(), match.group())
+
+
+def _match_block_timestamp(source: str, function_name: str) -> list[Evidence]:
+    span = _function_span(source, function_name)
+    text, start, _ = span or (source, 0, len(source))
+    match = re.search(r"\bblock\.timestamp\b", text, re.IGNORECASE)
+    if not match:
+        return []
+    return _evidence("block_timestamp", source, start + match.start(), match.group())
+
+
 _MATCHERS: dict[str, EvidenceMatcher] = {
     "Reentrancy (AST)": _match_reentrancy,
     "DELEGATECALL Usage (AST)": _match_delegatecall,
     "Selfdestruct": _match_selfdestruct,
     "Public Mint/Burn": _match_public_mint,
     "tx.origin Auth (AST)": _match_tx_origin,
+    "Flash Loan Attack Vector": _match_flash_loan,
+    "Storage Collision (Delegatecall)": _match_storage_collision,
+    "Unchecked Transfer": _match_unchecked_transfer,
+    "Unbounded Loop (AST)": _match_unbounded_loop,
+    "block.timestamp Usage (AST)": _match_block_timestamp,
 }
 
 

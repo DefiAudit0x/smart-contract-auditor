@@ -1,0 +1,13 @@
+{
+  "vulnerability": "Unchecked External Transfer",
+  "location": "pay(address,uint256)",
+  "severity": "Medium",
+  "category": "Unchecked External Call",
+  "invariant_id": "unchecked_transfer.return_value_checked",
+  "poc_file": "poc.t.sol",
+  "poc_mode": "exploit",
+  "expected_detectors": [
+    "Unchecked Transfer"
+  ],
+  "expected_clean": true
+}
