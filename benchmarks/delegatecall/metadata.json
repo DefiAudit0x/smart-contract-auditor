@@ -1,0 +1,10 @@
+{
+  "vulnerability": "Untrusted Delegatecall",
+  "location": "fallback()",
+  "severity": "High",
+  "category": "Delegatecall",
+  "expected_detectors": [
+    "DELEGATECALL Usage (AST)"
+  ],
+  "expected_clean": true
+}

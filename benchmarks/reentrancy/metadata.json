@@ -1,0 +1,10 @@
+{
+  "vulnerability": "Reentrancy",
+  "location": "withdraw(uint256)",
+  "severity": "Critical",
+  "category": "Reentrancy",
+  "expected_detectors": [
+    "Reentrancy (AST)"
+  ],
+  "expected_clean": true
+}

@@ -1,0 +1,10 @@
+{
+  "vulnerability": "Unexpected Selfdestruct",
+  "location": "destroy()",
+  "severity": "Critical",
+  "category": "Selfdestruct",
+  "expected_detectors": [
+    "Selfdestruct"
+  ],
+  "expected_clean": true
+}

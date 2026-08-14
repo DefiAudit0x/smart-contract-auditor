@@ -1,0 +1,10 @@
+{
+  "vulnerability": "Unrestricted Mint",
+  "location": "mint(address,uint256)",
+  "severity": "High",
+  "category": "Public Mint",
+  "expected_detectors": [
+    "Public Mint/Burn"
+  ],
+  "expected_clean": true
+}
