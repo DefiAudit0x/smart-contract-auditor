@@ -31,8 +31,9 @@ contract SafeStorage {
 @pytest.fixture(autouse=True)
 def _mock_llm():
     with patch("agents.pipeline._call_ollama", return_value=MOCK_REPORT):
-        with patch("agents.validation.call_model_with_fallback", return_value=MOCK_REPORT):
-            yield
+        with patch("agents.pipeline.call_model_with_fallback", return_value=MOCK_REPORT):
+            with patch("agents.validation.call_model_with_fallback", return_value=MOCK_REPORT):
+                yield
 
 
 @pytest.fixture(autouse=True)
@@ -45,6 +46,8 @@ def _no_rate_limit():
 def client():
     app.config['TESTING'] = True
     with app.test_client() as c:
+        with c.session_transaction() as sess:
+            sess['authenticated'] = True
         yield c
 
 

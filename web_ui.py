@@ -57,7 +57,7 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
-app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024
+app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024
 app.config['WTF_CSRF_TIME_LIMIT'] = 3600
 app.static_folder = 'static'
 app.register_blueprint(api_bp)
@@ -552,7 +552,15 @@ def rules_page():
 @app.route('/report/view/<filename>')
 def report_view(filename):
     safe = secure_filename(filename)
+    if filename != os.path.basename(filename) or filename in {'.', '..'}:
+        return "Invalid filename", 400
     if not safe:
+        return "Invalid filename", 400
+    # secure_filename strips a leading underscore, but report names may use it
+    # for internal/test reports; preserve it only for an otherwise safe name.
+    if filename.startswith('_') and safe == filename[1:]:
+        safe = filename
+    elif safe != filename:
         return "Invalid filename", 400
     fpath = os.path.realpath(os.path.join(REPORT_DIR, safe))
     if not fpath.startswith(os.path.realpath(REPORT_DIR)):

@@ -29,6 +29,8 @@ def _no_rate_limit():
 def client():
     app.config['TESTING'] = True
     with app.test_client() as c:
+        with c.session_transaction() as sess:
+            sess['authenticated'] = True
         yield c
 
 def _make_file_request(client, filename, content="contract C {}", analysis_type="opcodes"):
@@ -87,6 +89,8 @@ class TestFileUploadSecurity:
 
     def test_missing_api_key(self, client):
         import _shared
+        with client.session_transaction() as sess:
+            sess.clear()
         with patch.object(_shared, '_EXPECTED_API_KEY', 'test-secret-key'):
             app.config['TESTING'] = True
             tmpdir = tempfile.mkdtemp()

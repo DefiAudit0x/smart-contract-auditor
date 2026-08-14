@@ -31,19 +31,24 @@ def _no_rate_limit():
 @pytest.fixture(autouse=True)
 def _mock_llm():
     with patch("agents.pipeline._call_ollama", return_value=MOCK_REPORT):
-        with patch("agents.validation.call_model_with_fallback", return_value=MOCK_REPORT):
-            yield
+        with patch("agents.pipeline.call_model_with_fallback", return_value=MOCK_REPORT):
+            with patch("agents.validation.call_model_with_fallback", return_value=MOCK_REPORT):
+                yield
 
 
 @pytest.fixture
 def client():
     app.config['TESTING'] = True
     with app.test_client() as c:
+        with c.session_transaction() as sess:
+            sess['authenticated'] = True
         yield c
 
 
 class TestWebUI:
     def test_index(self, client):
+        with client.session_transaction() as sess:
+            sess.clear()
         rv = client.get('/')
         assert rv.status_code == 200
         assert b'Smart Contract Auditor' in rv.data
