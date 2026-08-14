@@ -103,6 +103,41 @@ Copy `.env.example` to `.env` and fill in your values.
 | `POST` | `/api/poc` | Generate an exploit PoC template |
 | `POST` | `/api/hackerone` | Format findings as a HackerOne report |
 
+## Ground-Truth Benchmark
+
+The repository includes a deterministic five-case benchmark covering reentrancy, delegatecall, selfdestruct, unauthorised public minting, and `tx.origin` authentication. Each case pairs `vulnerable.sol` with `fixed.sol` and includes metadata, a comparator evidence path, a declared invariant, and a Foundry PoC fixture.
+
+The latest run with Solidity `0.8.25` and Foundry `v1.7.1` reports:
+
+| Metric | Result |
+|---|---:|
+| Full Python suite | 252 passed |
+| True positives | 5 |
+| False positives | 0 |
+| False negatives | 0 |
+| Precision / Recall / F1 | 1.0 / 1.0 / 1.0 |
+| Comparator | 5 Confirmed |
+| Invariants | 5 vulnerable Violated; 5 fixed Satisfied |
+| PoCs | 5 Passed; 0 Failed; 0 Inconclusive |
+
+These are corpus-specific regression measurements, not a guarantee of complete vulnerability coverage. See [`BENCHMARK_METHODOLOGY.md`](BENCHMARK_METHODOLOGY.md) and [`LIMITATIONS.md`](LIMITATIONS.md).
+
+To reproduce the strict benchmark locally:
+
+```bash
+export PATH="$HOME/.foundry/bin:$PATH"
+PYTHONPATH=. python benchmarks/run_benchmark.py --require-poc
+python -m pytest -q
+```
+
+## Reproducible Build and Security
+
+Python dependencies are pinned with hashes in [`requirements.lock`](requirements.lock). Docker uses the pinned Python 3.10.14 Bookworm image tag, installs with `--require-hashes`, runs as a non-root user, and includes a healthcheck. CI runs the full test suite, Python compilation, a strict Foundry benchmark, and a pinned targeted lint gate.
+
+Archive uploads use traversal, symlink, executable-file, member-count, and expansion-size controls. GitHub repository loading accepts only canonical HTTPS `github.com/owner/repository` URLs. PoC execution refuses an unisolated fallback and applies Docker network, capability, filesystem, process, memory, and CPU restrictions when Docker mode is used.
+
+Read [`THREAT_MODEL.md`](THREAT_MODEL.md) for assets, trust boundaries, threats, and residual risks.
+
 ## Screenshots
 
 (Placeholder: add screenshots after deploying)

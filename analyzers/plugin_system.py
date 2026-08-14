@@ -67,13 +67,13 @@ class PluginManager:
             mod_name = fname[:-3]
             try:
                 mod = importlib.import_module(mod_name)
-                    for name, obj in inspect.getmembers(mod, inspect.isclass):
-                        if issubclass(obj, BaseDetector) and obj is not BaseDetector:
-                            instance = obj()
-                            self._detectors[instance.name] = instance
-                            logger.info(f"Loaded plugin detector: {instance.name} v{instance.version}")
-                except Exception as e:
-                    logger.warning(f"Failed to load plugin {mod_name}: {e}")
+                for name, obj in inspect.getmembers(mod, inspect.isclass):
+                    if issubclass(obj, BaseDetector) and obj is not BaseDetector:
+                        instance = obj()
+                        self._detectors[instance.name] = instance
+                        logger.info(f"Loaded plugin detector: {instance.name} v{instance.version}")
+            except Exception as e:
+                logger.warning(f"Failed to load plugin {mod_name}: {e}")
 
     def get_detectors(self) -> Dict[str, BaseDetector]:
         self.load_plugins()
