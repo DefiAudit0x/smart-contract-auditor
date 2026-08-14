@@ -73,6 +73,7 @@ th { color: var(--text2); font-weight: 500; }
 </div>
 
 <script nonce="{{ csp_nonce }}">
+var csrfToken = "{{ csrf_token() }}";
 var adminAuthed = false;
 
 function esc(str) { return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;').replace(/"/g,'&quot;'); }
@@ -89,7 +90,7 @@ function adminLogin() {
   var pass = document.getElementById('adminPass').value;
   fetch('/api/admin/login', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
     body: JSON.stringify({ password: pass })
   }).then(function(r) { if (!r.ok) throw new Error('Server error'); return r.json(); }).then(function(d) {
     if (d.success) { adminAuthed = true; document.getElementById('loginSection').style.display = 'none'; document.getElementById('adminPanel').style.display = 'block'; loadCodes(); }
@@ -105,7 +106,7 @@ function generateCode() {
   var maxUses = parseInt(document.getElementById('maxUses').value) || -1;
   fetch('/api/admin/codes', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
     body: JSON.stringify({ created_by: createdBy, max_uses: maxUses })
   }).then(function(r) { if (!r.ok) throw new Error('Server error'); return r.json(); }).then(function(d) {
     if (d.code) {
@@ -120,7 +121,7 @@ function deactivateCode(code) {
   if (!adminAuthed) return;
   fetch('/api/admin/codes/deactivate', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
     body: JSON.stringify({ code: code })
   }).then(function(r) { if (r.ok) loadCodes(); });
 }
@@ -137,7 +138,7 @@ function loadCodes() {
 }
 
 function adminLogout() {
-  fetch('/api/admin/logout', { method: 'POST' }).then(function() {
+  fetch('/api/admin/logout', { method: 'POST', headers: { 'X-CSRFToken': csrfToken } }).then(function() {
     adminAuthed = false;
     document.getElementById('loginSection').style.display = 'block';
     document.getElementById('adminPanel').style.display = 'none';

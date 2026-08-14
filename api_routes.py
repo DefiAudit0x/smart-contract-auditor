@@ -49,6 +49,11 @@ def api_analyze():
     label = "upload"
     if 'file' in request.files and request.files['file'].filename:
         f = request.files['file']
+        f.stream.seek(0, 2)
+        file_size = f.stream.tell()
+        f.stream.seek(0)
+        if file_size > 5 * 1024 * 1024:
+            return jsonify({"error": "File too large. Maximum size is 5MB."}), 413
         ext = os.path.splitext(f.filename)[1].lower()
         if ext not in _CODE_EXTS:
             return jsonify({"error": f"Unsupported file type '{ext}'. Only {', '.join(_CODE_EXTS)} files are allowed."}), 400
@@ -471,9 +476,17 @@ def api_analyze_project():
         tmp.close()
         sol_files = []
         with zipfile.ZipFile(tmp.name, 'r') as zf:
-            for name in zf.namelist():
+            members = zf.infolist()
+            if len(members) > 1000:
+                return jsonify({"error": "Zip contains too many files"}), 400
+            total_uncompressed = 0
+            for member in members:
+                total_uncompressed += member.file_size
+                if total_uncompressed > 100 * 1024 * 1024:
+                    return jsonify({"error": "Zip expands beyond the maximum size of 100 MB"}), 400
+                name = member.filename
                 if name.lower().endswith(('.sol', '.vy', '.move')):
-                    raw = zf.read(name)
+                    raw = zf.read(member)
                     code = raw[:8000].decode('utf-8', errors='replace')
                     sol_files.append((name, code))
         if not sol_files:

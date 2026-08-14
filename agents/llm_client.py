@@ -199,9 +199,9 @@ def call_model(model_id: str, prompt: str, timeout: int = 0) -> str:
     timeout = timeout or TIMEOUT
     info = FREE_MODELS.get(model_id, {})
     ctx = info.get("context", 0)
-    console.log(f"[bold cyan]{model_id}[/]  [dim]context: {ctx:,}  key: {key_suffix}[/]")
     current_key = get_api_key()
     key_suffix = _truncate_key(current_key) if current_key else "none"
+    console.log(f"[bold cyan]{model_id}[/]  [dim]context: {ctx:,}  key: {key_suffix}[/]")
     last_err = None
     for attempt in range(1, MAX_RETRIES + 1):
         try:

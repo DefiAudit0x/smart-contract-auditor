@@ -5,7 +5,7 @@ services:
   - type: web
     name: smart-contract-auditor
     env: python
-    buildCommand: pip install --no-cache-dir -r requirements.txt
+    buildCommand: pip install --no-cache-dir --require-hashes -r requirements.lock
     startCommand: ./start.sh
     healthCheckPath: /health
     disk:

@@ -4,11 +4,12 @@ gevent.monkey.patch_all()
 import os
 import sys
 import json
-import time
 import logging
+import re
+import time
 import hmac
 import secrets
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 from flask import Flask, render_template, request, jsonify, send_from_directory, session, redirect, g, url_for
 from flask_wtf.csrf import CSRFProtect
 from werkzeug.utils import secure_filename
@@ -73,6 +74,36 @@ def load_user(user_id):
 
 GITHUB_CLIENT_ID = os.environ.get("GITHUB_OAUTH_CLIENT_ID", "")
 GITHUB_CLIENT_SECRET = os.environ.get("GITHUB_OAUTH_CLIENT_SECRET", "")
+
+
+def _safe_next_page(value):
+    """Allow only local absolute paths for post-login redirects."""
+    if not value or not value.startswith('/'):
+        return '/app'
+    parsed = urlparse(value)
+    if parsed.scheme or parsed.netloc:
+        return '/app'
+    return value
+
+
+REPORT_FILENAME_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9._-]*$")
+
+
+def _safe_report_filename(value):
+    if not value or value != os.path.basename(value) or not REPORT_FILENAME_RE.fullmatch(value):
+        return None
+    return value
+
+
+ANALYSIS_ROOT = os.path.realpath(os.environ.get("ANALYSIS_ROOT", UPLOAD_DIR))
+
+
+def _safe_analysis_path(value):
+    """Resolve an analysis path only inside the configured analysis root."""
+    path = os.path.realpath(os.path.abspath(value or ""))
+    if path == ANALYSIS_ROOT or path.startswith(ANALYSIS_ROOT + os.sep):
+        return path
+    return None
 
 # CORS — allow n8n, Render, and local dev
 CORS(app, resources={r"/api/*": {"origins": ["https://auditor-bot.onrender.com", "http://localhost:5000"]}})
@@ -210,7 +241,7 @@ def github_callback():
     if not user:
         return redirect('/?error=user_creation_failed')
     login_user(user, remember=True)
-    next_page = request.args.get('next') or '/app'
+    next_page = _safe_next_page(request.args.get('next'))
     return redirect(next_page)
 
 @app.route('/logout')
@@ -270,8 +301,9 @@ def api_revoke_key(key_id):
 
 
 @app.route('/report/interactive/<filename>')
+@requires_auth
 def report_interactive(filename):
-    safe = secure_filename(filename)
+    safe = _safe_report_filename(filename)
     if not safe:
         return "Invalid filename", 400
     fpath = os.path.realpath(os.path.join(REPORT_DIR, safe))
@@ -323,11 +355,16 @@ def report_interactive(filename):
 
 
 @app.route('/download/<filename>')
+@requires_auth
 def download(filename):
-    return send_from_directory(REPORT_DIR, filename, as_attachment=False)
+    safe = _safe_report_filename(filename)
+    if not safe:
+        return "Invalid filename", 400
+    return send_from_directory(REPORT_DIR, safe, as_attachment=False)
 
 
 @app.route('/report/list')
+@requires_auth
 def report_list():
     ensure_report_dir()
     reports = []
@@ -342,6 +379,7 @@ def report_list():
 
 
 @app.route('/dashboard')
+@requires_auth
 def dashboard():
     ensure_report_dir()
     s = AuditService.kb_stats() if KB_ENABLED else {}
@@ -375,6 +413,7 @@ def dashboard():
 
 
 @app.route('/explorer', methods=['GET', 'POST'])
+@requires_auth
 def explorer():
     result = None
     if request.method == 'POST':
@@ -392,33 +431,52 @@ def explorer():
 
 
 @app.route('/batch', methods=['GET', 'POST'])
+@requires_auth
 def batch_page():
     result = None
     if request.method == 'POST':
         path = request.form.get('path', '').strip()
-        if path and os.path.isdir(path):
-            result = batch_audit(path)
+        safe_path = _safe_analysis_path(path)
+        if safe_path and os.path.isdir(safe_path):
+            result = batch_audit(safe_path)
         elif 'zipfile' in request.files and request.files['zipfile'].filename:
-            import tempfile, zipfile, shutil
+            import shutil
+            import stat
+            import tempfile
+            import zipfile
             f = request.files['zipfile']
             tmpdir = tempfile.mkdtemp(prefix="batch_upload_")
-            zippath = os.path.join(tmpdir, f.filename)
+            zippath = os.path.join(tmpdir, "upload.zip")
+            extract_root = os.path.join(tmpdir, "extracted")
+            os.makedirs(extract_root, exist_ok=True)
             f.save(zippath)
             try:
+                if os.path.getsize(zippath) > 50 * 1024 * 1024:
+                    raise ValueError("Zip file exceeds maximum size of 50 MB")
                 with zipfile.ZipFile(zippath, 'r') as zf:
-                    for member in zf.infolist():
-                        target = os.path.realpath(os.path.join(tmpdir, member.filename))
-                        if not target.startswith(os.path.realpath(tmpdir)):
-                            continue
-                        zf.extract(member, tmpdir)
-                items = os.listdir(tmpdir)
-                root = tmpdir
-                for item in items:
-                    item_path = os.path.join(tmpdir, item)
-                    if os.path.isdir(item_path) and item != '__MACOSX':
-                        root = item_path
-                        break
-                result = batch_audit(root)
+                    members = zf.infolist()
+                    if len(members) > 1000:
+                        raise ValueError("Zip contains too many files")
+                    safe_root = os.path.realpath(extract_root)
+                    total_uncompressed = 0
+                    for member in members:
+                        name = member.filename.replace('\\', '/')
+                        target = os.path.realpath(os.path.join(extract_root, name))
+                        if target != safe_root and not target.startswith(safe_root + os.sep):
+                            raise ValueError("Zip contains a path traversal entry")
+                        mode = (member.external_attr >> 16) & 0xFFFF
+                        if stat.S_ISLNK(mode):
+                            raise ValueError("Zip contains a symbolic link")
+                        total_uncompressed += member.file_size
+                        if total_uncompressed > 100 * 1024 * 1024:
+                            raise ValueError("Zip expands beyond the maximum size of 100 MB")
+                    for member in members:
+                        zf.extract(member, extract_root)
+                items = [item for item in os.listdir(extract_root) if item != '__MACOSX']
+                source_root = extract_root
+                if len(items) == 1 and os.path.isdir(os.path.join(extract_root, items[0])):
+                    source_root = os.path.join(extract_root, items[0])
+                result = batch_audit(source_root)
             except zipfile.BadZipFile:
                 result = {"error": "Invalid zip file"}
             except Exception as e:
@@ -433,6 +491,7 @@ def batch_page():
 
 
 @app.route('/gas', methods=['GET', 'POST'])
+@requires_auth
 def gas_page():
     result = None
     if request.method == 'POST':
@@ -449,6 +508,7 @@ def gas_page():
 
 
 @app.route('/testgen', methods=['GET', 'POST'])
+@requires_auth
 def testgen_page():
     tests = None
     if request.method == 'POST':
@@ -465,6 +525,7 @@ def testgen_page():
 
 
 @app.route('/inhgraph', methods=['GET', 'POST'])
+@requires_auth
 def inhgraph_page():
     html_graph = None
     if request.method == 'POST':
@@ -480,19 +541,24 @@ def inhgraph_page():
 
 
 @app.route('/project', methods=['GET', 'POST'])
+@requires_auth
 def project_page():
     from _shared import _handle_zip_upload
     result = None
     if request.method == 'POST':
         path = request.form.get('path', '').strip()
-        if path:
-            result = analyze_project(path, "english")
+        safe_path = _safe_analysis_path(path)
+        if safe_path and os.path.isdir(safe_path):
+            result = analyze_project(safe_path, "english")
+        elif path:
+            result = {"error": "Path must be inside the configured analysis root"}
         if 'zipfile' in request.files and request.files['zipfile'].filename:
             result = _handle_zip_upload(request.files['zipfile'])
     return render_template('project.html', result=result)
 
 
 @app.route('/permissions', methods=['GET', 'POST'])
+@requires_auth
 def permissions_page():
     result = None
     if request.method == 'POST':
@@ -550,8 +616,9 @@ def rules_page():
 
 
 @app.route('/report/view/<filename>')
+@requires_auth
 def report_view(filename):
-    safe = secure_filename(filename)
+    safe = _safe_report_filename(filename)
     if not safe:
         return "Invalid filename", 400
     fpath = os.path.realpath(os.path.join(REPORT_DIR, safe))
@@ -565,8 +632,9 @@ def report_view(filename):
 
 
 @app.route('/report/hackerone/<filename>')
+@requires_auth
 def report_hackerone(filename):
-    safe = secure_filename(filename)
+    safe = _safe_report_filename(filename)
     if not safe:
         return "Invalid filename", 400
     fpath = os.path.realpath(os.path.join(REPORT_DIR, safe))
@@ -586,8 +654,12 @@ def report_hackerone(filename):
 
 
 @app.route('/download_pdf/<filename>')
+@requires_auth
 def download_pdf(filename):
-    return send_from_directory(REPORT_DIR, filename, as_attachment=True)
+    safe = _safe_report_filename(filename)
+    if not safe:
+        return "Invalid filename", 400
+    return send_from_directory(REPORT_DIR, safe, as_attachment=True)
 
 
 @app.route('/privacy')
@@ -765,7 +837,6 @@ def api_admin_login():
         return jsonify({"success": True})
     return jsonify({"success": False, "error": "Wrong password"}), 403
 
-csrf.exempt(api_admin_login)
 
 
 @app.route('/api/admin/logout', methods=['POST'])
@@ -773,14 +844,12 @@ def api_admin_logout():
     session.pop('admin_authenticated', None)
     return jsonify({"success": True})
 
-csrf.exempt(api_admin_logout)
 
 
 @app.route('/api/admin/check')
 def api_admin_check():
     return jsonify({"authenticated": 'admin_authenticated' in session})
 
-csrf.exempt(api_admin_check)
 
 
 @app.route('/api/admin/codes', methods=['GET', 'POST'])
@@ -796,7 +865,6 @@ def api_admin_codes():
         return jsonify({"code": code})
     return jsonify({"codes": list_codes()})
 
-csrf.exempt(api_admin_codes)
 
 
 @app.route('/api/admin/codes/deactivate', methods=['POST'])
@@ -809,7 +877,7 @@ def api_admin_deactivate():
         return jsonify({"success": True})
     return jsonify({"error": "Code required"}), 400
 
-csrf.exempt(api_admin_deactivate)
+
 
 
 @app.route('/cicd')

@@ -4,6 +4,7 @@ Solidity AST parser — using solcx + solcast instead of Regex
 import os
 import re
 import logging
+import sys
 from typing import List, Dict, Optional, Any, Callable
 from dataclasses import dataclass, field
 
@@ -123,7 +124,13 @@ def compile_to_ast(code: str, file_path: str = "", search_paths: list = None) ->
             return None
         key = list(result.keys())[0]
         ast_json = result[key]['ast']
-        return from_ast(ast_json)
+        previous_limit = sys.getrecursionlimit()
+        try:
+            if previous_limit < 10000:
+                sys.setrecursionlimit(10000)
+            return from_ast(ast_json)
+        finally:
+            sys.setrecursionlimit(previous_limit)
     except Exception as e:
         logger.warning(f"Failed AST compilation: {e}")
         return None

@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 import pytest
 
 os.environ["RATE_LIMIT_PER_MINUTE"] = "999"
-os.environ["AUDITOR_API_KEY"] = ""
+os.environ["AUDITOR_API_KEY"] = "test-api-key"
 from web_ui import app
 
 API_KEY = os.environ.get("AUDITOR_API_KEY", "")
@@ -30,7 +30,7 @@ contract SafeStorage {
 
 @pytest.fixture(autouse=True)
 def _mock_llm():
-    with patch("agents.pipeline._call_ollama", return_value=MOCK_REPORT):
+    with patch("agents.pipeline.call_model_with_fallback", return_value=MOCK_REPORT):
         with patch("agents.validation.call_model_with_fallback", return_value=MOCK_REPORT):
             yield
 
@@ -45,6 +45,8 @@ def _no_rate_limit():
 def client():
     app.config['TESTING'] = True
     with app.test_client() as c:
+        with c.session_transaction() as sess:
+            sess['authenticated'] = True
         yield c
 
 

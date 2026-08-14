@@ -9,14 +9,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 import pytest
 
 os.environ["RATE_LIMIT_PER_MINUTE"] = "999"
-os.environ["AUDITOR_API_KEY"] = ""
+os.environ["AUDITOR_API_KEY"] = "test-api-key"
 from web_ui import app
 
 MOCK_REPORT = "## Security Analysis Report\n### Summary\n1 finding\n"
 
 @pytest.fixture(autouse=True)
 def _mock_llm():
-    with patch("agents.pipeline._call_ollama", return_value=MOCK_REPORT):
+    with patch("agents.pipeline.call_model_with_fallback", return_value=MOCK_REPORT):
         with patch("agents.validation.call_model_with_fallback", return_value=MOCK_REPORT):
             yield
 
@@ -27,6 +27,15 @@ def _no_rate_limit():
 
 @pytest.fixture
 def client():
+    app.config['TESTING'] = True
+    with app.test_client() as c:
+        with c.session_transaction() as sess:
+            sess['authenticated'] = True
+        yield c
+
+
+@pytest.fixture
+def unauthenticated_client():
     app.config['TESTING'] = True
     with app.test_client() as c:
         yield c
@@ -85,7 +94,7 @@ class TestFileUploadSecurity:
         data = json.loads(rv.data)
         assert "Rate limit" in data.get("error", "")
 
-    def test_missing_api_key(self, client):
+    def test_missing_api_key(self, unauthenticated_client):
         import _shared
         with patch.object(_shared, '_EXPECTED_API_KEY', 'test-secret-key'):
             app.config['TESTING'] = True
@@ -94,7 +103,7 @@ class TestFileUploadSecurity:
             with open(fpath, "w", encoding="utf-8") as f:
                 f.write("contract C {}")
             with open(fpath, "rb") as f:
-                rv = client.post('/api/analyze', data={
+                rv = unauthenticated_client.post('/api/analyze', data={
                     'file': (f, 'key.sol'),
                     'analysis_type': 'opcodes'
                 }, headers={})

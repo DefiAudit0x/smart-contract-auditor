@@ -1,6 +1,7 @@
 import os, sys, json, time, logging, threading, re, tempfile, zipfile
 from concurrent.futures import ThreadPoolExecutor
 from difflib import unified_diff
+import itertools
 sys.path.insert(0, os.path.dirname(__file__))
 
 logger = logging.getLogger(__name__)
@@ -405,17 +406,17 @@ class TelegramBot:
                 keyboard=self._main_keyboard())
         elif data == "help":
             self._answer_callback(cb_id, "Help menu")
-                self._send(chat_id,
-                    "🤖 *Commands:*\n\n"
-                    "`/audit <code>` — Code Audit\n"
-                    "`/poc <code>` — Auto-PoC Audit\n"
-                    "`/gas <code>` — Gas Analysis\n"
-                    "`/pdf <code>` — PDF Report\n"
-                    "`/lang` — Change Language\n"
-                    "`/status` — System Status\n\n"
-                    "📎 Send a GitHub link\n"
-                    "📎 Upload a smart contract file",
-                    keyboard=self._main_keyboard(), parse_mode="Markdown")
+            self._send(chat_id,
+                "🤖 *Commands:*\n\n"
+                "`/audit <code>` — Code Audit\n"
+                "`/poc <code>` — Auto-PoC Audit\n"
+                "`/gas <code>` — Gas Analysis\n"
+                "`/pdf <code>` — PDF Report\n"
+                "`/lang` — Change Language\n"
+                "`/status` — System Status\n\n"
+                "📎 Send a GitHub link\n"
+                "📎 Upload a smart contract file",
+                keyboard=self._main_keyboard(), parse_mode="Markdown")
         else:
             self._answer_callback(cb_id)
 

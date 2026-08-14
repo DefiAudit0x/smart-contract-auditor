@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 import pytest
 
 os.environ["RATE_LIMIT_PER_MINUTE"] = "999"
-os.environ["AUDITOR_API_KEY"] = ""
+os.environ["AUDITOR_API_KEY"] = "test-api-key"
 from web_ui import app, REPORT_DIR, ensure_report_dir
 
 MOCK_REPORT = """## Security Analysis Report
@@ -30,7 +30,7 @@ def _no_rate_limit():
 
 @pytest.fixture(autouse=True)
 def _mock_llm():
-    with patch("agents.pipeline._call_ollama", return_value=MOCK_REPORT):
+    with patch("agents.pipeline.call_model_with_fallback", return_value=MOCK_REPORT):
         with patch("agents.validation.call_model_with_fallback", return_value=MOCK_REPORT):
             yield
 
@@ -39,14 +39,27 @@ def _mock_llm():
 def client():
     app.config['TESTING'] = True
     with app.test_client() as c:
+        with c.session_transaction() as sess:
+            sess['authenticated'] = True
+        yield c
+
+
+@pytest.fixture
+def unauthenticated_client():
+    app.config['TESTING'] = True
+    with app.test_client() as c:
         yield c
 
 
 class TestWebUI:
     def test_index(self, client):
-        rv = client.get('/')
+        rv = client.get('/', follow_redirects=True)
         assert rv.status_code == 200
         assert b'Smart Contract Auditor' in rv.data
+
+    def test_protected_reports_require_auth(self, unauthenticated_client):
+        rv = unauthenticated_client.get('/report/list')
+        assert rv.status_code in (302, 401)
 
     def test_report_list_empty(self, client):
         rv = client.get('/report/list')

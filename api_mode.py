@@ -1,10 +1,11 @@
 """API Mode - REST API for programmatic use."""
+import hmac
+import logging
 import os
 import sys
 import tempfile
 import time
-
-import logging
+from functools import wraps
 from flask import Flask, request, jsonify
 from werkzeug.utils import secure_filename
 
@@ -48,15 +49,28 @@ cleanup_old_uploads()
 
 
 def require_auth(f):
-    """Middleware to verify API key."""
+    """Middleware to verify API key and fail closed when it is not configured."""
+    @wraps(f)
     def wrapper(*args, **kwargs):
-        if API_KEY:
-            key = request.headers.get("X-API-Key", "")
-            if key != API_KEY:
-                return jsonify({"error": "Unauthorized"}), 401
+        if not API_KEY:
+            return jsonify({"error": "API authentication is not configured"}), 503
+        auth = request.headers.get("X-API-Key", "")
+        if not auth:
+            bearer = request.headers.get("Authorization", "")
+            auth = bearer[7:] if bearer.startswith("Bearer ") else ""
+        if not hmac.compare_digest(auth, API_KEY):
+            return jsonify({"error": "Unauthorized"}), 401
         return f(*args, **kwargs)
-    wrapper.__name__ = f.__name__
     return wrapper
+
+
+def _safe_input_path(raw_path: str) -> str:
+    """Allow filesystem analysis only inside the dedicated upload directory."""
+    path = os.path.realpath(os.path.abspath(raw_path))
+    root = os.path.realpath(UPLOAD_DIR)
+    if path == root or not path.startswith(root + os.sep):
+        raise ValueError("path must be inside the upload directory")
+    return path
 
 
 @app.route("/v1/audit", methods=["POST"])
@@ -86,6 +100,11 @@ def api_file():
     if "file" not in request.files:
         return jsonify({"error": "No file uploaded"}), 400
     f = request.files["file"]
+    f.stream.seek(0, 2)
+    file_size = f.stream.tell()
+    f.stream.seek(0)
+    if file_size > 5 * 1024 * 1024:
+        return jsonify({"error": "File too large. Maximum size is 5MB."}), 413
     safe = secure_filename(f.filename) or "upload.sol"
     path = os.path.join(UPLOAD_DIR, safe)
     f.save(path)
@@ -120,8 +139,12 @@ def api_batch():
     data = request.get_json()
     if not data or "path" not in data:
         return jsonify({"error": "Field 'path' is required"}), 400
-    workers = data.get("workers", 4)
-    result = batch_audit(data["path"], workers)
+    try:
+        path = _safe_input_path(data["path"])
+    except (TypeError, ValueError):
+        return jsonify({"error": "path must be inside the upload directory"}), 400
+    workers = min(max(int(data.get("workers", 4)), 1), 8)
+    result = batch_audit(path, workers)
     return jsonify(result)
 
 
@@ -156,7 +179,11 @@ def api_project():
     data = request.get_json()
     if not data or "path" not in data:
         return jsonify({"error": "Field 'path' is required"}), 400
-    result = analyze_project(data["path"], "english")
+    try:
+        path = _safe_input_path(data["path"])
+    except (TypeError, ValueError):
+        return jsonify({"error": "path must be inside the upload directory"}), 400
+    result = analyze_project(path, "english")
     return jsonify({"result": result})
 
 
@@ -184,4 +211,4 @@ def run_api(host="0.0.0.0", port=5001, debug=False):
 
 
 if __name__ == "__main__":
-    run_api(debug=True)
+    run_api(debug=os.environ.get("FLASK_DEBUG", "0") == "1")
