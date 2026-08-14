@@ -1,0 +1,75 @@
+{
+  "name": "smart-contract-auditor",
+  "displayName": "Smart Contract Auditor",
+  "description": "AI-powered security audit for Solidity, Vyper, and Move smart contracts. Detects reentrancy, CEI violations, and 100+ vulnerability patterns with multi-pass LLM validation.",
+  "version": "1.0.0",
+  "publisher": "DefiAudit0x",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DefiAudit0x/smart-contract-auditor"
+  },
+  "bugs": {
+    "url": "https://github.com/DefiAudit0x/smart-contract-auditor/issues"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Linters",
+    "Security",
+    "Programming Languages"
+  ],
+  "keywords": [
+    "solidity",
+    "smart contract",
+    "security",
+    "audit",
+    "blockchain",
+    "ethereum",
+    "vyper",
+    "reentrancy",
+    "smart-contract-security"
+  ],
+  "activationEvents": [
+    "onLanguage:solidity",
+    "onLanguage:vyper"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "sca.auditFile",
+        "title": "Smart Contract Auditor: Audit current file"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "sca.auditFile",
+        "key": "ctrl+shift+a",
+        "mac": "cmd+shift+a"
+      }
+    ],
+    "configuration": {
+      "title": "Smart Contract Auditor",
+      "properties": {
+        "sca.apiUrl": {
+          "type": "string",
+          "default": "https://auditor-bot.onrender.com",
+          "description": "Auditor API base URL"
+        },
+        "sca.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "API key for authenticated access"
+        },
+        "sca.language": {
+          "type": "string",
+          "enum": ["en", "ar", "zh"],
+          "default": "en",
+          "description": "Report language (en=English, ar=Arabic, zh=Chinese)"
+        }
+      }
+    }
+  }
+}

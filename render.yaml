@@ -1,0 +1,45 @@
+# Render deployment config
+# https://render.com/docs/deploy-flask
+
+services:
+  - type: web
+    name: smart-contract-auditor
+    env: python
+    buildCommand: pip install --no-cache-dir -r requirements.txt
+    startCommand: ./start.sh
+    healthCheckPath: /health
+    disk:
+      name: kb-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10
+      - key: PYTHONDONTWRITEBYTECODE
+        value: "1"
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: KB_USE_ST
+        value: "0"
+      - key: API_PROVIDER
+        value: openrouter
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OLLAMA_API_KEY
+        sync: false
+      - key: AUDITOR_API_KEY
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: ETHERSCAN_API_KEY
+        sync: false
+      - key: SECRET_KEY
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: AUTH_DB_PATH
+        value: /data/auth.db

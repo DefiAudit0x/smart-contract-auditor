@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart Contract Auditor</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/codemirror.min.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/dracula.min.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/fontawesome.min.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+<!-- ─── Top Bar ─── -->
+<header class="topbar">
+  <div class="topbar-brand">
+    <span class="shield">&#128737;</span>
+    <span>Smart Contract Auditor</span>
+  </div>
+  <div class="topbar-center">
+    <button class="btn btn-sm btn-ghost" id="knowledgeBtn" title="Knowledge Base"><i class="fas fa-book"></i></button>
+    <button class="btn btn-sm btn-ghost" id="historyBtn" title="History"><i class="fas fa-history"></i></button>
+  </div>
+  <div class="topbar-right">
+    <span id="quotaDisplay" style="display:inline-flex;align-items:center;gap:4px;"></span>
+    <a href="/account" class="btn btn-sm btn-ghost" style="text-decoration:none;padding:4px 10px;" title="Account"><i class="fas fa-user"></i></a>
+    <button class="btn-icon" id="themeToggle" title="Toggle theme"><i class="fas fa-moon"></i></button>
+  </div>
+</header>
+
+<!-- ─── Main ─── -->
+<div class="main">
+
+  <!-- ─── Sidebar ─── -->
+  <nav class="sidebar">
+    <div class="sidebar-label">Input</div>
+    <button class="sidebar-tab active" data-tab="paste"><i class="fas fa-paste"></i><span>Paste</span></button>
+    <button class="sidebar-tab" data-tab="upload"><i class="fas fa-cloud-upload-alt"></i><span>Upload</span></button>
+    <button class="sidebar-tab" data-tab="project"><i class="fas fa-folder-open"></i><span>Project</span></button>
+    <button class="sidebar-tab" data-tab="github"><i class="fab fa-github"></i><span>GitHub</span></button>
+    <button class="sidebar-tab" data-tab="diff"><i class="fas fa-code-branch"></i><span>Diff</span></button>
+  </nav>
+
+  <!-- ─── Editor Pane ─── -->
+  <section class="editor-pane">
+    <div class="editor-toolbar">
+      <div class="editor-toolbar-left">
+        <span class="editor-status" id="fileInfo"></span>
+      </div>
+      <div class="editor-toolbar-right">
+        <select id="analysisType">
+          <option value="full">Full Audit</option>
+          <option value="quick">Quick Scan</option>
+          <option value="deep">Deep Analysis</option>
+        </select>
+        <button class="btn btn-primary" id="analyzeBtn"><i class="fas fa-play"></i> Analyze</button>
+        <button class="btn btn-danger" id="stopBtn" style="display:none;"><i class="fas fa-stop"></i> Stop</button>
+      </div>
+    </div>
+
+    <div class="editor-body" id="editorBody">
+      <div class="tab-content active" id="tab-paste">
+        <div class="multi-file-bar">
+          <input type="text" id="fileName" class="file-name-input" placeholder="filename.sol" value="contract.sol">
+          <button class="btn btn-sm" id="addFileBtn"><i class="fas fa-plus"></i> Add</button>
+        </div>
+        <textarea id="codeEditor" placeholder="Paste your Solidity / Vyper / Move code here..."></textarea>
+        <div id="pasteFileList" class="multi-file-list"></div>
+      </div>
+      <div class="tab-content" id="tab-upload">
+        <div class="tab-content-center">
+          <i class="fas fa-cloud-upload-alt"></i>
+          <p>Drop .sol / .vy / .move files here or click to browse</p>
+          <input type="file" id="fileInput" accept=".sol,.vy,.move,.clsp,.clib" multiple>
+          <button class="btn" id="browseBtn"><i class="fas fa-folder-open"></i> Browse Files</button>
+        </div>
+      </div>
+      <div class="tab-content" id="tab-project">
+        <div class="tab-content-center">
+          <i class="fas fa-folder-open"></i>
+          <p>Upload a ZIP project with multiple contracts</p>
+          <select id="entryContract" style="max-width:300px;display:none;">
+            <option value="">Auto-detect entry contract</option>
+          </select>
+          <input type="file" id="projectInput" accept=".zip">
+          <button class="btn" id="browseProjectBtn"><i class="fas fa-file-archive"></i> Browse ZIP</button>
+          <div id="projectFileInfo" class="hint"></div>
+        </div>
+      </div>
+      <div class="tab-content" id="tab-github">
+        <div class="tab-content-center">
+          <i class="fab fa-github"></i>
+          <p>Audit a public GitHub repository</p>
+          <input type="text" id="githubUrl" placeholder="https://github.com/owner/repo">
+          <div id="githubFileInfo" class="hint"></div>
+        </div>
+      </div>
+      <div class="tab-content" id="tab-diff">
+        <div class="diff-panels">
+          <div class="diff-panel">
+            <div class="diff-panel-header">Original</div>
+            <textarea id="diffOriginal" placeholder="Original code..."></textarea>
+          </div>
+          <div class="diff-panel">
+            <div class="diff-panel-header">Modified</div>
+            <textarea id="diffModified" placeholder="Modified code..."></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="drop-zone" id="dropZone">
+        <i class="fas fa-file-upload"></i>
+        <span>Drop file here</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Results Pane ─── -->
+  <section class="results-pane" id="resultsPane">
+    <div class="results-header">
+      <span class="results-title" id="resultsTitle">Results</span>
+      <div class="results-actions" id="resultsActions" style="display:none">
+        <button class="btn-icon" id="exportHubBtn" title="Export"><i class="fas fa-file-export"></i></button>
+        <button class="btn-icon" id="gasBtn" title="Gas Report"><i class="fas fa-gas-pump"></i></button>
+        <button class="btn-icon" id="fixBtn" title="Suggest Fix"><i class="fas fa-wrench"></i></button>
+        <button class="btn-icon" id="malwareBtn" title="Malware Scan"><i class="fas fa-bug"></i></button>
+        <button class="btn-icon" id="fuzzBtn" title="Generate Fuzz Test"><i class="fas fa-flask"></i></button>
+        <button class="btn-icon" id="pocBtn" title="Generate PoC Exploit"><i class="fas fa-bolt"></i></button>
+        <button class="btn-icon" id="toggleChart" title="Toggle Chart"><i class="fas fa-chart-bar"></i></button>
+      </div>
+    </div>
+    <div class="results-body" id="resultsBody">
+      <div class="results-empty" id="featuresShowcase">
+        <i class="fas fa-shield-alt" style="font-size:32px;color:var(--accent);margin-bottom:8px;"></i>
+        <p style="margin-bottom:16px;">Paste your code and click <strong>Analyze</strong>, or explore what this tool can do:</p>
+        <div class="features-mini-grid">
+          <div class="feature-mini"><i class="fas fa-microchip"></i><div><strong>Multi-Pass AI</strong><span>3-pass LLM + validation + gate scoring</span></div></div>
+          <div class="feature-mini"><i class="fas fa-project-diagram"></i><div><strong>CFG/DFG</strong><span>Control &amp; data flow graph analysis</span></div></div>
+          <div class="feature-mini"><i class="fas fa-shield-alt"></i><div><strong>CVSS 4.0</strong><span>Industry-standard severity scoring</span></div></div>
+          <div class="feature-mini"><i class="fas fa-database"></i><div><strong>OSV Database</strong><span>Real-time vulnerability lookups</span></div></div>
+          <div class="feature-mini"><i class="fas fa-file-export"></i><div><strong>Multi-Format</strong><span>SARIF, PDF, MD, HackerOne export</span></div></div>
+          <div class="feature-mini"><i class="fas fa-code-branch"></i><div><strong>Diff Auditor</strong><span>Compare original vs modified code</span></div></div>
+          <div class="feature-mini"><i class="fas fa-gas-pump"></i><div><strong>Gas Profiler</strong><span>solc-based gas optimization reports</span></div></div>
+          <div class="feature-mini"><i class="fas fa-book"></i><div><strong>Knowledge Base</strong><span>Self-learning pattern discovery</span></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<footer style="flex-shrink:0;padding:6px 16px;border-top:1px solid var(--border);background:var(--bg-surface);font-size:11px;color:var(--text-dim);text-align:center;">
+  Developed by AI &bull; DefiAudit0x &bull; Powered by GPT-OSS:120b &bull; Multi-Pass AI Validation &bull; CFG/DFG Level 3 Analysis &bull; OSV Integrated
+</footer>
+
+<!-- ─── History Panel ─── -->
+<div class="panel-overlay" id="historyPanel">
+  <div class="panel-slide">
+    <div class="panel-slide-header">
+      <h3>History</h3>
+      <button class="btn-icon" id="historyClose"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="panel-slide-body" id="historyList"></div>
+  </div>
+</div>
+
+<!-- ─── Chart Modal ─── -->
+<div class="modal-overlay" id="chartModal">
+  <div class="modal-box">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <h3 style="margin:0;">Severity Distribution</h3>
+      <button class="btn-icon" id="chartClose"><i class="fas fa-times"></i></button>
+    </div>
+    <canvas id="severityChart" width="400" height="280"></canvas>
+  </div>
+</div>
+
+<!-- ─── Knowledge Modal ─── -->
+<div class="modal-overlay" id="knowledgeModal">
+  <div class="modal-box">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <h3 style="margin:0;">Upload Knowledge (PDF)</h3>
+      <button class="btn-icon" id="knowledgeClose"><i class="fas fa-times"></i></button>
+    </div>
+    <p>Upload security research, audit reports, or vulnerability databases to enrich future analysis.</p>
+    <input type="file" id="knowledgeInput" accept=".pdf" style="display:none;">
+    <button class="btn" id="browseKnowledgeBtn" style="margin-bottom:8px;"><i class="fas fa-folder-open"></i> Browse PDF</button>
+    <div id="knowledgeFileInfo" class="hint" style="margin-bottom:8px;"></div>
+    <div id="knowledgeResult" style="font-size:13px;margin-bottom:8px;"></div>
+    <button class="btn btn-primary" id="uploadKnowledgeBtn"><i class="fas fa-upload"></i> Ingest to Knowledge Base</button>
+  </div>
+</div>
+
+<!-- ─── Export Hub Modal ─── -->
+<div class="modal-overlay" id="exportHubModal">
+  <div class="modal-box" style="max-width:520px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <h3 style="margin:0;">Export Report</h3>
+      <button class="btn-icon" id="exportHubClose"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="export-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+      <button class="export-option" onclick="downloadReport('md')">
+        <i class="fas fa-file-alt" style="color:var(--accent);"></i>
+        <span>Markdown</span>
+        <small>Download .md file</small>
+      </button>
+      <button class="export-option" onclick="downloadReport('sarif')">
+        <i class="fas fa-code" style="color:var(--green);"></i>
+        <span>SARIF</span>
+        <small>IDE-compatible format</small>
+      </button>
+      <button class="export-option" onclick="downloadReport('pdf')">
+        <i class="fas fa-file-pdf" style="color:var(--red);"></i>
+        <span>PDF</span>
+        <small>Printable report</small>
+      </button>
+      <button class="export-option" onclick="exportToGithub()">
+        <i class="fab fa-github" style="color:var(--text);"></i>
+        <span>GitHub Issue</span>
+        <small>Copy to clipboard</small>
+      </button>
+      <button class="export-option" onclick="exportHackerone()">
+        <i class="fas fa-paper-plane" style="color:var(--orange);"></i>
+        <span>HackerOne</span>
+        <small>Bug bounty format</small>
+      </button>
+      <a class="export-option" href="/cicd" style="text-decoration:none;">
+        <i class="fas fa-rocket" style="color:var(--purple);"></i>
+        <span>CI/CD Config</span>
+        <small>GitHub Actions YAML</small>
+      </a>
+    </div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='vendor/codemirror.min.js') }}" defer></script>
+<script src="{{ url_for('static', filename='vendor/javascript.min.js') }}" defer></script>
+<script src="{{ url_for('static', filename='vendor/matchbrackets.min.js') }}" defer></script>
+<script src="{{ url_for('static', filename='vendor/active-line.min.js') }}" defer></script>
+<script src="{{ url_for('static', filename='vendor/purify.min.js') }}" defer></script>
+<script src="{{ url_for('static', filename='vendor/marked.min.js') }}" defer></script>
+<script src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}" defer></script>
+<script src="{{ url_for('static', filename='vendor/html2pdf.bundle.min.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/main.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/chart.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/api.js') }}" defer></script>
+</body>
+</html>
