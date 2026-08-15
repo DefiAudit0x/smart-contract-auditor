@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "document_type": "ProductionArchitectureProposal",
+  "decision_status": "Pending independent architecture decision",
+  "proposal_scope": {
+    "production_implementation": false,
+    "production_code_changes": [],
+    "comparator_changes": [],
+    "primary_benchmark_changed": false,
+    "real_world_adjudications_changed": false,
+    "parity_re_adjudicated": false,
+    "case_4_added": false
+  },
+  "evidence_basis": {
+    "revised_poc_gates_passed_within_scope": true,
+    "tested_compiler_versions": ["0.4.10", "0.8.25"],
+    "tested_semantic_families": ["Selfdestruct", "block.timestamp", "DELEGATECALL"],
+    "full_regression_tests": 334,
+    "warnings": 70,
+    "primary_metrics": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
+    }
+  },
+  "explicit_boundary": {
+    "multi_file_compilation_and_source_unit_preservation": true,
+    "multi_file_imported_source_semantic_detection": false,
+    "multi_file_imported_source_comparator_trace": false,
+    "production_detector_migration": false,
+    "production_compiler_candidate_resolution": false,
+    "production_raw_ast_retention_policy_implemented": false
+  },
+  "proposed_components": [
+    "SourceManifest",
+    "CompilerRequest",
+    "CompilerResolver",
+    "CompilerCandidate",
+    "CompilationResult",
+    "VersionedAdapter",
+    "CanonicalProgram",
+    "DetectorInput",
+    "SourceView",
+    "AnalysisResult",
+    "FindingProvenance"
+  ],
+  "failure_states": [
+    "UnsupportedCompiler",
+    "CompilationFailed",
+    "ASTUnavailable",
+    "UnsupportedASTVersion",
+    "ASTNormalizationFailed",
+    "Inconclusive",
+    "AnalysisSucceededNoFindings",
+    "AnalysisSucceededWithFindings"
+  ],
+  "migration_stages": [
+    {"stage": 0, "name": "isolated_poc_bridge", "production_default": false},
+    {"stage": 1, "name": "one_detector_shadow_mode", "production_default": false},
+    {"stage": 2, "name": "selected_detector_families", "production_default": false},
+    {"stage": 3, "name": "canonical_default_after_acceptance", "production_default": false}
+  ],
+  "required_gates_before_implementation": [
+    "deterministic compiler resolution with candidate evidence",
+    "field-to-detector consumer mapping for Canonical AST v1",
+    "context-safe versioned adapters",
+    "AST-native structural completeness",
+    "end-to-end status semantics",
+    "finding-level provenance and raw-AST retention policy",
+    "imported-source semantic detection with source-id/range trace",
+    "one production detector using DetectorInput in shadow mode",
+    "Comparator evidence and historical syntax policy",
+    "feature-flag rollout and failure-preserving rollback",
+    "controlled/compatibility/real-world track preservation"
+  ],
+  "support_matrix": [
+    {"solidity_family": "0.4.10", "ast_schema": "legacy ast-json", "poc_tested": true, "production_supported": "TBD"},
+    {"solidity_family": "0.5.x", "ast_schema": "TBD", "poc_tested": false, "production_supported": "TBD"},
+    {"solidity_family": "0.6.x", "ast_schema": "TBD", "poc_tested": false, "production_supported": "TBD"},
+    {"solidity_family": "0.7.x", "ast_schema": "TBD", "poc_tested": false, "production_supported": "TBD"},
+    {"solidity_family": "0.8.25", "ast_schema": "modern compact/standard-json", "poc_tested": true, "production_supported": "TBD"},
+    {"solidity_family": "other 0.8.x", "ast_schema": "candidate-specific", "poc_tested": false, "production_supported": "TBD"}
+  ],
+  "next_action": "Independent review of this proposal; no commit or push included"
+}

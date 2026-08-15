@@ -232,14 +232,16 @@ The project should retain three independent tracks:
 | Track | Purpose | Current status |
 |---|---|---|
 | Controlled track | Synthetic benchmark and deterministic regression | Primary Precision/Recall/F1 remains 1.0/1.0/1.0; compatibility fixtures remain outside it. |
-| Compatibility track | Historical compiler, raw AST, adapter, canonical AST, and failure semantics | Isolated POC implemented and evaluated; production adoption remains pending independent review. |
+| Compatibility track | Historical compiler, raw AST, adapter, canonical AST, and failure semantics | Initial POC reviewed as Revise; Revised POC gates passed within scope; Production Architecture Proposal remains pending. |
 | Real-World track | Independent adjudication and abstention | Nomad, BonqDAO, and Parity remain Quarantined; no Case #4. |
 
-The next gate is independent review of the isolated POC, followed by a separate production decision. No alias, detector patch, Comparator patch, random compiler fallback, or architecture-wide refactor is included in this change.
+The initial POC was reviewed as Revise. The Revised Compatibility POC now covers context-safe mapping, strict schema ownership, structural loss, explicit status results, finding-level provenance, a DetectorInput contract, and one multi-file slice. The next gate is a separate Production Architecture Proposal, not production implementation. No alias, detector patch, Comparator patch, random compiler fallback, or architecture-wide refactor is included in the isolated compatibility work.
 
 ## Open design questions
 
 The design still requires decisions before production adoption: how verified deployment metadata is prioritized over pragma constraints; how multi-file source manifests are normalized; which additional legacy AST schemas receive first-class adapters; whether the minimum semantic contract should expand beyond the POC families; how adapter versioning is released; and how partial source-set failures are represented. These questions remain open rather than being hidden inside the isolated POC.
+
+A separate [Production Architecture Proposal](PRODUCTION_ARCHITECTURE_PROPOSAL.md) now defines the proposed `CompilerResolver`, `SourceManifest`, Canonical AST v1 contract, versioned adapter ownership, detector migration stages, Comparator boundary, provenance retention, multi-file production model, failure state machine, rollout/rollback policy, compatibility support matrix, and measurable acceptance gates. The proposal explicitly records that the current multi-file slice proves compilation and source-unit preservation but does **not** yet prove semantic detection or Comparator traceability for findings originating in an imported source unit. Production implementation remains pending an independent Adopt/Revise/Reject decision.
 
 ## References
 

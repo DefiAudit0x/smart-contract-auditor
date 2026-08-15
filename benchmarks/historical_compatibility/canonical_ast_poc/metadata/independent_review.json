@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "review_type": "IndependentReview",
+  "baseline_commit": "f1418a4da06c87d5ebd318f28f169f5304e1bb0b",
+  "scope": {
+    "production_changes": [],
+    "primary_benchmark_changed": false,
+    "real_world_adjudications_changed": false,
+    "comparator_changed": false,
+    "parity_re_adjudicated": false,
+    "case_4_added": false
+  },
+  "decision": "Revise",
+  "positive_evidence": {
+    "historical_modern_semantic_equivalence_for_three_families": true,
+    "fixed_controls_clean": true,
+    "invalid_zero_contract_container_fails_explicitly": true,
+    "no_compiler_fallback_probe_passed": true
+  },
+  "blocking_findings": [
+    {
+      "id": "R-02",
+      "area": "legacy_alias_mapping",
+      "severity": "Critical",
+      "finding": "Direct token matching creates false positives for a legacy local identifier named now."
+    },
+    {
+      "id": "R-03",
+      "area": "modern_alias_mapping",
+      "severity": "Critical",
+      "finding": "Direct token matching creates false positives for local identifiers named timestamp and delegatecall."
+    },
+    {
+      "id": "R-04",
+      "area": "adapter_schema_ownership",
+      "severity": "High",
+      "finding": "Legacy raw AST with modern format metadata and modern raw AST with legacy format metadata are both accepted."
+    },
+    {
+      "id": "R-05",
+      "area": "structural_validation",
+      "severity": "High",
+      "finding": "Constructor/fallback/receive-only source can normalize to a contract with zero functions and still return CanonicalASTReady."
+    },
+    {
+      "id": "R-06",
+      "area": "provenance",
+      "severity": "High",
+      "finding": "Compiled result without provenance raises AttributeError instead of an explicit failure state."
+    },
+    {
+      "id": "R-07",
+      "area": "detector_bridge",
+      "severity": "Critical",
+      "finding": "Bridge injects private production DTO state and does not prove direct CanonicalProgram detector input."
+    },
+    {
+      "id": "R-08",
+      "area": "multi_file",
+      "severity": "High",
+      "finding": "POC has no source manifest/import graph/compiler constraints and import inputs fail."
+    },
+    {
+      "id": "R-09",
+      "area": "failure_semantics",
+      "severity": "Critical",
+      "finding": "Inconclusive and explicit success statuses are declared but not emitted by the end-to-end runner."
+    }
+  ],
+  "next_gate": "Revised compatibility POC or Architecture Revision before any production proposal"
+}
