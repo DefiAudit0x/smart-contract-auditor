@@ -47,6 +47,12 @@ Parity nevertheless remains quarantined. The exact deployed Solidity 0.4.x sourc
 
 The joint review distinguishes two taxonomy-definition gaps from one detector implementation/compatibility gap. Nomad lacks a message-proof validation family, BonqDAO lacks an oracle/dispute-window family, and Parity has semantic `Selfdestruct` coverage but no exact-source confirmation for the legacy spelling. All three remain metric-neutral. No detector or architecture change is justified from these three cases alone. See [`taxonomy-gap-analysis-three-cases.md`](../real_world/adjudications/taxonomy-gap-analysis-three-cases.md).
 
+## Historical Compatibility Audit: Selfdestruct
+
+The measurement-only historical compatibility track contains 25 fixtures across Solidity 0.4.11, 0.5.17, 0.6.12, 0.7.6, and 0.8.25. The exact source forms are separated from current analyzer behavior: Solidity 0.4.x compiles both `selfdestruct` and legacy `suicide`, but the current detector and Comparator return **HIT/Confirmed** only for the canonical `selfdestruct` spelling. The 0.4.x `suicide` and assembly-`suicide` fixtures compile and produce **MISS/Rejected**. From Solidity 0.5.x onward, the `suicide` fixtures fail in the historical compiler matrix, while the `selfdestruct` forms remain **HIT/Confirmed**. Fixed controls compile cleanly and remain detector-clean.
+
+This result is measurement-only: no production detector, parser, compiler-selection path, Comparator matcher, or architecture was changed. It identifies a narrowly scoped legacy-alias compatibility gap rather than proving an architecture-wide failure. The primary benchmark remains unchanged at Precision=1.0, Recall=1.0, F1=1.0. See [`REPORT.md`](../historical_compatibility/REPORT.md) and [`selfdestruct_compatibility_measurement.json`](../historical_compatibility/metadata/selfdestruct_compatibility_measurement.json).
+
 ## Reproduction
 
 From the repository root, the deterministic cross-track report can be regenerated with:

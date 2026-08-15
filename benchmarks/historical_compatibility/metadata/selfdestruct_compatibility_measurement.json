@@ -1,0 +1,811 @@
+{
+  "compiler_matrix": [
+    "0.4.11",
+    "0.5.17",
+    "0.6.12",
+    "0.7.6",
+    "0.8.25"
+  ],
+  "current_analyzer_solc": "0.8.25",
+  "measurement_only": true,
+  "production_changes": [],
+  "rows": [
+    {
+      "current_analyzer": {
+        "analyzer_solc_version": "0.8.25",
+        "compiler_compatibility": false,
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed",
+          "Selfdestruct"
+        ],
+        "finding_count": 3,
+        "selfdestruct_detector": true
+      },
+      "current_comparator": {
+        "evidence": [
+          {
+            "excerpt": "selfdestruct(",
+            "kind": "selfdestruct",
+            "location": "line 5"
+          }
+        ],
+        "reason": "The detector finding is supported by deterministic source evidence",
+        "status": "Confirmed"
+      },
+      "fixture": "assembly_selfdestruct.sol",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "ast_keywords": [],
+        "compiler": "0.4.11",
+        "error": null,
+        "raw_ast_keywords": [
+          "selfdestruct"
+        ],
+        "status": "compiled"
+      },
+      "source": "solidity_04/assembly_selfdestruct.sol",
+      "version_family": "solidity_04"
+    },
+    {
+      "current_analyzer": {
+        "analyzer_solc_version": "0.8.25",
+        "compiler_compatibility": false,
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "selfdestruct_detector": false
+      },
+      "current_comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "fixture": "assembly_suicide.sol",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "ast_keywords": [],
+        "compiler": "0.4.11",
+        "error": null,
+        "raw_ast_keywords": [
+          "suicide"
+        ],
+        "status": "compiled"
+      },
+      "source": "solidity_04/assembly_suicide.sol",
+      "version_family": "solidity_04"
+    },
+    {
+      "current_analyzer": {
+        "analyzer_solc_version": "0.8.25",
+        "compiler_compatibility": false,
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "selfdestruct_detector": false
+      },
+      "current_comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "fixture": "fixed.sol",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "ast_keywords": [],
+        "compiler": "0.4.11",
+        "error": null,
+        "raw_ast_keywords": [],
+        "status": "compiled"
+      },
+      "source": "solidity_04/fixed.sol",
+      "version_family": "solidity_04"
+    },
+    {
+      "current_analyzer": {
+        "analyzer_solc_version": "0.8.25",
+        "compiler_compatibility": false,
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed",
+          "Selfdestruct"
+        ],
+        "finding_count": 3,
+        "selfdestruct_detector": true
+      },
+      "current_comparator": {
+        "evidence": [
+          {
+            "excerpt": "selfdestruct(",
+            "kind": "selfdestruct",
+            "location": "line 5"
+          }
+        ],
+        "reason": "The detector finding is supported by deterministic source evidence",
+        "status": "Confirmed"
+      },
+      "fixture": "selfdestruct.sol",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "ast_keywords": [
+          "selfdestruct"
+        ],
+        "compiler": "0.4.11",
+        "error": null,
+        "raw_ast_keywords": [
+          "selfdestruct"
+        ],
+        "status": "compiled"
+      },
+      "source": "solidity_04/selfdestruct.sol",
+      "version_family": "solidity_04"
+    },
+    {
+      "current_analyzer": {
+        "analyzer_solc_version": "0.8.25",
+        "compiler_compatibility": false,
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "selfdestruct_detector": false
+      },
+      "current_comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "fixture": "suicide.sol",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "ast_keywords": [
+          "suicide"
+        ],
+        "compiler": "0.4.11",
+        "error": null,
+        "raw_ast_keywords": [
+          "suicide"
+        ],
+        "status": "compiled"
+      },
+      "source": "solidity_04/suicide.sol",
+      "version_family": "solidity_04"
+    },
+    {
+      "current_analyzer": {
+        "analyzer_solc_version": "0.8.25",
+        "compiler_compatibility": false,
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed",
+          "Selfdestruct"
+        ],
+        "finding_count": 3,
+        "selfdestruct_detector": true
+      },
+      "current_comparator": {
+        "evidence": [
+          {
+            "excerpt": "selfdestruct(",
+            "kind": "selfdestruct",
+            "location": "line 5"
+          }
+        ],
+        "reason": "The detector finding is supported by deterministic source evidence",
+        "status": "Confirmed"
+      },
+      "fixture": "assembly_selfdestruct.sol",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "ast_keywords": [],
+        "compiler": "0.5.17",
+        "error": null,
+        "raw_ast_keywords": [
+          "selfdestruct"
+        ],
+        "status": "compiled"
+      },
+      "source": "solidity_05/assembly_selfdestruct.sol",
+      "version_family": "solidity_05"
+    },
+    {
+      "current_analyzer": {
+        "analyzer_solc_version": "0.8.25",
+        "compiler_compatibility": false,
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "selfdestruct_detector": false
+      },
+      "current_comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "fixture": "assembly_suicide.sol",
+      "historical_compiler": {
+        "ast_keywords": [],
+        "compiler": "0.5.17",
+        "error": "                   ^-----^",
+        "raw_ast_keywords": [],
+        "status": "compile_failed"
+      },
+      "source": "solidity_05/assembly_suicide.sol",
+      "version_family": "solidity_05"
+    },
+    {
+      "current_analyzer": {
+        "analyzer_solc_version": "0.8.25",
+        "compiler_compatibility": false,
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "selfdestruct_detector": false
+      },
+      "current_comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "fixture": "fixed.sol",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "ast_keywords": [],
+        "compiler": "0.5.17",
+        "error": null,
+        "raw_ast_keywords": [],
+        "status": "compiled"
+      },
+      "source": "solidity_05/fixed.sol",
+      "version_family": "solidity_05"
+    },
+    {
+      "current_analyzer": {
+        "analyzer_solc_version": "0.8.25",
+        "compiler_compatibility": false,
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed",
+          "Selfdestruct"
+        ],
+        "finding_count": 3,
+        "selfdestruct_detector": true
+      },
+      "current_comparator": {
+        "evidence": [
+          {
+            "excerpt": "selfdestruct(",
+            "kind": "selfdestruct",
+            "location": "line 5"
+          }
+        ],
+        "reason": "The detector finding is supported by deterministic source evidence",
+        "status": "Confirmed"
+      },
+      "fixture": "selfdestruct.sol",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "ast_keywords": [
+          "selfdestruct"
+        ],
+        "compiler": "0.5.17",
+        "error": null,
+        "raw_ast_keywords": [
+          "selfdestruct"
+        ],
+        "status": "compiled"
+      },
+      "source": "solidity_05/selfdestruct.sol",
+      "version_family": "solidity_05"
+    },
+    {
+      "current_analyzer": {
+        "analyzer_solc_version": "0.8.25",
+        "compiler_compatibility": false,
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "selfdestruct_detector": false
+      },
+      "current_comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "fixture": "suicide.sol",
+      "historical_compiler": {
+        "ast_keywords": [],
+        "compiler": "0.5.17",
+        "error": "        ^-----^",
+        "raw_ast_keywords": [],
+        "status": "compile_failed"
+      },
+      "source": "solidity_05/suicide.sol",
+      "version_family": "solidity_05"
+    },
+    {
+      "current_analyzer": {
+        "analyzer_solc_version": "0.8.25",
+        "compiler_compatibility": false,
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed",
+          "Selfdestruct"
+        ],
+        "finding_count": 3,
+        "selfdestruct_detector": true
+      },
+      "current_comparator": {
+        "evidence": [
+          {
+            "excerpt": "selfdestruct(",
+            "kind": "selfdestruct",
+            "location": "line 5"
+          }
+        ],
+        "reason": "The detector finding is supported by deterministic source evidence",
+        "status": "Confirmed"
+      },
+      "fixture": "assembly_selfdestruct.sol",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "ast_keywords": [],
+        "compiler": "0.6.12",
+        "error": null,
+        "raw_ast_keywords": [
+          "selfdestruct"
+        ],
+        "status": "compiled"
+      },
+      "source": "solidity_06/assembly_selfdestruct.sol",
+      "version_family": "solidity_06"
+    },
+    {
+      "current_analyzer": {
+        "analyzer_solc_version": "0.8.25",
+        "compiler_compatibility": false,
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "selfdestruct_detector": false
+      },
+      "current_comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "fixture": "assembly_suicide.sol",
+      "historical_compiler": {
+        "ast_keywords": [],
+        "compiler": "0.6.12",
+        "error": "  |                    ^^^^^^^",
+        "raw_ast_keywords": [],
+        "status": "compile_failed"
+      },
+      "source": "solidity_06/assembly_suicide.sol",
+      "version_family": "solidity_06"
+    },
+    {
+      "current_analyzer": {
+        "analyzer_solc_version": "0.8.25",
+        "compiler_compatibility": false,
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "selfdestruct_detector": false
+      },
+      "current_comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "fixture": "fixed.sol",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "ast_keywords": [],
+        "compiler": "0.6.12",
+        "error": null,
+        "raw_ast_keywords": [],
+        "status": "compiled"
+      },
+      "source": "solidity_06/fixed.sol",
+      "version_family": "solidity_06"
+    },
+    {
+      "current_analyzer": {
+        "analyzer_solc_version": "0.8.25",
+        "compiler_compatibility": false,
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed",
+          "Selfdestruct"
+        ],
+        "finding_count": 3,
+        "selfdestruct_detector": true
+      },
+      "current_comparator": {
+        "evidence": [
+          {
+            "excerpt": "selfdestruct(",
+            "kind": "selfdestruct",
+            "location": "line 5"
+          }
+        ],
+        "reason": "The detector finding is supported by deterministic source evidence",
+        "status": "Confirmed"
+      },
+      "fixture": "selfdestruct.sol",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "ast_keywords": [
+          "selfdestruct"
+        ],
+        "compiler": "0.6.12",
+        "error": null,
+        "raw_ast_keywords": [
+          "selfdestruct"
+        ],
+        "status": "compiled"
+      },
+      "source": "solidity_06/selfdestruct.sol",
+      "version_family": "solidity_06"
+    },
+    {
+      "current_analyzer": {
+        "analyzer_solc_version": "0.8.25",
+        "compiler_compatibility": false,
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "selfdestruct_detector": false
+      },
+      "current_comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "fixture": "suicide.sol",
+      "historical_compiler": {
+        "ast_keywords": [],
+        "compiler": "0.6.12",
+        "error": "  |         ^^^^^^^",
+        "raw_ast_keywords": [],
+        "status": "compile_failed"
+      },
+      "source": "solidity_06/suicide.sol",
+      "version_family": "solidity_06"
+    },
+    {
+      "current_analyzer": {
+        "analyzer_solc_version": "0.8.25",
+        "compiler_compatibility": false,
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed",
+          "Selfdestruct"
+        ],
+        "finding_count": 3,
+        "selfdestruct_detector": true
+      },
+      "current_comparator": {
+        "evidence": [
+          {
+            "excerpt": "selfdestruct(",
+            "kind": "selfdestruct",
+            "location": "line 5"
+          }
+        ],
+        "reason": "The detector finding is supported by deterministic source evidence",
+        "status": "Confirmed"
+      },
+      "fixture": "assembly_selfdestruct.sol",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "ast_keywords": [],
+        "compiler": "0.7.6",
+        "error": null,
+        "raw_ast_keywords": [
+          "selfdestruct"
+        ],
+        "status": "compiled"
+      },
+      "source": "solidity_07/assembly_selfdestruct.sol",
+      "version_family": "solidity_07"
+    },
+    {
+      "current_analyzer": {
+        "analyzer_solc_version": "0.8.25",
+        "compiler_compatibility": false,
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "selfdestruct_detector": false
+      },
+      "current_comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "fixture": "assembly_suicide.sol",
+      "historical_compiler": {
+        "ast_keywords": [],
+        "compiler": "0.7.6",
+        "error": "  |                    ^^^^^^^",
+        "raw_ast_keywords": [],
+        "status": "compile_failed"
+      },
+      "source": "solidity_07/assembly_suicide.sol",
+      "version_family": "solidity_07"
+    },
+    {
+      "current_analyzer": {
+        "analyzer_solc_version": "0.8.25",
+        "compiler_compatibility": false,
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "selfdestruct_detector": false
+      },
+      "current_comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "fixture": "fixed.sol",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "ast_keywords": [],
+        "compiler": "0.7.6",
+        "error": null,
+        "raw_ast_keywords": [],
+        "status": "compiled"
+      },
+      "source": "solidity_07/fixed.sol",
+      "version_family": "solidity_07"
+    },
+    {
+      "current_analyzer": {
+        "analyzer_solc_version": "0.8.25",
+        "compiler_compatibility": false,
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed",
+          "Selfdestruct"
+        ],
+        "finding_count": 3,
+        "selfdestruct_detector": true
+      },
+      "current_comparator": {
+        "evidence": [
+          {
+            "excerpt": "selfdestruct(",
+            "kind": "selfdestruct",
+            "location": "line 5"
+          }
+        ],
+        "reason": "The detector finding is supported by deterministic source evidence",
+        "status": "Confirmed"
+      },
+      "fixture": "selfdestruct.sol",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "ast_keywords": [
+          "selfdestruct"
+        ],
+        "compiler": "0.7.6",
+        "error": null,
+        "raw_ast_keywords": [
+          "selfdestruct"
+        ],
+        "status": "compiled"
+      },
+      "source": "solidity_07/selfdestruct.sol",
+      "version_family": "solidity_07"
+    },
+    {
+      "current_analyzer": {
+        "analyzer_solc_version": "0.8.25",
+        "compiler_compatibility": false,
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "selfdestruct_detector": false
+      },
+      "current_comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "fixture": "suicide.sol",
+      "historical_compiler": {
+        "ast_keywords": [],
+        "compiler": "0.7.6",
+        "error": "  |         ^^^^^^^",
+        "raw_ast_keywords": [],
+        "status": "compile_failed"
+      },
+      "source": "solidity_07/suicide.sol",
+      "version_family": "solidity_07"
+    },
+    {
+      "current_analyzer": {
+        "analyzer_solc_version": "0.8.25",
+        "compiler_compatibility": true,
+        "detectors": [
+          "Assembly Block (AST)",
+          "Event Emission",
+          "Selfdestruct"
+        ],
+        "finding_count": 3,
+        "selfdestruct_detector": true
+      },
+      "current_comparator": {
+        "evidence": [
+          {
+            "excerpt": "selfdestruct(",
+            "kind": "selfdestruct",
+            "location": "line 5"
+          }
+        ],
+        "reason": "The detector finding is supported by deterministic source evidence",
+        "status": "Confirmed"
+      },
+      "fixture": "assembly_selfdestruct.sol",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "ast_keywords": [
+          "selfdestruct"
+        ],
+        "compiler": "0.8.25",
+        "error": null,
+        "raw_ast_keywords": [
+          "selfdestruct"
+        ],
+        "status": "compiled"
+      },
+      "source": "solidity_08/assembly_selfdestruct.sol",
+      "version_family": "solidity_08"
+    },
+    {
+      "current_analyzer": {
+        "analyzer_solc_version": "0.8.25",
+        "compiler_compatibility": true,
+        "detectors": [
+          "Event Emission"
+        ],
+        "finding_count": 1,
+        "selfdestruct_detector": false
+      },
+      "current_comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "fixture": "assembly_suicide.sol",
+      "historical_compiler": {
+        "ast_keywords": [],
+        "compiler": "0.8.25",
+        "error": "  |                    ^^^^^^^",
+        "raw_ast_keywords": [],
+        "status": "compile_failed"
+      },
+      "source": "solidity_08/assembly_suicide.sol",
+      "version_family": "solidity_08"
+    },
+    {
+      "current_analyzer": {
+        "analyzer_solc_version": "0.8.25",
+        "compiler_compatibility": true,
+        "detectors": [
+          "Event Emission"
+        ],
+        "finding_count": 1,
+        "selfdestruct_detector": false
+      },
+      "current_comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "fixture": "fixed.sol",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "ast_keywords": [],
+        "compiler": "0.8.25",
+        "error": null,
+        "raw_ast_keywords": [],
+        "status": "compiled"
+      },
+      "source": "solidity_08/fixed.sol",
+      "version_family": "solidity_08"
+    },
+    {
+      "current_analyzer": {
+        "analyzer_solc_version": "0.8.25",
+        "compiler_compatibility": true,
+        "detectors": [
+          "Event Emission",
+          "Selfdestruct"
+        ],
+        "finding_count": 2,
+        "selfdestruct_detector": true
+      },
+      "current_comparator": {
+        "evidence": [
+          {
+            "excerpt": "selfdestruct(",
+            "kind": "selfdestruct",
+            "location": "line 5"
+          }
+        ],
+        "reason": "The detector finding is supported by deterministic source evidence",
+        "status": "Confirmed"
+      },
+      "fixture": "selfdestruct.sol",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "ast_keywords": [
+          "selfdestruct"
+        ],
+        "compiler": "0.8.25",
+        "error": null,
+        "raw_ast_keywords": [
+          "selfdestruct"
+        ],
+        "status": "compiled"
+      },
+      "source": "solidity_08/selfdestruct.sol",
+      "version_family": "solidity_08"
+    },
+    {
+      "current_analyzer": {
+        "analyzer_solc_version": "0.8.25",
+        "compiler_compatibility": true,
+        "detectors": [
+          "Event Emission"
+        ],
+        "finding_count": 1,
+        "selfdestruct_detector": false
+      },
+      "current_comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "fixture": "suicide.sol",
+      "historical_compiler": {
+        "ast_keywords": [],
+        "compiler": "0.8.25",
+        "error": "  |         ^^^^^^^",
+        "raw_ast_keywords": [],
+        "status": "compile_failed"
+      },
+      "source": "solidity_08/suicide.sol",
+      "version_family": "solidity_08"
+    }
+  ],
+  "schema_version": 1
+}

@@ -1,0 +1,33 @@
+version,fixture,historical_compiler_status,ast_keywords,raw_ast_keywords,analyzer_selfdestruct,comparator
+solidity_04,assembly_selfdestruct.sol,compiled,-,selfdestruct,HIT,Confirmed
+solidity_04,assembly_suicide.sol,compiled,-,suicide,MISS,Rejected
+solidity_04,fixed.sol,compiled,-,-,MISS,Rejected
+solidity_04,selfdestruct.sol,compiled,selfdestruct,selfdestruct,HIT,Confirmed
+solidity_04,suicide.sol,compiled,suicide,suicide,MISS,Rejected
+solidity_05,assembly_selfdestruct.sol,compiled,-,selfdestruct,HIT,Confirmed
+solidity_05,assembly_suicide.sol,compile_failed,-,-,MISS,Rejected
+solidity_05,fixed.sol,compiled,-,-,MISS,Rejected
+solidity_05,selfdestruct.sol,compiled,selfdestruct,selfdestruct,HIT,Confirmed
+solidity_05,suicide.sol,compile_failed,-,-,MISS,Rejected
+solidity_06,assembly_selfdestruct.sol,compiled,-,selfdestruct,HIT,Confirmed
+solidity_06,assembly_suicide.sol,compile_failed,-,-,MISS,Rejected
+solidity_06,fixed.sol,compiled,-,-,MISS,Rejected
+solidity_06,selfdestruct.sol,compiled,selfdestruct,selfdestruct,HIT,Confirmed
+solidity_06,suicide.sol,compile_failed,-,-,MISS,Rejected
+solidity_07,assembly_selfdestruct.sol,compiled,-,selfdestruct,HIT,Confirmed
+solidity_07,assembly_suicide.sol,compile_failed,-,-,MISS,Rejected
+solidity_07,fixed.sol,compiled,-,-,MISS,Rejected
+solidity_07,selfdestruct.sol,compiled,selfdestruct,selfdestruct,HIT,Confirmed
+solidity_07,suicide.sol,compile_failed,-,-,MISS,Rejected
+solidity_08,assembly_selfdestruct.sol,compiled,selfdestruct,selfdestruct,HIT,Confirmed
+solidity_08,assembly_suicide.sol,compile_failed,-,-,MISS,Rejected
+solidity_08,fixed.sol,compiled,-,-,MISS,Rejected
+solidity_08,selfdestruct.sol,compiled,selfdestruct,selfdestruct,HIT,Confirmed
+solidity_08,suicide.sol,compile_failed,-,-,MISS,Rejected
+
+AGGREGATES
+solidity_04 compiled= 5 compile_failed= 0 analyzer_hits= 2 comparator_confirmed= 2 comparator_rejected= 3
+solidity_05 compiled= 3 compile_failed= 2 analyzer_hits= 2 comparator_confirmed= 2 comparator_rejected= 3
+solidity_06 compiled= 3 compile_failed= 2 analyzer_hits= 2 comparator_confirmed= 2 comparator_rejected= 3
+solidity_07 compiled= 3 compile_failed= 2 analyzer_hits= 2 comparator_confirmed= 2 comparator_rejected= 3
+solidity_08 compiled= 3 compile_failed= 2 analyzer_hits= 2 comparator_confirmed= 2 comparator_rejected= 3
