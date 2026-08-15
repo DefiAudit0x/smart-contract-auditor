@@ -31,6 +31,12 @@ Nomad is the first candidate processed through the complete stage-by-stage workf
 
 Nomad remains quarantined because the owned reproduction is not a historical mainnet fork, the current detector taxonomy does not cover zero-root message-proof validation, and a second independent adjudication is pending. See [`rw-003-nomad-report.md`](../real_world/adjudications/rw-003-nomad-report.md) and [`rw-003-nomad-pipeline.json`](../real_world/adjudications/rw-003-nomad-pipeline.json).
 
+## Second adjudication result: BonqDAO
+
+BonqDAO is the second candidate processed through the complete stage-by-stage workflow. Polygon transactions, independent incident analyses, the exact-match verified `TellorPriceFeed` source, the pinned TellorFlex implementation, and the owned dispute-window contrast establish the incident mechanism. The owned invariant returns `Violated` for direct `getCurrentValue` consumption and `Satisfied` for the historical cutoff path; the self-contained Foundry PoC passes both checks.
+
+BonqDAO remains quarantined because oracle manipulation and spot-price consumption without a dispute window are not covered by the current detector taxonomy. Static and LLM runs observed `block.timestamp Usage (AST)`, but that observation is not a semantically valid Bonq detector mapping. The comparator is therefore `NotApplicable`, and the case is excluded from all admitted-case metrics. See [`rw-004-bonqdao-report.md`](../real_world/adjudications/rw-004-bonqdao-report.md) and [`rw-004-bonqdao-pipeline.json`](../real_world/adjudications/rw-004-bonqdao-pipeline.json).
+
 ## Reproduction
 
 From the repository root, the deterministic cross-track report can be regenerated with:

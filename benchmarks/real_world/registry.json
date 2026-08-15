@@ -89,8 +89,8 @@
       "incident": "BonqDAO Tellor price manipulation",
       "date": "2023-02",
       "families": ["oracle", "price_manipulation", "accounting"],
-      "affected_functions": ["updateValue", "borrow", "liquidate"],
-      "affected_function_confidence": "reported_in_independent_analysis",
+      "affected_functions": ["submitValue", "getCurrentValue", "price", "borrow", "liquidate"],
+      "affected_function_confidence": "independent_reports_source_mapping_and_transactions",
       "source_path": "src/test/2023-02/BonqDAO_exp.sol",
       "source_repository_commit": "2baf1a43c44d6cb3ce17a678701784fbe7edabad",
       "source_sha256": "1b16549a68b78baa830af0c28dd922a1c0c2a9ff5d82556a93318ded825df30a",
@@ -100,12 +100,32 @@
       ],
       "vulnerable_contract": "0x8f55d884cad66b79e1a131f6bcb0e66f4fd84d5b",
       "expected_detectors": [],
-      "status": "candidate_pending_oracle_detector_and_adjudication",
+      "status": "candidate_pending_oracle_detector_and_second_adjudication",
       "references": [
-        "https://polygonscan.com/address/0x8f55d884cad66b79e1a131f6bcb0e66f4fd84d5b#code#F2#L282",
+        "https://polygonscan.com/address/0xa1620af6138d2754f7250299dc9024563bd1a5d6#code",
+        "https://polygonscan.com/address/0x8f55d884cad66b79e1a131f6bcb0e66f4fd84d5b#code",
         "https://medium.com/@omniscia.io/bonq-protocol-incident-post-mortem-4fd79fe5c932",
-        "https://hacken.io/insights/bonqdao-hack/"
-      ]
+        "https://immunefi.com/blog/bug-fix-reviews/hack-analysis-bonqdao-february-2023/",
+        "https://rekt.news/bonq-rekt",
+        "https://medium.com/think-and-dev/the-bonq-dao-attack-d197d13cddd0",
+        "https://www.numencyber.com/bonqdao-price-manipulation-attack-analysis-with-poc/"
+      ],
+      "implementation_source": {
+        "repository_url": "https://github.com/tellor-io/tellorFlex",
+        "commit": "3b3820f2111ec2813cb51455ef68cf0955c51674",
+        "path": "contracts/TellorFlex.sol",
+        "sha256": "db633e4080e3e95410e0eec34b17fbacaadca42281bbde5dd6282f61cd40a522",
+        "role": "historical upstream TellorFlex implementation used by the verified Polygon oracle; Bonq TellorPriceFeed consumer is exact-match verified on PolygonScan",
+        "line_ranges": ["submitValue:282-345", "getCurrentValue:419-427", "getDataBefore:437-454", "isInDispute:820-839"]
+      },
+      "owned_reproduction": {
+        "source_path": "benchmarks/real_world/owned_reproductions/bonqdao/BonqTellorVulnerable.sol",
+        "fixed_path": "benchmarks/real_world/owned_reproductions/bonqdao/BonqTellorFixed.sol",
+        "poc_path": "benchmarks/real_world/owned_reproductions/bonqdao/bonqdao_dispute_window_poc.t.sol",
+        "invariant_id": "bonq.oracle_price_requires_dispute_window",
+        "status": "passed"
+      },
+      "adjudication_path": "benchmarks/real_world/adjudications/rw-004-bonqdao.json"
     },
     {
       "id": "rw-005-euler",

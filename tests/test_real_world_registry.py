@@ -48,7 +48,7 @@ def test_all_real_world_adjudications_are_quarantined_and_metric_neutral():
         assert record["review_status"] == "quarantined"
         assert record["review"]["ground_truth_decision"] == "quarantine"
         assert record["detector_mapping"]["covered_by_existing_detector"] is False
-        if record["case_id"] == "rw-003-nomad-bridge":
+        if record["case_id"] in {"rw-003-nomad-bridge", "rw-004-bonqdao"}:
             assert record["reproduction"]["execution_status"] == "passed"
         else:
             assert record["reproduction"]["execution_status"] == "not_started"
@@ -70,6 +70,36 @@ def test_nomad_has_pinned_implementation_and_remains_quarantined():
     assert nomad["implementation_source"]["commit"] == "7510d54a5cd334d283d84fdff59827abfceb2da7"
     assert nomad["implementation_source"]["sha256"] == "3b6439fe258ffeeec58586e6d21ae3286903409b10b28f46b4b8cb64b4a773d6"
     assert nomad["owned_reproduction"]["status"] == "passed"
+
+
+def test_bonq_has_pinned_implementation_and_remains_quarantined():
+    registry = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
+    bonq = next(case for case in registry["cases"] if case["id"] == "rw-004-bonqdao")
+    assert bonq["status"].startswith("candidate_pending_")
+    assert bonq["expected_detectors"] == []
+    assert bonq["implementation_source"]["commit"] == "3b3820f2111ec2813cb51455ef68cf0955c51674"
+    assert bonq["implementation_source"]["sha256"] == "db633e4080e3e95410e0eec34b17fbacaadca42281bbde5dd6282f61cd40a522"
+    assert bonq["owned_reproduction"]["status"] == "passed"
+    assert bonq["owned_reproduction"]["invariant_id"] == "bonq.oracle_price_requires_dispute_window"
+
+
+def test_bonq_adjudication_keeps_ground_truth_independent():
+    path = ROOT / "benchmarks" / "real_world" / "adjudications" / "rw-004-bonqdao.json"
+    record = json.loads(path.read_text(encoding="utf-8"))
+    assert record["review_status"] == "quarantined"
+    assert record["review"]["ground_truth_decision"] == "quarantine"
+    assert record["detector_mapping"]["covered_by_existing_detector"] is False
+    assert record["reproduction"]["execution_status"] == "passed"
+    assert record["root_cause"]["affected_contract"] == "0xa1620af6138d2754f7250299dc9024563bd1a5d6"
+    assert any(
+        entry.startswith("TellorPriceFeed.price:30-32")
+        for entry in record["root_cause"]["source_line_ranges"]
+    )
+    pipeline = record["pipeline_observations"]
+    assert pipeline["ground_truth_unchanged"] is True
+    assert pipeline["stage_statuses"]["comparator"] == "NotApplicable"
+    assert pipeline["stage_statuses"]["full_pipeline"] == "Quarantined"
+    assert (ROOT / pipeline["report_path"]).is_file()
 
 
 def test_nomad_adjudication_keeps_ground_truth_independent():

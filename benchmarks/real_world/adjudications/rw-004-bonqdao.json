@@ -4,58 +4,92 @@
   "review_status": "quarantined",
   "independent_evidence": {
     "incident_reference_urls": [
-      "https://polygonscan.com/address/0x8f55d884cad66b79e1a131f6bcb0e66f4fd84d5b#code#F2#L282",
+      "https://polygonscan.com/address/0xa1620af6138d2754f7250299dc9024563bd1a5d6#code",
+      "https://polygonscan.com/address/0x8f55d884cad66b79e1a131f6bcb0e66f4fd84d5b#code",
       "https://medium.com/@omniscia.io/bonq-protocol-incident-post-mortem-4fd79fe5c932",
-      "https://hacken.io/insights/bonqdao-hack/"
+      "https://immunefi.com/blog/bug-fix-reviews/hack-analysis-bonqdao-february-2023/",
+      "https://rekt.news/bonq-rekt",
+      "https://medium.com/think-and-dev/the-bonq-dao-attack-d197d13cddd0",
+      "https://www.numencyber.com/bonqdao-price-manipulation-attack-analysis-with-poc/"
     ],
-    "source_repository_url": "https://github.com/SunWeb3Sec/DeFiHackLabs",
-    "source_repository_commit": "2baf1a43c44d6cb3ce17a678701784fbe7edabad",
-    "source_file_path": "src/test/2023-02/BonqDAO_exp.sol",
-    "source_sha256": "1b16549a68b78baa830af0c28dd922a1c0c2a9ff5d82556a93318ded825df30a",
+    "source_repository_url": "https://github.com/tellor-io/tellorFlex",
+    "source_repository_commit": "3b3820f2111ec2813cb51455ef68cf0955c51674",
+    "source_file_path": "contracts/TellorFlex.sol",
+    "source_sha256": "db633e4080e3e95410e0eec34b17fbacaadca42281bbde5dd6282f61cd40a522",
     "onchain_transaction_urls": [
-      "https://etherscan.io/tx/0x31957ecc43774d19f54d9968e95c69c882468b46860f921668f2c55fadd51b19",
-      "https://etherscan.io/tx/0xa02d0c3d16d6ee0e0b6a42c3cc91997c2b40c87d777136dedebe8ee0f47f32b1"
+      "https://polygonscan.com/tx/0x31957ecc43774d19f54d9968e95c69c882468b46860f921668f2c55fadd51b19",
+      "https://polygonscan.com/tx/0xa02d0c3d16d6ee0e0b6a42c3cc91997c2b40c87d777136dedebe8ee0f47f32b1"
     ],
-    "chain_and_block": "requires independent verification"
+    "chain_and_block": "Polygon mainnet; first transaction succeeded at block 38792978 and second transaction succeeded at block 38793029. The independent fork anchor for the incident reproduction is block 38792977. TellorFlex is 0x8f55D884CAD66B79e1a131f6bCB0e66f4fD84d5B; Bonq TellorPriceFeed is 0xa1620af6138d2754f7250299dc9024563bd1a5d6; the attacker is 0xcAcf2D28B2A5309e099f0C6e8C60Ec3dDf656642."
   },
   "root_cause": {
-    "family": "oracle, price_manipulation, accounting",
-    "affected_contract": "0x8f55d884cad66b79e1a131f6bcb0e66f4fd84d5b",
+    "family": "oracle, price_manipulation, dispute_window, accounting",
+    "affected_contract": "0xa1620af6138d2754f7250299dc9024563bd1a5d6",
     "affected_functions": [
-      "updateValue",
-      "borrow",
-      "liquidate"
+      "TellorPriceFeed.price",
+      "TellorFlex.submitValue",
+      "TellorFlex.getCurrentValue",
+      "TellorFlex.getDataBefore",
+      "Trove.borrow",
+      "Trove.liquidate"
     ],
-    "source_line_ranges": [],
-    "mechanism_summary": "",
-    "external_evidence_quotes_or_paraphrases": []
+    "source_line_ranges": [
+      "TellorPriceFeed.price:30-32; vulnerable getCurrentValue consumption at line 31",
+      "TellorFlex.submitValue:282-345",
+      "TellorFlex.getCurrentValue:419-427",
+      "TellorFlex.getDataBefore:437-454"
+    ],
+    "mechanism_summary": "TellorFlex permits a staked reporter to submit a value for a query. Its getCurrentValue implementation calls getDataBefore with block.timestamp + 1, which intentionally selects the newest report. Bonq's exact-match verified TellorPriceFeed.price then calls oracle.getCurrentValue(queryId) directly and converts the returned bytes to a uint256. The consumer therefore treats a freshly submitted, still-disputable report as safe collateral price data. The attacker submitted an inflated WALBT price, borrowed BEUR against 0.1 WALBT, later submitted a very low price, and used the changed valuation to liquidate WALBT troves. The independent invariant is that collateral valuation must not consume a newest oracle report until a dispute window has elapsed.",
+    "external_evidence_quotes_or_paraphrases": [
+      "Omniscia identifies ConvertedPriceFeed.price and Bonq's TellorPriceFeed use of TellorFlex.getCurrentValue without a dispute delay as the root cause.",
+      "Immunefi independently reports the two-transaction attack, the inflated and deflated WALBT prices, and a local fork at block 38792977.",
+      "Rekt independently records the 10 TRB stake, submitValue call, inflated price, 100M BEUR borrow, and subsequent low-price liquidation sequence.",
+      "Think and Dev identifies the production feed chain and shows TellorPriceFeed.price returning uint256(bytes32(oracle.getCurrentValue(queryId))); it describes a 20-minute historical buffer as the safe boundary.",
+      "Numen independently links TellorPriceFeed at 0xa1620af6138d2754f7250299dc9024563bd1a5d6 and confirms that borrowing consumed TellorFlex.getCurrentValue.",
+      "PolygonScan marks the TellorPriceFeed deployment as exact-match verified with Solidity v0.8.17+commit.8df45f5f and exposes the vulnerable source line; it marks TellorFlex as verified with Solidity 0.8.3+commit.8d00100c."
+    ]
   },
   "reproduction": {
-    "owned_fixture_path": null,
-    "fork_block": null,
-    "poc_source_provenance": "Third-party discovery PoC is not executed or copied automatically.",
-    "execution_status": "not_started",
+    "owned_fixture_path": "benchmarks/real_world/owned_reproductions/bonqdao",
+    "fork_block": 38792977,
+    "poc_source_provenance": "Owned minimal vulnerable/fixed fixtures and a self-contained Foundry PoC derived from the independently adjudicated mechanism; no third-party PoC source is imported, copied, or executed.",
+    "execution_status": "passed",
     "limitations": [
-      "Pinned contract implementation source and line mapping are not yet stored in an owned fixture."
+      "The owned fixtures model the oracle-consumer boundary and are not the historical Bonq deployment or a complete Trove/BEUR/WALBT implementation.",
+      "The owned PoC is intentionally offline and does not require a Polygon mainnet fork; block 38792977 is retained as the independent incident fork anchor only.",
+      "The PoC demonstrates fresh-report acceptance and dispute-window rejection/maturation, not the full 100M BEUR borrow and 113M WALBT liquidation flow.",
+      "Static and LLM observations are recorded for transparency; neither is Ground Truth and neither changes the taxonomy decision."
     ]
   },
   "detector_mapping": {
     "covered_by_existing_detector": false,
     "detector_names": [],
-    "mapping_rationale": "No detector mapping is admitted before source-level review.",
-    "not_covered_reason": "Pending independent source mapping and detector coverage review."
+    "mapping_rationale": "The current analyzer taxonomy contains no semantically valid detector for oracle manipulation, stale-price consumption, or use of a Tellor spot value before its dispute window. Static and LLM outputs observed block.timestamp usage, but that detector is not equivalent to the confirmed oracle-consumer vulnerability.",
+    "not_covered_reason": "Taxonomy Coverage Gate failed for this vulnerability family. Assigning block.timestamp Usage (AST), unchecked transfer, reentrancy, or another existing detector would overstate coverage and contaminate the real-world metrics."
+  },
+  "pipeline_observations": {
+    "report_path": "benchmarks/real_world/adjudications/rw-004-bonqdao-pipeline.json",
+    "stage_statuses": {
+      "static": "Completed",
+      "llm": "Completed",
+      "static_plus_llm": "ObservationalOnly",
+      "comparator": "NotApplicable",
+      "invariant": "Violated/Satisfied",
+      "poc": "Passed",
+      "full_pipeline": "Quarantined"
+    },
+    "ground_truth_unchanged": true
   },
   "review": {
     "ground_truth_decision": "quarantine",
-    "decision_rationale": "Candidate is documented for discovery but excluded from all metrics until admission gates are complete.",
+    "decision_rationale": "The BonqDAO claim is independently supported by multiple incident analyses, exact production addresses, Polygon transaction anchors, an exact-match verified TellorPriceFeed consumer, a pinned TellorFlex implementation snapshot with SHA-256, precise source line ranges, and a passed owned invariant/PoC contrast. It remains quarantined because the current detector taxonomy does not cover oracle manipulation or dispute-window enforcement. The decision does not treat LLM output, detector output, or PoC success as a detector classification. A joint review of Nomad and BonqDAO is required before Case 3, and a second independent adjudication is required before any admission.",
     "reviewer_independence": "separate_from_analyzer_and_llm",
-    "reviewed_at": "",
+    "reviewed_at": "2026-08-14",
     "admission_requirements_remaining": [
-      "Pin the affected implementation source and exact version.",
-      "Map the incident to source line ranges independently.",
-      "Verify chain and block metadata from immutable on-chain evidence.",
-      "Create and review an owned reproduction or document why reproduction is infeasible.",
-      "Adjudicate detector coverage without using analyzer or LLM output as Ground Truth."
+      "Conduct the planned joint Nomad and BonqDAO review before Case 3.",
+      "Obtain a second independent adjudication before changing the decision to admitted.",
+      "Decide in a separate design review whether a narrowly scoped oracle/dispute-window detector should be proposed; do not add it as part of this case record.",
+      "Keep Bonq excluded from precision, recall, F1, and admitted-case metrics until the taxonomy gate and admission review change the status."
     ]
   }
 }

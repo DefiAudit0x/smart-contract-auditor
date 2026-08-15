@@ -1,0 +1,136 @@
+{
+  "case_id": "rw-004-bonqdao",
+  "ground_truth_status": "quarantined",
+  "run_id": "2026-08-14T20:50:38Z",
+  "schema_version": 1,
+  "stages": {
+    "comparator": {
+      "expected_detectors": [],
+      "reason": "The existing detector taxonomy has no semantically valid oracle-manipulation or dispute-window detector for this case.",
+      "status": "NotApplicable"
+    },
+    "full_pipeline": {
+      "acceptance_gate": false,
+      "reason": "The source, on-chain evidence, owned invariant, and executable PoC establish the incident mechanism, but oracle manipulation / spot-price consumption without a dispute window is not covered by the current detector taxonomy; no existing detector is forced.",
+      "status": "Quarantined"
+    },
+    "invariant": {
+      "fixed": {
+        "evidence_lines": [
+          13,
+          19,
+          23,
+          36,
+          44,
+          52,
+          53
+        ],
+        "reason": "The price consumer queries a report before the explicit dispute-window cutoff.",
+        "status": "Satisfied"
+      },
+      "id": "bonq.oracle_price_requires_dispute_window",
+      "vulnerable": {
+        "evidence_lines": [
+          18,
+          22,
+          35,
+          47
+        ],
+        "reason": "The price consumer returns the latest oracle report without enforcing a dispute window.",
+        "status": "Violated"
+      }
+    },
+    "llm": {
+      "fixed": {
+        "allowed_detectors": [
+          "Reentrancy (AST)",
+          "DELEGATECALL Usage (AST)",
+          "Selfdestruct",
+          "Public Mint/Burn",
+          "tx.origin Auth (AST)",
+          "Flash Loan Attack Vector",
+          "Storage Collision (Delegatecall)",
+          "Unchecked Transfer",
+          "Unbounded Loop (AST)",
+          "block.timestamp Usage (AST)"
+        ],
+        "catalog_checked": true,
+        "model": "gpt-5-mini",
+        "predictions": [
+          "block.timestamp Usage (AST)"
+        ],
+        "rationale": "Detected direct uses of block.timestamp in source:\n- In BonqTellorFixedOracle.submitValue: latest = Report({value: value, reportedAt: block.timestamp});\n- In BonqTellorFixedPriceFeed.price: oracle.getDataBefore(block.timestamp - DISPUTE_WINDOW);\nThese explicit occurrences match the block.timestamp usage pattern.",
+        "status": "Completed",
+        "usage": {
+          "completion_tokens": 680,
+          "prompt_tokens": 644
+        }
+      },
+      "vulnerable": {
+        "allowed_detectors": [
+          "Reentrancy (AST)",
+          "DELEGATECALL Usage (AST)",
+          "Selfdestruct",
+          "Public Mint/Burn",
+          "tx.origin Auth (AST)",
+          "Flash Loan Attack Vector",
+          "Storage Collision (Delegatecall)",
+          "Unchecked Transfer",
+          "Unbounded Loop (AST)",
+          "block.timestamp Usage (AST)"
+        ],
+        "catalog_checked": true,
+        "model": "gpt-5-mini",
+        "predictions": [
+          "block.timestamp Usage (AST)"
+        ],
+        "rationale": "The contract BonqTellorVulnerableOracle assigns reportedAt using the global timestamp: in submitValue(uint256 value) it sets latest = Report({value: value, reportedAt: block.timestamp});. The code therefore directly reads block.timestamp (used to populate latest.reportedAt and later compared in getDataBefore), matching the block.timestamp usage pattern.",
+        "status": "Completed",
+        "usage": {
+          "completion_tokens": 561,
+          "prompt_tokens": 579
+        }
+      }
+    },
+    "poc": {
+      "output": "Compiling 1 files with Solc 0.8.25\nSolc 0.8.25 finished in 23.70ms\nCompiler run successful!\n\nRan 2 tests for test/bonqdao_dispute_window_poc.t.sol:BonqDisputeWindowPoC\n[PASS] testFixedRejectsFreshReportAndAcceptsMatureReport() (gas: 605721)\n[PASS] testVulnerableConsumesFreshReport() (gas: 508575)\nSuite result: ok. 2 passed; 0 failed; 0 skipped; finished in 706.14µs (624.49µs CPU time)\n\nRan 1 test suite in 3.08ms (706.14µs CPU time): 2 tests passed, 0 failed, 0 skipped (2 total tests)\n",
+      "reason": "Foundry test passed",
+      "status": "Passed"
+    },
+    "static": {
+      "fixed": {
+        "finding_count": 4,
+        "observed_detectors": [
+          "Event Emission",
+          "Pragma Fixed",
+          "block.timestamp Usage (AST)"
+        ],
+        "source": "benchmarks/real_world/owned_reproductions/bonqdao/BonqTellorFixed.sol",
+        "status": "Completed"
+      },
+      "vulnerable": {
+        "finding_count": 3,
+        "observed_detectors": [
+          "Event Emission",
+          "Pragma Fixed",
+          "block.timestamp Usage (AST)"
+        ],
+        "source": "benchmarks/real_world/owned_reproductions/bonqdao/BonqTellorVulnerable.sol",
+        "status": "Completed"
+      }
+    },
+    "static_plus_llm": {
+      "llm_vulnerable": [
+        "block.timestamp Usage (AST)"
+      ],
+      "reason": "Static and LLM observations are retained for transparency but cannot create Ground Truth or override the Taxonomy Coverage Gate.",
+      "static_vulnerable": [
+        "Event Emission",
+        "Pragma Fixed",
+        "block.timestamp Usage (AST)"
+      ],
+      "status": "ObservationalOnly"
+    }
+  },
+  "track": "real_world_adjudication"
+}
