@@ -16,20 +16,42 @@
   "cases": [
     {
       "id": "rw-001-parity-kill",
-      "incident": "Parity multisig second hack",
+      "incident": "Parity multisig shared WalletLibrary selfdestruct freeze",
       "date": "2017-11",
       "families": ["access_control", "initialization", "selfdestruct"],
-      "affected_functions": ["initWallet", "kill"],
-      "affected_function_confidence": "reported_from_poc_interface",
+      "affected_functions": ["initWallet", "kill", "suicide"],
+      "affected_function_confidence": "independent_postmortem_source_mapping_and_transaction",
       "source_path": "src/test/2017-11/Parity_kill_exp.sol",
       "source_repository_commit": "97df63d8a33c18e3e8c926879b1d05dc4de8286d",
       "source_sha256": "d19520035888d00275947fe1d0ab6e35f49d04341aba1d439ecab0d674ee636d",
-      "attack_transaction": null,
-      "vulnerable_contract": null,
-      "expected_detectors": [],
-      "status": "candidate_pending_external_incident_validation",
-      "references": [],
-      "notes": "The PoC exposes initWallet and kill, but the current file does not carry an incident URL or transaction hash; do not admit until an independent primary reference is attached."
+      "attack_transaction": "0x47f7cff7a5e671884629c93b368cb18f58a993f4b19c2a53a8662e3f1482f690",
+      "vulnerable_contract": "0x863df6bfa4469f3ead0be8f9f2aae51c91a907b4",
+      "expected_detectors": ["Selfdestruct"],
+      "status": "candidate_pending_selfdestruct_compatibility_and_second_adjudication",
+      "references": [
+        "https://medium.com/paritytech/a-postmortem-on-the-parity-multi-sig-library-self-destruct-63daca3a4cf7",
+        "https://etherscan.io/address/0x863df6bfa4469f3ead0be8f9f2aae51c91a907b4#code",
+        "https://etherscan.io/tx/0x47f7cff7a5e671884629c93b368cb18f58a993f4b19c2a53a8662e3f1482f690",
+        "https://github.com/openethereum/parity-ethereum/issues/6995",
+        "https://eips.ethereum.org/EIPS/eip-999"
+      ],
+      "notes": "Independent evidence and owned reproduction are complete. Taxonomy family coverage is Yes at the semantic level, but the exact deployed Solidity 0.4.x source uses legacy suicide(_to), the current analyzer is pinned to solc 0.8.25, and the comparator recognizes only selfdestruct(. The case remains quarantined because the existing detector did not confirm the exact source; no detector or architecture change is introduced.",
+      "implementation_source": {
+        "repository_url": "https://github.com/openethereum/parity-ethereum",
+        "commit": "4d08e7b0aec46443bf26547b17d10cb302672835",
+        "path": "js/src/contracts/snippets/enhanced-wallet.sol",
+        "sha256": "5fe66d969af4d80ad50129cbb009fae6c4765da5828dfe7a53ad72b0f0ae29e0",
+        "role": "upstream historical WalletLibrary lineage; exact deployed verified snapshot is separately pinned at benchmarks/real_world/source_snapshots/parity/WalletLibrary.sol",
+        "line_ranges": ["WalletLibrary:64-461", "initWallet:216-219", "kill:222-224", "suicide(_to):223", "Wallet constructor delegatecall:417", "Wallet fallback delegatecall:429"]
+      },
+      "owned_reproduction": {
+        "source_path": "benchmarks/real_world/owned_reproductions/parity/ParityWalletLibraryVulnerable.sol",
+        "fixed_path": "benchmarks/real_world/owned_reproductions/parity/ParityWalletLibraryFixed.sol",
+        "poc_path": "benchmarks/real_world/owned_reproductions/parity/parity_library_kill_poc.t.sol",
+        "invariant_id": "parity.uninitialized_shared_library_cannot_be_destroyed",
+        "status": "passed"
+      },
+      "adjudication_path": "benchmarks/real_world/adjudications/rw-001-parity-kill.json"
     },
     {
       "id": "rw-002-harvest-finance",

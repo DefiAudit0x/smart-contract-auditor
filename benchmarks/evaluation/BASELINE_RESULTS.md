@@ -37,6 +37,16 @@ BonqDAO is the second candidate processed through the complete stage-by-stage wo
 
 BonqDAO remains quarantined because oracle manipulation and spot-price consumption without a dispute window are not covered by the current detector taxonomy. Static and LLM runs observed `block.timestamp Usage (AST)`, but that observation is not a semantically valid Bonq detector mapping. The comparator is therefore `NotApplicable`, and the case is excluded from all admitted-case metrics. See [`rw-004-bonqdao-report.md`](../real_world/adjudications/rw-004-bonqdao-report.md) and [`rw-004-bonqdao-pipeline.json`](../real_world/adjudications/rw-004-bonqdao-pipeline.json).
 
+## Third adjudication result: Parity WalletLibrary
+
+Parity is the first case in this set whose semantic family is represented by the controlled taxonomy: the independently established root cause includes a destructive shared-library `kill`/`suicide` path, mapping to the existing `Selfdestruct` family. The exact Etherscan source, the initialization and kill transactions, the owned invariant contrast, and the self-contained Foundry PoC are all complete.
+
+Parity nevertheless remains quarantined. The exact deployed Solidity 0.4.x source uses legacy `suicide(_to)`, while the current analyzer/comparator path is fixed to modern compiler/matcher behavior and did not confirm `Selfdestruct` on the exact source. The LLM predicted `Selfdestruct`, and the owned modern contrast was detector- and Comparator-confirmed, but neither observation substitutes for exact-source evidence. The A/B/C result is therefore **A: Missed, B: Completed observation, C: Quarantined**. See [`rw-001-parity-report.md`](../real_world/adjudications/rw-001-parity-report.md) and [`rw-001-parity-pipeline.json`](../real_world/adjudications/rw-001-parity-pipeline.json).
+
+## Three-case cross-case review
+
+The joint review distinguishes two taxonomy-definition gaps from one detector implementation/compatibility gap. Nomad lacks a message-proof validation family, BonqDAO lacks an oracle/dispute-window family, and Parity has semantic `Selfdestruct` coverage but no exact-source confirmation for the legacy spelling. All three remain metric-neutral. No detector or architecture change is justified from these three cases alone. See [`taxonomy-gap-analysis-three-cases.md`](../real_world/adjudications/taxonomy-gap-analysis-three-cases.md).
+
 ## Reproduction
 
 From the repository root, the deterministic cross-track report can be regenerated with:

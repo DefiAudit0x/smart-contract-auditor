@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "case_id": "rw-001-parity-kill",
+  "deployment_source": {
+    "verification_url": "https://etherscan.io/address/0x863df6bfa4469f3ead0be8f9f2aae51c91a907b4#code",
+    "contract_name": "WalletLibrary",
+    "address": "0x863DF6BFa4469f3ead0bE8f9F2AAE51c91A907b4",
+    "compiler": "v0.4.10+commit.f0d539ae",
+    "optimizer": "enabled, 200 runs",
+    "local_snapshot_path": "benchmarks/real_world/source_snapshots/parity/WalletLibrary.sol",
+    "sha256": "dedb7a47a4a37cf61689e8f655beb58b4fe0e026ef591a93ccb62be4041b2e42",
+    "line_ranges": [
+      "WalletLibrary:64-463",
+      "initMultiowned:107-116",
+      "only_uninitialized:215",
+      "initWallet:219-222",
+      "kill:225-227",
+      "suicide(_to):226",
+      "Wallet constructor delegatecall:420",
+      "Wallet fallback delegatecall:432"
+    ]
+  },
+  "upstream_lineage": {
+    "repository_url": "https://github.com/openethereum/parity-ethereum",
+    "commit": "4d08e7b0aec46443bf26547b17d10cb302672835",
+    "path": "js/src/contracts/snippets/enhanced-wallet.sol",
+    "raw_url": "https://raw.githubusercontent.com/openethereum/parity-ethereum/4d08e7b0aec46443bf26547b17d10cb302672835/js/src/contracts/snippets/enhanced-wallet.sol",
+    "sha256": "5fe66d969af4d80ad50129cbb009fae6c4765da5828dfe7a53ad72b0f0ae29e0",
+    "line_count": 461
+  },
+  "source_difference": "The Etherscan deployed snapshot contains the only_uninitialized modifier and applies it to initMultiowned, initDaylimit, and initWallet. The upstream commit contains the same WalletLibrary/kill structure but lacks those three guard applications. The adjudication uses the Etherscan snapshot for exact deployed line mapping and retains the upstream commit only as source lineage; it does not silently substitute one for the other."
+}

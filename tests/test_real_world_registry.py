@@ -47,10 +47,14 @@ def test_all_real_world_adjudications_are_quarantined_and_metric_neutral():
         record = json.loads(path.read_text(encoding="utf-8"))
         assert record["review_status"] == "quarantined"
         assert record["review"]["ground_truth_decision"] == "quarantine"
-        assert record["detector_mapping"]["covered_by_existing_detector"] is False
-        if record["case_id"] in {"rw-003-nomad-bridge", "rw-004-bonqdao"}:
+        if record["case_id"] == "rw-001-parity-kill":
+            assert record["detector_mapping"]["covered_by_existing_detector"] is True
+            assert record["reproduction"]["execution_status"] == "passed"
+        elif record["case_id"] in {"rw-003-nomad-bridge", "rw-004-bonqdao"}:
+            assert record["detector_mapping"]["covered_by_existing_detector"] is False
             assert record["reproduction"]["execution_status"] == "passed"
         else:
+            assert record["detector_mapping"]["covered_by_existing_detector"] is False
             assert record["reproduction"]["execution_status"] == "not_started"
 
 
@@ -81,6 +85,41 @@ def test_bonq_has_pinned_implementation_and_remains_quarantined():
     assert bonq["implementation_source"]["sha256"] == "db633e4080e3e95410e0eec34b17fbacaadca42281bbde5dd6282f61cd40a522"
     assert bonq["owned_reproduction"]["status"] == "passed"
     assert bonq["owned_reproduction"]["invariant_id"] == "bonq.oracle_price_requires_dispute_window"
+
+
+def test_parity_has_pinned_implementation_and_remains_quarantined():
+    registry = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
+    parity = next(case for case in registry["cases"] if case["id"] == "rw-001-parity-kill")
+    assert parity["status"].startswith("candidate_pending_")
+    assert parity["expected_detectors"] == ["Selfdestruct"]
+    assert parity["implementation_source"]["commit"] == "4d08e7b0aec46443bf26547b17d10cb302672835"
+    assert parity["implementation_source"]["sha256"] == "5fe66d969af4d80ad50129cbb009fae6c4765da5828dfe7a53ad72b0f0ae29e0"
+    assert parity["owned_reproduction"]["status"] == "passed"
+    assert parity["owned_reproduction"]["invariant_id"] == "parity.uninitialized_shared_library_cannot_be_destroyed"
+
+
+def test_parity_adjudication_separates_taxonomy_coverage_from_detector_success():
+    path = ROOT / "benchmarks" / "real_world" / "adjudications" / "rw-001-parity-kill.json"
+    record = json.loads(path.read_text(encoding="utf-8"))
+    assert record["review_status"] == "quarantined"
+    assert record["review"]["ground_truth_decision"] == "quarantine"
+    assert record["detector_mapping"]["covered_by_existing_detector"] is True
+    assert record["detector_mapping"]["detector_names"] == ["Selfdestruct"]
+    assert record["reproduction"]["execution_status"] == "passed"
+    assert record["root_cause"]["affected_contract"] == "0x863df6bfa4469f3ead0be8f9f2aae51c91a907b4"
+    assert any("deployed snapshot suicide(_to):226" in entry for entry in record["root_cause"]["source_line_ranges"])
+    pipeline = record["pipeline_observations"]
+    assert pipeline["ground_truth_unchanged"] is True
+    assert pipeline["stage_statuses"]["comparator"] == "NoExactSourceHypothesis"
+    assert pipeline["stage_statuses"]["full_pipeline"] == "Quarantined"
+    pipeline_path = ROOT / pipeline["report_path"]
+    assert pipeline_path.is_file()
+    pipeline_report = json.loads(pipeline_path.read_text(encoding="utf-8"))
+    assert pipeline_report["taxonomy_gate"]["status"] == "Covered"
+    assert pipeline_report["stages"]["a_existing_detector_only"]["status"] == "Missed"
+    assert pipeline_report["stages"]["b_llm_only"]["status"] == "Completed"
+    assert pipeline_report["stages"]["c_full_pipeline"]["status"] == "Quarantined"
+    assert pipeline_report["stages"]["poc"]["status"] == "Passed"
 
 
 def test_bonq_adjudication_keeps_ground_truth_independent():

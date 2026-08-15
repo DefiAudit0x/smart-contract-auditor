@@ -3,51 +3,94 @@
   "case_id": "rw-001-parity-kill",
   "review_status": "quarantined",
   "independent_evidence": {
-    "incident_reference_urls": [],
-    "source_repository_url": "https://github.com/SunWeb3Sec/DeFiHackLabs",
-    "source_repository_commit": "97df63d8a33c18e3e8c926879b1d05dc4de8286d",
-    "source_file_path": "src/test/2017-11/Parity_kill_exp.sol",
-    "source_sha256": "d19520035888d00275947fe1d0ab6e35f49d04341aba1d439ecab0d674ee636d",
-    "onchain_transaction_urls": [],
-    "chain_and_block": "requires independent verification"
+    "incident_reference_urls": [
+      "https://medium.com/paritytech/a-postmortem-on-the-parity-multi-sig-library-self-destruct-63daca3a4cf7",
+      "https://github.com/openethereum/parity-ethereum/issues/6995",
+      "https://eips.ethereum.org/EIPS/eip-999",
+      "https://etherscan.io/address/0x863df6bfa4469f3ead0be8f9f2aae51c91a907b4#code"
+    ],
+    "source_repository_url": "https://github.com/openethereum/parity-ethereum",
+    "source_repository_commit": "4d08e7b0aec46443bf26547b17d10cb302672835",
+    "source_file_path": "js/src/contracts/snippets/enhanced-wallet.sol",
+    "source_sha256": "5fe66d969af4d80ad50129cbb009fae6c4765da5828dfe7a53ad72b0f0ae29e0",
+    "onchain_transaction_urls": [
+      "https://etherscan.io/tx/0x05f71e1b2cb4f03e547739db15d080fd30c989eda04d37ce6264c5686e0722c9",
+      "https://etherscan.io/tx/0x47f7cff7a5e671884629c93b368cb18f58a993f4b19c2a53a8662e3f1482f690"
+    ],
+    "chain_and_block": "Ethereum mainnet. The affected WalletLibrary is 0x863DF6BFa4469f3ead0bE8f9F2AAE51c91A907b4. The initialization transaction is 0x05f71e1b2cb4f03e547739db15d080fd30c989eda04d37ce6264c5686e0722c9. The kill transaction succeeded at block 4501969 on 2017-11-06 15:25:21 UTC, from 0xae7168Deb525862f4FEe37d987A971b385b96952, with decoded input kill(address _to) and a SELF DESTRUCT trace. Etherscan exact-match deployed snapshot is stored at benchmarks/real_world/source_snapshots/parity/WalletLibrary.sol with SHA-256 dedb7a47a4a37cf61689e8f655beb58b4fe0e026ef591a93ccb62be4041b2e42."
   },
   "root_cause": {
     "family": "access_control, initialization, selfdestruct",
-    "affected_contract": "requires source/address mapping",
+    "affected_contract": "0x863df6bfa4469f3ead0be8f9f2aae51c91a907b4",
     "affected_functions": [
-      "initWallet",
-      "kill"
+      "WalletLibrary.initWallet",
+      "WalletLibrary.kill",
+      "WalletLibrary.suicide",
+      "Wallet.constructor delegatecall",
+      "Wallet fallback delegatecall"
     ],
-    "source_line_ranges": [],
-    "mechanism_summary": "The PoC exposes initWallet and kill, but the current file does not carry an incident URL or transaction hash; do not admit until an independent primary reference is attached.",
-    "external_evidence_quotes_or_paraphrases": []
+    "source_line_ranges": [
+      "Etherscan deployed snapshot WalletLibrary:64-463",
+      "Etherscan deployed snapshot only_uninitialized:215",
+      "Etherscan deployed snapshot initWallet:219-222",
+      "Etherscan deployed snapshot kill:225-227",
+      "Etherscan deployed snapshot suicide(_to):226",
+      "Etherscan deployed snapshot Wallet constructor delegatecall:420",
+      "Etherscan deployed snapshot Wallet fallback delegatecall:432",
+      "upstream lineage initWallet:216-219",
+      "upstream lineage kill:222-224"
+    ],
+    "mechanism_summary": "Parity deployed a shared WalletLibrary that retained wallet initialization and a destructive kill path. Because the library instance itself was left uninitialized, an external caller could invoke initWallet, satisfy the only_uninitialized condition on its first call, and become an owner. The caller then invoked kill(address _to), whose onlymanyowners path accepted the newly acquired owner with the relevant confirmation state and executed legacy suicide(_to). Dependent multisig wallets delegated their functionality to the destroyed library, so their code path returned no useful behavior and funds became inaccessible. The semantic detector family is Selfdestruct, but the exact deployed source spells the primitive suicide rather than selfdestruct.",
+    "external_evidence_quotes_or_paraphrases": [
+      "The Parity post-mortem reports that an anonymous user initialized the shared library, became its owner, and destructed it, blocking 587 wallets holding 513,774.16 ETH plus tokens.",
+      "The Parity post-mortem identifies the initialization transaction and the subsequent kill transaction, and states that removing the kill function or initializing the library would have prevented the incident.",
+      "The contemporaneous GitHub issue records that the library was uninitialized, that the reporter became its owner through initWallet, and that the dependent multisig wallets used the library at 0x863df6bfa4469f3ead0be8f9f2aae51c91a907b4.",
+      "Etherscan marks the WalletLibrary source as exact-match verified with Solidity v0.4.10+commit.f0d539ae and records the kill transaction as a successful SELF DESTRUCT.",
+      "EIP-999 independently describes the accidental self-destruction of WalletLibrary at the same address and its effect on dependent Parity wallets."
+    ]
   },
   "reproduction": {
-    "owned_fixture_path": null,
+    "owned_fixture_path": "benchmarks/real_world/owned_reproductions/parity",
     "fork_block": null,
-    "poc_source_provenance": "Third-party discovery PoC is not executed or copied automatically.",
-    "execution_status": "not_started",
+    "poc_source_provenance": "Owned minimal vulnerable/fixed fixtures and a self-contained Foundry PoC model the independently adjudicated initialization-to-kill mechanism. No third-party PoC source is imported, copied, or executed.",
+    "execution_status": "passed",
     "limitations": [
-      "Pinned contract implementation source and line mapping are not yet stored in an owned fixture."
+      "The owned fixtures model the shared-library boundary and do not reproduce the complete Parity multisig wallet fleet or all dependent wallet balances.",
+      "The owned PoC is offline and uses Solidity 0.8.25 for deterministic execution; it models the historical suicide behavior with the modern selfdestruct spelling.",
+      "Foundry reports the post-Cancun selfdestruct semantic warning; the test asserts the transfer effect in the local EVM and does not treat the warning as historical evidence.",
+      "The PoC demonstrates ownership acquisition followed by destructive invocation and the fixed rejection contrast; it does not claim to recreate 587 production wallets.",
+      "The exact deployed source is Solidity 0.4.x and uses suicide(_to), while the current analyzer is fixed at solc 0.8.25 and the comparator matcher recognizes only selfdestruct(."
     ]
   },
   "detector_mapping": {
-    "covered_by_existing_detector": false,
-    "detector_names": [],
-    "mapping_rationale": "No detector mapping is admitted before source-level review.",
-    "not_covered_reason": "Pending independent source mapping and detector coverage review."
+    "covered_by_existing_detector": true,
+    "detector_names": ["Selfdestruct"],
+    "mapping_rationale": "Taxonomy Coverage Gate passes at the semantic family level: the independently established root cause includes a destructive selfdestruct-equivalent path, and Selfdestruct is an existing controlled detector. The A run nevertheless missed the exact deployed source because the legacy source uses suicide(_to), the analyzer AST compiler is fixed at solc 0.8.25, and the deterministic matcher recognizes only selfdestruct(. This is an implementation/compatibility miss within an existing taxonomy mapping, not a reason to assign an unrelated detector.",
+    "not_covered_reason": ""
+  },
+  "pipeline_observations": {
+    "report_path": "benchmarks/real_world/adjudications/rw-001-parity-pipeline.json",
+    "stage_statuses": {
+      "static": "CompletedWithCompatibilityGap",
+      "llm": "Completed",
+      "static_plus_llm": "ObservationalOnly",
+      "comparator": "NoExactSourceHypothesis",
+      "invariant": "Violated/Satisfied",
+      "poc": "Passed",
+      "full_pipeline": "Quarantined"
+    },
+    "ground_truth_unchanged": true
   },
   "review": {
     "ground_truth_decision": "quarantine",
-    "decision_rationale": "Candidate is documented for discovery but excluded from all metrics until admission gates are complete.",
+    "decision_rationale": "The Parity incident is independently supported by the official post-mortem, contemporaneous issue timeline, Etherscan exact-match source metadata, immutable initialization and kill transactions, precise source line mapping, and a passed owned vulnerable/fixed PoC and invariant. The semantic taxonomy gate passes because Selfdestruct is an existing family. However, the current detector did not confirm the exact deployed source: the source uses legacy suicide(_to), AST compilation falls back under the analyzer's fixed solc 0.8.25, and the comparator has no suicide matcher. LLM prediction of Selfdestruct and confirmation on the owned modern contrast are observations, not a substitute for exact-source detector confirmation. The correct current classification is therefore Quarantined, with no detector, feature, or architecture change.",
     "reviewer_independence": "separate_from_analyzer_and_llm",
-    "reviewed_at": "",
+    "reviewed_at": "2026-08-15",
     "admission_requirements_remaining": [
-      "Pin the affected implementation source and exact version.",
-      "Map the incident to source line ranges independently.",
-      "Verify chain and block metadata from immutable on-chain evidence.",
-      "Create and review an owned reproduction or document why reproduction is infeasible.",
-      "Adjudicate detector coverage without using analyzer or LLM output as Ground Truth."
+      "Perform a second independent adjudication of the Parity source and transaction chain before any admission decision.",
+      "Keep the exact-source detector miss separate from the semantic taxonomy coverage result.",
+      "Do not add a suicide alias, detector, compiler path, or architecture change as part of this case; consider such work only in a later design review after three to five diverse cases.",
+      "Keep Parity excluded from precision, recall, F1, and admitted-case metrics while the full pipeline lacks exact-source confirmation."
     ]
   }
 }

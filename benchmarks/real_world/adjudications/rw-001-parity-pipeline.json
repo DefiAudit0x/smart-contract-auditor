@@ -1,0 +1,341 @@
+{
+  "case_id": "rw-001-parity-kill",
+  "ground_truth_status": "quarantined",
+  "run_id": "2026-08-15T00:51:50Z",
+  "schema_version": 1,
+  "stages": {
+    "a_existing_detector_only": {
+      "expected_detector": "Selfdestruct",
+      "owned_fixed_comparator": [
+        {
+          "detector": "Event Emission",
+          "evidence": [],
+          "function": "",
+          "reason": "No deterministic evidence rule is registered for this detector",
+          "status": "Inconclusive"
+        },
+        {
+          "detector": "Pragma Fixed",
+          "evidence": [],
+          "function": "",
+          "reason": "No deterministic evidence rule is registered for this detector",
+          "status": "Inconclusive"
+        }
+      ],
+      "owned_fixed_contrast": {
+        "analyzer_solc_version": "0.8.25",
+        "compatibility_note": null,
+        "compiler_compatibility": true,
+        "expected_detector_observed": false,
+        "finding_count": 2,
+        "findings": [
+          {
+            "agent_name": "Event Emission",
+            "category": "Best Practice",
+            "description": "Contract does not emit events (emit)",
+            "function_name": "",
+            "severity": "Info"
+          },
+          {
+            "agent_name": "Pragma Fixed",
+            "category": "Best Practice",
+            "description": "pragma with ^ — may cause compatibility issues",
+            "function_name": "",
+            "severity": "Info"
+          }
+        ],
+        "observed_detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "source": "benchmarks/real_world/owned_reproductions/parity/ParityWalletLibraryFixed.sol",
+        "source_pragma": "^0.8.25",
+        "status": "Completed"
+      },
+      "owned_vulnerable_comparator": [
+        {
+          "detector": "Selfdestruct",
+          "evidence": [
+            {
+              "excerpt": "selfdestruct(",
+              "kind": "selfdestruct",
+              "location": "line 20"
+            }
+          ],
+          "function": "kill",
+          "reason": "The detector finding is supported by deterministic source evidence",
+          "status": "Confirmed"
+        },
+        {
+          "detector": "Event Emission",
+          "evidence": [],
+          "function": "",
+          "reason": "No deterministic evidence rule is registered for this detector",
+          "status": "Inconclusive"
+        },
+        {
+          "detector": "Pragma Fixed",
+          "evidence": [],
+          "function": "",
+          "reason": "No deterministic evidence rule is registered for this detector",
+          "status": "Inconclusive"
+        }
+      ],
+      "owned_vulnerable_contrast": {
+        "analyzer_solc_version": "0.8.25",
+        "compatibility_note": null,
+        "compiler_compatibility": true,
+        "expected_detector_observed": true,
+        "finding_count": 3,
+        "findings": [
+          {
+            "agent_name": "Selfdestruct",
+            "category": "Access Control",
+            "description": "SELFDESTRUCT in 'kill' — can destroy the contract",
+            "function_name": "kill",
+            "severity": "Critical"
+          },
+          {
+            "agent_name": "Event Emission",
+            "category": "Best Practice",
+            "description": "Contract does not emit events (emit)",
+            "function_name": "",
+            "severity": "Info"
+          },
+          {
+            "agent_name": "Pragma Fixed",
+            "category": "Best Practice",
+            "description": "pragma with ^ — may cause compatibility issues",
+            "function_name": "",
+            "severity": "Info"
+          }
+        ],
+        "observed_detectors": [
+          "Event Emission",
+          "Pragma Fixed",
+          "Selfdestruct"
+        ],
+        "source": "benchmarks/real_world/owned_reproductions/parity/ParityWalletLibraryVulnerable.sol",
+        "source_pragma": "^0.8.25",
+        "status": "Completed"
+      },
+      "pinned_source": {
+        "analyzer_solc_version": "0.8.25",
+        "compatibility_note": "The current analyzer is fixed at solc 0.8.25 while the pinned WalletLibrary source requires Solidity 0.4.x; AST compilation falls back and the literal selfdestruct matcher does not recognize legacy suicide().",
+        "compiler_compatibility": false,
+        "expected_detector_observed": false,
+        "finding_count": 4,
+        "findings": [
+          {
+            "agent_name": "Storage Collision (Delegatecall)",
+            "category": "Storage",
+            "description": "delegatecall with struct/mapping — slot collision risk",
+            "function_name": "",
+            "severity": "High"
+          },
+          {
+            "agent_name": "Centralization Risk",
+            "category": "Access Control",
+            "description": "onlyOwner without renounceOwnership — centralization risk",
+            "function_name": "",
+            "severity": "Medium"
+          },
+          {
+            "agent_name": "Event Emission",
+            "category": "Best Practice",
+            "description": "Contract does not emit events (emit)",
+            "function_name": "",
+            "severity": "Info"
+          },
+          {
+            "agent_name": "Pragma Fixed",
+            "category": "Best Practice",
+            "description": "pragma with ^ — may cause compatibility issues",
+            "function_name": "",
+            "severity": "Info"
+          }
+        ],
+        "observed_detectors": [
+          "Centralization Risk",
+          "Event Emission",
+          "Pragma Fixed",
+          "Storage Collision (Delegatecall)"
+        ],
+        "source": "benchmarks/real_world/source_snapshots/parity/WalletLibrary.sol",
+        "source_pragma": "^0.4.9",
+        "status": "CompletedWithCompatibilityGap"
+      },
+      "pinned_source_comparator": [
+        {
+          "detector": "Storage Collision (Delegatecall)",
+          "evidence": [
+            {
+              "excerpt": "delegatecall(",
+              "kind": "delegatecall_storage_layout",
+              "location": "line 420"
+            }
+          ],
+          "function": "",
+          "reason": "The detector finding is supported by deterministic source evidence",
+          "status": "Confirmed"
+        },
+        {
+          "detector": "Centralization Risk",
+          "evidence": [],
+          "function": "",
+          "reason": "No deterministic evidence rule is registered for this detector",
+          "status": "Inconclusive"
+        },
+        {
+          "detector": "Event Emission",
+          "evidence": [],
+          "function": "",
+          "reason": "No deterministic evidence rule is registered for this detector",
+          "status": "Inconclusive"
+        },
+        {
+          "detector": "Pragma Fixed",
+          "evidence": [],
+          "function": "",
+          "reason": "No deterministic evidence rule is registered for this detector",
+          "status": "Inconclusive"
+        }
+      ],
+      "reason": "The semantic family is in the controlled taxonomy, but the current analyzer emitted no Selfdestruct finding on the exact deployed snapshot. The pinned source uses legacy suicide(_to), the AST compiler is fixed at solc 0.8.25 while the source requires 0.4.x, and the comparator matcher recognizes only selfdestruct(. The owned 0.8.25 vulnerable contrast is detected and comparator-confirmed, so the miss is an exact-source compatibility/implementation observation rather than a taxonomy gap.",
+      "status": "Missed"
+    },
+    "b_llm_only": {
+      "expected_detector": "Selfdestruct",
+      "ground_truth_role": "ObservationOnly",
+      "owned_fixed_contrast": {
+        "allowed_detectors": [
+          "Reentrancy (AST)",
+          "DELEGATECALL Usage (AST)",
+          "Selfdestruct",
+          "Public Mint/Burn",
+          "tx.origin Auth (AST)",
+          "Flash Loan Attack Vector",
+          "Storage Collision (Delegatecall)",
+          "Unchecked Transfer",
+          "Unbounded Loop (AST)",
+          "block.timestamp Usage (AST)"
+        ],
+        "catalog_checked": true,
+        "model": "gpt-5-mini",
+        "predictions": [],
+        "rationale": "No detectors triggered. Source contains only a constructor and two functions that immediately revert; there are no occurrences of delegatecall or .delegatecall (so no DELEGATECALL Usage or Storage Collision), no selfdestruct or suicide keyword (so no Selfdestruct), no mint/burn logic or token transfers (so no Public Mint/Burn), no use of tx.origin (so no tx.origin Auth), no patterns of flash-loan vulnerable external calls or protocol interactions (so no Flash Loan Attack Vector), no low-level transfers (.call, .send, .transfer) or unchecked return handling (so no Unchecked Transfer), no for/while loops (so no Unbounded Loop), and no use of block.timestamp or now (so no block.timestamp Usage). The functions are marked pure/external and immediately revert, and state is set only in the constructor (immutable variables), which provides no evidence for the listed detectors.",
+        "status": "Completed",
+        "usage": {
+          "completion_tokens": 727,
+          "prompt_tokens": 368
+        }
+      },
+      "owned_vulnerable_contrast": {
+        "allowed_detectors": [
+          "Reentrancy (AST)",
+          "DELEGATECALL Usage (AST)",
+          "Selfdestruct",
+          "Public Mint/Burn",
+          "tx.origin Auth (AST)",
+          "Flash Loan Attack Vector",
+          "Storage Collision (Delegatecall)",
+          "Unchecked Transfer",
+          "Unbounded Loop (AST)",
+          "block.timestamp Usage (AST)"
+        ],
+        "catalog_checked": true,
+        "model": "gpt-5-mini",
+        "predictions": [
+          "Selfdestruct"
+        ],
+        "rationale": "The source contains an explicit selfdestruct invocation: function kill(address payable recipient) external { require(owner[msg.sender], \"not owner\"); selfdestruct(recipient); } — the presence of the selfdestruct(...) call is the concrete pattern matched. No delegatecall, tx.origin, loops, block.timestamp usage, unchecked low-level transfer patterns, mint/burn functions, or reentrancy-typical external calls are present in the provided code.",
+        "status": "Completed",
+        "usage": {
+          "completion_tokens": 569,
+          "prompt_tokens": 422
+        }
+      },
+      "pinned_source": {
+        "allowed_detectors": [
+          "Reentrancy (AST)",
+          "DELEGATECALL Usage (AST)",
+          "Selfdestruct",
+          "Public Mint/Burn",
+          "tx.origin Auth (AST)",
+          "Flash Loan Attack Vector",
+          "Storage Collision (Delegatecall)",
+          "Unchecked Transfer",
+          "Unbounded Loop (AST)",
+          "block.timestamp Usage (AST)"
+        ],
+        "catalog_checked": true,
+        "model": "gpt-5-mini",
+        "predictions": [
+          "DELEGATECALL Usage (AST)",
+          "Reentrancy (AST)",
+          "Selfdestruct",
+          "Storage Collision (Delegatecall)",
+          "block.timestamp Usage (AST)"
+        ],
+        "rationale": "DELEGATECALL Usage (AST): multiple explicit delegatecall usages present: assembly delegatecall in Wallet constructor (assembly { ... delegatecall(...) }), and runtime delegatecall calls in Wallet fallback and in hasConfirmed/isOwner (e.g. _walletLibrary.delegatecall(msg.data)).\n\nSelfdestruct: WalletLibrary.kill contains suicide(_to), i.e. explicit self-destruct opcode usage.\n\nReentrancy (AST): external call performed before critical state cleanup: in confirm(bytes32) the code does if (!m_txs[_h].to.call.value(m_txs[_h].value)(m_txs[_h].data)) throw; then later MultiTransact(...) and delete m_txs[_h]; state (m_txs) is deleted after the external call, introducing a reentrancy pattern.\n\nStorage Collision (Delegatecall): WalletLibrary declares storage for mappings/arrays beyond the fields present in Wallet (e.g. mapping(bytes32 => PendingState) m_pending; bytes32[] m_pendingIndex; mapping(bytes32 => Transaction) m_txs; etc.), while Wallet has a shorter field list. The contract uses delegatecall into WalletLibrary (see fallback and constructor), meaning the library code will read/write the caller (Wallet) storage slots — a concrete pattern that can cause storage collisions.\n\nblock.timestamp Usage (AST): the code uses now in today(): function today() private constant returns (uint) { return now / 1 days; } (now is block.timestamp).",
+        "status": "Completed",
+        "usage": {
+          "completion_tokens": 2159,
+          "prompt_tokens": 4388
+        }
+      },
+      "reason": "LLM predictions are recorded after a live catalog check but cannot create Ground Truth or override exact-source comparator evidence.",
+      "status": "Completed"
+    },
+    "c_full_pipeline": {
+      "acceptance_gate": false,
+      "comparator": "NoExactSourceHypothesis",
+      "detector_mapping": "CoveredAtTaxonomyLevel",
+      "invariant": "Violated/Satisfied",
+      "poc": "Passed",
+      "reason": "Independent evidence, exact source pinning, taxonomy family coverage, invariant, and owned PoC are present, but the current detector did not confirm Selfdestruct on the exact legacy source. LLM output and the owned modern contrast cannot substitute for exact-source detector confirmation; no detector or architecture change is introduced.",
+      "source_evidence": "Completed",
+      "status": "Quarantined"
+    },
+    "invariant": {
+      "fixed": {
+        "evidence_lines": [
+          8,
+          10,
+          12,
+          15,
+          19
+        ],
+        "reason": "Initialization is completed at deployment and the destructive library path is disabled.",
+        "status": "Satisfied"
+      },
+      "id": "parity.uninitialized_shared_library_cannot_be_destroyed",
+      "vulnerable": {
+        "evidence_lines": [
+          5,
+          8,
+          11,
+          12,
+          14,
+          18,
+          20
+        ],
+        "reason": "An externally callable initializer can acquire ownership of an uninitialized shared library before invoking its destructive kill path.",
+        "status": "Violated"
+      }
+    },
+    "poc": {
+      "output": "Compiling 1 files with Solc 0.8.25\nSolc 0.8.25 finished in 20.40ms\nCompiler run successful with warnings:\nWarning (5159): \"selfdestruct\" has been deprecated. Note that, starting from the Cancun hard fork, the underlying opcode no longer deletes the code and data associated with an account and only transfers its Ether to the beneficiary, unless executed in the same transaction in which the contract was created (see EIP-6780). Any use in newly deployed contracts is strongly discouraged even if the new behavior is taken into account. Future changes to the EVM might further reduce the functionality of the opcode.\n  --> test/parity_library_kill_poc.t.sol:16:9:\n   |\n16 |         selfdestruct(recipient);\n   |         ^^^^^^^^^^^^\n\n\nRan 2 tests for test/parity_library_kill_poc.t.sol:ParityLibraryKillPoC\n[PASS] testFixedLibraryRejectsTakeoverAndDestruction() (gas: 235174)\n[PASS] testUninitializedLibraryCanBeTakenOverAndKilled() (gas: 325300)\nSuite result: ok. 2 passed; 0 failed; 0 skipped; finished in 743.42µs (582.38µs CPU time)\n\nRan 1 test suite in 3.39ms (743.42µs CPU time): 2 tests passed, 0 failed, 0 skipped (2 total tests)\n",
+      "reason": "Foundry test passed",
+      "status": "Passed"
+    }
+  },
+  "taxonomy_gate": {
+    "expected_detectors": [
+      "Selfdestruct"
+    ],
+    "reason": "The confirmed root-cause family includes a destructive selfdestruct/suicide path; Selfdestruct is an existing controlled detector family.",
+    "status": "Covered"
+  },
+  "track": "real_world_adjudication"
+}
