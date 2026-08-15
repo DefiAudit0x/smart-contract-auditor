@@ -53,6 +53,18 @@ The measurement-only historical compatibility track contains 25 fixtures across 
 
 This result is measurement-only: no production detector, parser, compiler-selection path, Comparator matcher, or architecture was changed. It identifies a narrowly scoped legacy-alias compatibility gap rather than proving an architecture-wide failure. The primary benchmark remains unchanged at Precision=1.0, Recall=1.0, F1=1.0. See [`REPORT.md`](../historical_compatibility/REPORT.md) and [`selfdestruct_compatibility_measurement.json`](../historical_compatibility/metadata/selfdestruct_compatibility_measurement.json).
 
+## Cross-Detector Compatibility Audit
+
+The measurement-only cross-detector track extends the historical probe to three existing families: `Selfdestruct`, `block.timestamp Usage (AST)`, and `DELEGATECALL Usage (AST)`. It contains 45 rows across five Solidity compiler families and three forms per detector: canonical, legacy/equivalent, and fixed. The historical compiler accepts all canonical forms, while the unchanged current normalized-AST path succeeds only for the Solidity 0.8.25 canonical rows. The `Selfdestruct` textual fallback still detects canonical historical text; the two AST-only detectors miss canonical historical source when the current compiler path cannot normalize it. Legacy forms are either compiler-rejected in later versions or rejected by the current detector/Comparator vocabulary.
+
+This is evidence of a **possible shared compiler/AST compatibility boundary**, not yet an architecture verdict. No alias, detector, Comparator matcher, compiler fallback, or architecture change was made, and Case #4 remains paused. See [`cross-detector/REPORT.md`](../historical_compatibility/cross_detector/REPORT.md) and [`cross_detector_compatibility_measurement.json`](../historical_compatibility/cross_detector/metadata/cross_detector_compatibility_measurement.json).
+
+## Architecture Boundary Audit
+
+The read-only Compiler/AST boundary investigation traced the actual production path through `SolidityAnalyzer.analyze_file`, `SolidityAnalyzer._parse_single_file`, `solidity_ast.compile_to_ast`, `solcast.from_ast`, `analyze_contracts`, `_extract_function`, and the base `LanguageAnalyzer.analyze_file` agent loop. It confirmed that `SOLC_VERSION = "0.8.25"` is fixed in the current path; no pragma-based compiler selection occurs. Exact Parity `WalletLibrary.sol` source compiles to raw AST with direct solc 0.4.10, but `solcast.from_ast` returns a plain `dict` with `children` and `name`, so the current `analyze_contracts` contract extraction returns zero normalized contracts. A minimal 0.4.11 `suicide` probe reproduces the same container incompatibility. The exact Parity source fails the 0.4.11 compiler with a source-specific historical assembly stack error, while a modern 0.8.25 control returns a `SourceUnit` and normalizes to one contract/function with `uses_selfdestruct=true`.
+
+This confirms a bounded compiler-selection limitation and an old-AST normalizer/container incompatibility, but does not establish a detector-interface failure or justify a fix. The investigation is read-only: no alias, compiler fallback, normalizer adapter, detector, Comparator, or architecture component was changed. See [`architecture_boundary/REPORT.md`](../historical_compatibility/architecture_boundary/REPORT.md) and [`compiler_ast_boundary_experiment.json`](../historical_compatibility/architecture_boundary/metadata/compiler_ast_boundary_experiment.json).
+
 ## Reproduction
 
 From the repository root, the deterministic cross-track report can be regenerated with:

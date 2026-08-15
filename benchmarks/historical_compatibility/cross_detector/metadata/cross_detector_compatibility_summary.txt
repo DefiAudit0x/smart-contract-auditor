@@ -1,0 +1,60 @@
+detector,version,form,compiler,raw_ast,normalized_ast,detector,comparator
+Selfdestruct,solidity_04,canonical,compiled,selfdestruct,compile_failed,HIT,Confirmed
+Selfdestruct,solidity_04,legacy,compiled,suicide,compile_failed,MISS,Rejected
+Selfdestruct,solidity_04,fixed,compiled,-,compile_failed,MISS,Rejected
+block.timestamp Usage (AST),solidity_04,canonical,compiled,timestamp,compile_failed,MISS,Confirmed
+block.timestamp Usage (AST),solidity_04,legacy,compiled,now,compile_failed,MISS,Rejected
+block.timestamp Usage (AST),solidity_04,fixed,compiled,-,compile_failed,MISS,Rejected
+DELEGATECALL Usage (AST),solidity_04,canonical,compiled,delegatecall,compile_failed,MISS,Confirmed
+DELEGATECALL Usage (AST),solidity_04,legacy,compiled,callcode,compile_failed,MISS,Rejected
+DELEGATECALL Usage (AST),solidity_04,fixed,compiled,-,compile_failed,MISS,Rejected
+Selfdestruct,solidity_05,canonical,compiled,selfdestruct,compile_failed,HIT,Confirmed
+Selfdestruct,solidity_05,legacy,compile_failed,-,compile_failed,MISS,Rejected
+Selfdestruct,solidity_05,fixed,compiled,-,compile_failed,MISS,Rejected
+block.timestamp Usage (AST),solidity_05,canonical,compiled,timestamp,compile_failed,MISS,Confirmed
+block.timestamp Usage (AST),solidity_05,legacy,compiled,now,compile_failed,MISS,Rejected
+block.timestamp Usage (AST),solidity_05,fixed,compiled,-,compile_failed,MISS,Rejected
+DELEGATECALL Usage (AST),solidity_05,canonical,compiled,delegatecall,compile_failed,MISS,Confirmed
+DELEGATECALL Usage (AST),solidity_05,legacy,compile_failed,-,compile_failed,MISS,Rejected
+DELEGATECALL Usage (AST),solidity_05,fixed,compiled,-,compile_failed,MISS,Rejected
+Selfdestruct,solidity_06,canonical,compiled,selfdestruct,compile_failed,HIT,Confirmed
+Selfdestruct,solidity_06,legacy,compile_failed,-,compile_failed,MISS,Rejected
+Selfdestruct,solidity_06,fixed,compiled,-,compile_failed,MISS,Rejected
+block.timestamp Usage (AST),solidity_06,canonical,compiled,timestamp,compile_failed,MISS,Confirmed
+block.timestamp Usage (AST),solidity_06,legacy,compiled,now,compile_failed,MISS,Rejected
+block.timestamp Usage (AST),solidity_06,fixed,compiled,-,compile_failed,MISS,Rejected
+DELEGATECALL Usage (AST),solidity_06,canonical,compiled,delegatecall,compile_failed,MISS,Confirmed
+DELEGATECALL Usage (AST),solidity_06,legacy,compile_failed,-,compile_failed,MISS,Rejected
+DELEGATECALL Usage (AST),solidity_06,fixed,compiled,-,compile_failed,MISS,Rejected
+Selfdestruct,solidity_07,canonical,compiled,selfdestruct,compile_failed,HIT,Confirmed
+Selfdestruct,solidity_07,legacy,compile_failed,-,compile_failed,MISS,Rejected
+Selfdestruct,solidity_07,fixed,compiled,-,compile_failed,MISS,Rejected
+block.timestamp Usage (AST),solidity_07,canonical,compiled,timestamp,compile_failed,MISS,Confirmed
+block.timestamp Usage (AST),solidity_07,legacy,compile_failed,-,compile_failed,MISS,Rejected
+block.timestamp Usage (AST),solidity_07,fixed,compiled,-,compile_failed,MISS,Rejected
+DELEGATECALL Usage (AST),solidity_07,canonical,compiled,delegatecall,compile_failed,MISS,Confirmed
+DELEGATECALL Usage (AST),solidity_07,legacy,compile_failed,-,compile_failed,MISS,Rejected
+DELEGATECALL Usage (AST),solidity_07,fixed,compiled,-,compile_failed,MISS,Rejected
+Selfdestruct,solidity_08,canonical,compiled,selfdestruct,normalized,HIT,Confirmed
+Selfdestruct,solidity_08,legacy,compile_failed,-,compile_failed,MISS,Rejected
+Selfdestruct,solidity_08,fixed,compiled,-,normalized,MISS,Rejected
+block.timestamp Usage (AST),solidity_08,canonical,compiled,timestamp,normalized,HIT,Confirmed
+block.timestamp Usage (AST),solidity_08,legacy,compile_failed,-,compile_failed,MISS,Rejected
+block.timestamp Usage (AST),solidity_08,fixed,compiled,-,normalized,MISS,Rejected
+DELEGATECALL Usage (AST),solidity_08,canonical,compiled,delegatecall,normalized,HIT,Confirmed
+DELEGATECALL Usage (AST),solidity_08,legacy,compile_failed,-,compile_failed,MISS,Rejected
+DELEGATECALL Usage (AST),solidity_08,fixed,compiled,-,normalized,MISS,Rejected
+
+AGGREGATES
+Selfdestruct
+  canonical compiled= 5 normalized_signal= 1 detector_hits= 5 comparator_confirmed= 5 comparator_rejected= 0
+  legacy compiled= 1 normalized_signal= 0 detector_hits= 0 comparator_confirmed= 0 comparator_rejected= 5
+  fixed compiled= 5 normalized_signal= 0 detector_hits= 0 comparator_confirmed= 0 comparator_rejected= 5
+block.timestamp Usage (AST)
+  canonical compiled= 5 normalized_signal= 1 detector_hits= 1 comparator_confirmed= 5 comparator_rejected= 0
+  legacy compiled= 3 normalized_signal= 0 detector_hits= 0 comparator_confirmed= 0 comparator_rejected= 5
+  fixed compiled= 5 normalized_signal= 0 detector_hits= 0 comparator_confirmed= 0 comparator_rejected= 5
+DELEGATECALL Usage (AST)
+  canonical compiled= 5 normalized_signal= 1 detector_hits= 1 comparator_confirmed= 5 comparator_rejected= 0
+  legacy compiled= 1 normalized_signal= 0 detector_hits= 0 comparator_confirmed= 0 comparator_rejected= 5
+  fixed compiled= 5 normalized_signal= 0 detector_hits= 0 comparator_confirmed= 0 comparator_rejected= 5

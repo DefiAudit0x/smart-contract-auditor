@@ -1,0 +1,1920 @@
+{
+  "current_analyzer_solc": "0.8.25",
+  "detectors": [
+    "Selfdestruct",
+    "block.timestamp Usage (AST)",
+    "DELEGATECALL Usage (AST)"
+  ],
+  "forms": [
+    "canonical",
+    "legacy",
+    "fixed"
+  ],
+  "historical_compilers": {
+    "solidity_04": "0.4.11",
+    "solidity_05": "0.5.17",
+    "solidity_06": "0.6.12",
+    "solidity_07": "0.7.6",
+    "solidity_08": "0.8.25"
+  },
+  "measurement_only": true,
+  "production_changes": [],
+  "row_count": 45,
+  "rows": [
+    {
+      "comparator": {
+        "evidence": [
+          {
+            "excerpt": "selfdestruct(",
+            "kind": "selfdestruct",
+            "location": "line 5"
+          }
+        ],
+        "reason": "The detector finding is supported by deterministic source evidence",
+        "status": "Confirmed"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed",
+          "Selfdestruct"
+        ],
+        "finding_count": 3,
+        "matching_functions": [
+          ""
+        ],
+        "target_hit": true
+      },
+      "detector": "Selfdestruct",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "compiler": "0.4.11",
+        "error": null,
+        "raw_ast_keywords": [
+          "selfdestruct"
+        ],
+        "status": "compiled"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_selfdestruct": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": true,
+        "fixture": "selfdestruct_canonical.sol",
+        "form": "canonical"
+      },
+      "version_family": "solidity_04"
+    },
+    {
+      "comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "matching_functions": [],
+        "target_hit": false
+      },
+      "detector": "Selfdestruct",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "compiler": "0.4.11",
+        "error": null,
+        "raw_ast_keywords": [
+          "suicide"
+        ],
+        "status": "compiled"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_selfdestruct": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": true,
+        "fixture": "selfdestruct_legacy.sol",
+        "form": "legacy"
+      },
+      "version_family": "solidity_04"
+    },
+    {
+      "comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "matching_functions": [],
+        "target_hit": false
+      },
+      "detector": "Selfdestruct",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "compiler": "0.4.11",
+        "error": null,
+        "raw_ast_keywords": [],
+        "status": "compiled"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_selfdestruct": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": false,
+        "fixture": "selfdestruct_fixed.sol",
+        "form": "fixed"
+      },
+      "version_family": "solidity_04"
+    },
+    {
+      "comparator": {
+        "evidence": [
+          {
+            "excerpt": "block.timestamp",
+            "kind": "block_timestamp",
+            "location": "line 5"
+          }
+        ],
+        "reason": "The detector finding is supported by deterministic source evidence",
+        "status": "Confirmed"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "matching_functions": [],
+        "target_hit": false
+      },
+      "detector": "block.timestamp Usage (AST)",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "compiler": "0.4.11",
+        "error": null,
+        "raw_ast_keywords": [
+          "timestamp"
+        ],
+        "status": "compiled"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_block_timestamp": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": true,
+        "fixture": "timestamp_canonical.sol",
+        "form": "canonical"
+      },
+      "version_family": "solidity_04"
+    },
+    {
+      "comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "matching_functions": [],
+        "target_hit": false
+      },
+      "detector": "block.timestamp Usage (AST)",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "compiler": "0.4.11",
+        "error": null,
+        "raw_ast_keywords": [
+          "now"
+        ],
+        "status": "compiled"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_block_timestamp": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": true,
+        "fixture": "timestamp_legacy.sol",
+        "form": "legacy"
+      },
+      "version_family": "solidity_04"
+    },
+    {
+      "comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "matching_functions": [],
+        "target_hit": false
+      },
+      "detector": "block.timestamp Usage (AST)",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "compiler": "0.4.11",
+        "error": null,
+        "raw_ast_keywords": [],
+        "status": "compiled"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_block_timestamp": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": false,
+        "fixture": "timestamp_fixed.sol",
+        "form": "fixed"
+      },
+      "version_family": "solidity_04"
+    },
+    {
+      "comparator": {
+        "evidence": [
+          {
+            "excerpt": "delegatecall(",
+            "kind": "delegatecall",
+            "location": "line 9"
+          }
+        ],
+        "reason": "The detector finding is supported by deterministic source evidence",
+        "status": "Confirmed"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "matching_functions": [],
+        "target_hit": false
+      },
+      "detector": "DELEGATECALL Usage (AST)",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "compiler": "0.4.11",
+        "error": null,
+        "raw_ast_keywords": [
+          "delegatecall"
+        ],
+        "status": "compiled"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_delegatecall": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": true,
+        "fixture": "delegatecall_canonical.sol",
+        "form": "canonical"
+      },
+      "version_family": "solidity_04"
+    },
+    {
+      "comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "matching_functions": [],
+        "target_hit": false
+      },
+      "detector": "DELEGATECALL Usage (AST)",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "compiler": "0.4.11",
+        "error": null,
+        "raw_ast_keywords": [
+          "callcode"
+        ],
+        "status": "compiled"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_delegatecall": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": true,
+        "fixture": "delegatecall_legacy.sol",
+        "form": "legacy"
+      },
+      "version_family": "solidity_04"
+    },
+    {
+      "comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "matching_functions": [],
+        "target_hit": false
+      },
+      "detector": "DELEGATECALL Usage (AST)",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "compiler": "0.4.11",
+        "error": null,
+        "raw_ast_keywords": [],
+        "status": "compiled"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_delegatecall": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": false,
+        "fixture": "delegatecall_fixed.sol",
+        "form": "fixed"
+      },
+      "version_family": "solidity_04"
+    },
+    {
+      "comparator": {
+        "evidence": [
+          {
+            "excerpt": "selfdestruct(",
+            "kind": "selfdestruct",
+            "location": "line 5"
+          }
+        ],
+        "reason": "The detector finding is supported by deterministic source evidence",
+        "status": "Confirmed"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed",
+          "Selfdestruct"
+        ],
+        "finding_count": 3,
+        "matching_functions": [
+          ""
+        ],
+        "target_hit": true
+      },
+      "detector": "Selfdestruct",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "compiler": "0.5.17",
+        "error": null,
+        "raw_ast_keywords": [
+          "selfdestruct"
+        ],
+        "status": "compiled"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_selfdestruct": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": true,
+        "fixture": "selfdestruct_canonical.sol",
+        "form": "canonical"
+      },
+      "version_family": "solidity_05"
+    },
+    {
+      "comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "matching_functions": [],
+        "target_hit": false
+      },
+      "detector": "Selfdestruct",
+      "historical_compiler": {
+        "compiler": "0.5.17",
+        "error": "        ^-----^",
+        "raw_ast_keywords": [],
+        "status": "compile_failed"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_selfdestruct": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": true,
+        "fixture": "selfdestruct_legacy.sol",
+        "form": "legacy"
+      },
+      "version_family": "solidity_05"
+    },
+    {
+      "comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "matching_functions": [],
+        "target_hit": false
+      },
+      "detector": "Selfdestruct",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "compiler": "0.5.17",
+        "error": null,
+        "raw_ast_keywords": [],
+        "status": "compiled"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_selfdestruct": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": false,
+        "fixture": "selfdestruct_fixed.sol",
+        "form": "fixed"
+      },
+      "version_family": "solidity_05"
+    },
+    {
+      "comparator": {
+        "evidence": [
+          {
+            "excerpt": "block.timestamp",
+            "kind": "block_timestamp",
+            "location": "line 5"
+          }
+        ],
+        "reason": "The detector finding is supported by deterministic source evidence",
+        "status": "Confirmed"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "matching_functions": [],
+        "target_hit": false
+      },
+      "detector": "block.timestamp Usage (AST)",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "compiler": "0.5.17",
+        "error": null,
+        "raw_ast_keywords": [
+          "timestamp"
+        ],
+        "status": "compiled"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_block_timestamp": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": true,
+        "fixture": "timestamp_canonical.sol",
+        "form": "canonical"
+      },
+      "version_family": "solidity_05"
+    },
+    {
+      "comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "matching_functions": [],
+        "target_hit": false
+      },
+      "detector": "block.timestamp Usage (AST)",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "compiler": "0.5.17",
+        "error": null,
+        "raw_ast_keywords": [
+          "now"
+        ],
+        "status": "compiled"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_block_timestamp": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": true,
+        "fixture": "timestamp_legacy.sol",
+        "form": "legacy"
+      },
+      "version_family": "solidity_05"
+    },
+    {
+      "comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "matching_functions": [],
+        "target_hit": false
+      },
+      "detector": "block.timestamp Usage (AST)",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "compiler": "0.5.17",
+        "error": null,
+        "raw_ast_keywords": [],
+        "status": "compiled"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_block_timestamp": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": false,
+        "fixture": "timestamp_fixed.sol",
+        "form": "fixed"
+      },
+      "version_family": "solidity_05"
+    },
+    {
+      "comparator": {
+        "evidence": [
+          {
+            "excerpt": "delegatecall(",
+            "kind": "delegatecall",
+            "location": "line 9"
+          }
+        ],
+        "reason": "The detector finding is supported by deterministic source evidence",
+        "status": "Confirmed"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed",
+          "Storage Collision (Delegatecall)"
+        ],
+        "finding_count": 3,
+        "matching_functions": [],
+        "target_hit": false
+      },
+      "detector": "DELEGATECALL Usage (AST)",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "compiler": "0.5.17",
+        "error": null,
+        "raw_ast_keywords": [
+          "delegatecall"
+        ],
+        "status": "compiled"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_delegatecall": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": true,
+        "fixture": "delegatecall_canonical.sol",
+        "form": "canonical"
+      },
+      "version_family": "solidity_05"
+    },
+    {
+      "comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "matching_functions": [],
+        "target_hit": false
+      },
+      "detector": "DELEGATECALL Usage (AST)",
+      "historical_compiler": {
+        "compiler": "0.5.17",
+        "error": "        ^---------------------^",
+        "raw_ast_keywords": [],
+        "status": "compile_failed"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_delegatecall": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": true,
+        "fixture": "delegatecall_legacy.sol",
+        "form": "legacy"
+      },
+      "version_family": "solidity_05"
+    },
+    {
+      "comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "matching_functions": [],
+        "target_hit": false
+      },
+      "detector": "DELEGATECALL Usage (AST)",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "compiler": "0.5.17",
+        "error": null,
+        "raw_ast_keywords": [],
+        "status": "compiled"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_delegatecall": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": false,
+        "fixture": "delegatecall_fixed.sol",
+        "form": "fixed"
+      },
+      "version_family": "solidity_05"
+    },
+    {
+      "comparator": {
+        "evidence": [
+          {
+            "excerpt": "selfdestruct(",
+            "kind": "selfdestruct",
+            "location": "line 5"
+          }
+        ],
+        "reason": "The detector finding is supported by deterministic source evidence",
+        "status": "Confirmed"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed",
+          "Selfdestruct"
+        ],
+        "finding_count": 3,
+        "matching_functions": [
+          ""
+        ],
+        "target_hit": true
+      },
+      "detector": "Selfdestruct",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "compiler": "0.6.12",
+        "error": null,
+        "raw_ast_keywords": [
+          "selfdestruct"
+        ],
+        "status": "compiled"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_selfdestruct": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": true,
+        "fixture": "selfdestruct_canonical.sol",
+        "form": "canonical"
+      },
+      "version_family": "solidity_06"
+    },
+    {
+      "comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "matching_functions": [],
+        "target_hit": false
+      },
+      "detector": "Selfdestruct",
+      "historical_compiler": {
+        "compiler": "0.6.12",
+        "error": "  |         ^^^^^^^",
+        "raw_ast_keywords": [],
+        "status": "compile_failed"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_selfdestruct": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": true,
+        "fixture": "selfdestruct_legacy.sol",
+        "form": "legacy"
+      },
+      "version_family": "solidity_06"
+    },
+    {
+      "comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "matching_functions": [],
+        "target_hit": false
+      },
+      "detector": "Selfdestruct",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "compiler": "0.6.12",
+        "error": null,
+        "raw_ast_keywords": [],
+        "status": "compiled"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_selfdestruct": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": false,
+        "fixture": "selfdestruct_fixed.sol",
+        "form": "fixed"
+      },
+      "version_family": "solidity_06"
+    },
+    {
+      "comparator": {
+        "evidence": [
+          {
+            "excerpt": "block.timestamp",
+            "kind": "block_timestamp",
+            "location": "line 5"
+          }
+        ],
+        "reason": "The detector finding is supported by deterministic source evidence",
+        "status": "Confirmed"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "matching_functions": [],
+        "target_hit": false
+      },
+      "detector": "block.timestamp Usage (AST)",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "compiler": "0.6.12",
+        "error": null,
+        "raw_ast_keywords": [
+          "timestamp"
+        ],
+        "status": "compiled"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_block_timestamp": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": true,
+        "fixture": "timestamp_canonical.sol",
+        "form": "canonical"
+      },
+      "version_family": "solidity_06"
+    },
+    {
+      "comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "matching_functions": [],
+        "target_hit": false
+      },
+      "detector": "block.timestamp Usage (AST)",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "compiler": "0.6.12",
+        "error": null,
+        "raw_ast_keywords": [
+          "now"
+        ],
+        "status": "compiled"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_block_timestamp": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": true,
+        "fixture": "timestamp_legacy.sol",
+        "form": "legacy"
+      },
+      "version_family": "solidity_06"
+    },
+    {
+      "comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "matching_functions": [],
+        "target_hit": false
+      },
+      "detector": "block.timestamp Usage (AST)",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "compiler": "0.6.12",
+        "error": null,
+        "raw_ast_keywords": [],
+        "status": "compiled"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_block_timestamp": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": false,
+        "fixture": "timestamp_fixed.sol",
+        "form": "fixed"
+      },
+      "version_family": "solidity_06"
+    },
+    {
+      "comparator": {
+        "evidence": [
+          {
+            "excerpt": "delegatecall(",
+            "kind": "delegatecall",
+            "location": "line 9"
+          }
+        ],
+        "reason": "The detector finding is supported by deterministic source evidence",
+        "status": "Confirmed"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed",
+          "Storage Collision (Delegatecall)"
+        ],
+        "finding_count": 3,
+        "matching_functions": [],
+        "target_hit": false
+      },
+      "detector": "DELEGATECALL Usage (AST)",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "compiler": "0.6.12",
+        "error": null,
+        "raw_ast_keywords": [
+          "delegatecall"
+        ],
+        "status": "compiled"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_delegatecall": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": true,
+        "fixture": "delegatecall_canonical.sol",
+        "form": "canonical"
+      },
+      "version_family": "solidity_06"
+    },
+    {
+      "comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "matching_functions": [],
+        "target_hit": false
+      },
+      "detector": "DELEGATECALL Usage (AST)",
+      "historical_compiler": {
+        "compiler": "0.6.12",
+        "error": "  |         ^^^^^^^^^^^^^^^^^^^^^^^",
+        "raw_ast_keywords": [],
+        "status": "compile_failed"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_delegatecall": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": true,
+        "fixture": "delegatecall_legacy.sol",
+        "form": "legacy"
+      },
+      "version_family": "solidity_06"
+    },
+    {
+      "comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "matching_functions": [],
+        "target_hit": false
+      },
+      "detector": "DELEGATECALL Usage (AST)",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "compiler": "0.6.12",
+        "error": null,
+        "raw_ast_keywords": [],
+        "status": "compiled"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_delegatecall": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": false,
+        "fixture": "delegatecall_fixed.sol",
+        "form": "fixed"
+      },
+      "version_family": "solidity_06"
+    },
+    {
+      "comparator": {
+        "evidence": [
+          {
+            "excerpt": "selfdestruct(",
+            "kind": "selfdestruct",
+            "location": "line 5"
+          }
+        ],
+        "reason": "The detector finding is supported by deterministic source evidence",
+        "status": "Confirmed"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed",
+          "Selfdestruct"
+        ],
+        "finding_count": 3,
+        "matching_functions": [
+          ""
+        ],
+        "target_hit": true
+      },
+      "detector": "Selfdestruct",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "compiler": "0.7.6",
+        "error": null,
+        "raw_ast_keywords": [
+          "selfdestruct"
+        ],
+        "status": "compiled"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_selfdestruct": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": true,
+        "fixture": "selfdestruct_canonical.sol",
+        "form": "canonical"
+      },
+      "version_family": "solidity_07"
+    },
+    {
+      "comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "matching_functions": [],
+        "target_hit": false
+      },
+      "detector": "Selfdestruct",
+      "historical_compiler": {
+        "compiler": "0.7.6",
+        "error": "  |         ^^^^^^^",
+        "raw_ast_keywords": [],
+        "status": "compile_failed"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_selfdestruct": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": true,
+        "fixture": "selfdestruct_legacy.sol",
+        "form": "legacy"
+      },
+      "version_family": "solidity_07"
+    },
+    {
+      "comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "matching_functions": [],
+        "target_hit": false
+      },
+      "detector": "Selfdestruct",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "compiler": "0.7.6",
+        "error": null,
+        "raw_ast_keywords": [],
+        "status": "compiled"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_selfdestruct": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": false,
+        "fixture": "selfdestruct_fixed.sol",
+        "form": "fixed"
+      },
+      "version_family": "solidity_07"
+    },
+    {
+      "comparator": {
+        "evidence": [
+          {
+            "excerpt": "block.timestamp",
+            "kind": "block_timestamp",
+            "location": "line 5"
+          }
+        ],
+        "reason": "The detector finding is supported by deterministic source evidence",
+        "status": "Confirmed"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "matching_functions": [],
+        "target_hit": false
+      },
+      "detector": "block.timestamp Usage (AST)",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "compiler": "0.7.6",
+        "error": null,
+        "raw_ast_keywords": [
+          "timestamp"
+        ],
+        "status": "compiled"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_block_timestamp": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": true,
+        "fixture": "timestamp_canonical.sol",
+        "form": "canonical"
+      },
+      "version_family": "solidity_07"
+    },
+    {
+      "comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "matching_functions": [],
+        "target_hit": false
+      },
+      "detector": "block.timestamp Usage (AST)",
+      "historical_compiler": {
+        "compiler": "0.7.6",
+        "error": "  |                ^^^",
+        "raw_ast_keywords": [],
+        "status": "compile_failed"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_block_timestamp": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": true,
+        "fixture": "timestamp_legacy.sol",
+        "form": "legacy"
+      },
+      "version_family": "solidity_07"
+    },
+    {
+      "comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "matching_functions": [],
+        "target_hit": false
+      },
+      "detector": "block.timestamp Usage (AST)",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "compiler": "0.7.6",
+        "error": null,
+        "raw_ast_keywords": [],
+        "status": "compiled"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_block_timestamp": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": false,
+        "fixture": "timestamp_fixed.sol",
+        "form": "fixed"
+      },
+      "version_family": "solidity_07"
+    },
+    {
+      "comparator": {
+        "evidence": [
+          {
+            "excerpt": "delegatecall(",
+            "kind": "delegatecall",
+            "location": "line 9"
+          }
+        ],
+        "reason": "The detector finding is supported by deterministic source evidence",
+        "status": "Confirmed"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed",
+          "Storage Collision (Delegatecall)"
+        ],
+        "finding_count": 3,
+        "matching_functions": [],
+        "target_hit": false
+      },
+      "detector": "DELEGATECALL Usage (AST)",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "compiler": "0.7.6",
+        "error": null,
+        "raw_ast_keywords": [
+          "delegatecall"
+        ],
+        "status": "compiled"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_delegatecall": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": true,
+        "fixture": "delegatecall_canonical.sol",
+        "form": "canonical"
+      },
+      "version_family": "solidity_07"
+    },
+    {
+      "comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "matching_functions": [],
+        "target_hit": false
+      },
+      "detector": "DELEGATECALL Usage (AST)",
+      "historical_compiler": {
+        "compiler": "0.7.6",
+        "error": "  |         ^^^^^^^^^^^^^^^^^^^^^^^",
+        "raw_ast_keywords": [],
+        "status": "compile_failed"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_delegatecall": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": true,
+        "fixture": "delegatecall_legacy.sol",
+        "form": "legacy"
+      },
+      "version_family": "solidity_07"
+    },
+    {
+      "comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "Pragma Fixed"
+        ],
+        "finding_count": 2,
+        "matching_functions": [],
+        "target_hit": false
+      },
+      "detector": "DELEGATECALL Usage (AST)",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "compiler": "0.7.6",
+        "error": null,
+        "raw_ast_keywords": [],
+        "status": "compiled"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_delegatecall": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": false,
+        "fixture": "delegatecall_fixed.sol",
+        "form": "fixed"
+      },
+      "version_family": "solidity_07"
+    },
+    {
+      "comparator": {
+        "evidence": [
+          {
+            "excerpt": "selfdestruct(",
+            "kind": "selfdestruct",
+            "location": "line 5"
+          }
+        ],
+        "reason": "The detector finding is supported by deterministic source evidence",
+        "status": "Confirmed"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "Selfdestruct"
+        ],
+        "finding_count": 2,
+        "matching_functions": [
+          "destroy"
+        ],
+        "target_hit": true
+      },
+      "detector": "Selfdestruct",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "compiler": "0.8.25",
+        "error": null,
+        "raw_ast_keywords": [
+          "selfdestruct"
+        ],
+        "status": "compiled"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 1,
+        "signals": {
+          "uses_selfdestruct": true
+        },
+        "status": "normalized"
+      },
+      "raw_source": {
+        "expected_semantic_signal": true,
+        "fixture": "selfdestruct_canonical.sol",
+        "form": "canonical"
+      },
+      "version_family": "solidity_08"
+    },
+    {
+      "comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission"
+        ],
+        "finding_count": 1,
+        "matching_functions": [],
+        "target_hit": false
+      },
+      "detector": "Selfdestruct",
+      "historical_compiler": {
+        "compiler": "0.8.25",
+        "error": "  |         ^^^^^^^",
+        "raw_ast_keywords": [],
+        "status": "compile_failed"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_selfdestruct": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": true,
+        "fixture": "selfdestruct_legacy.sol",
+        "form": "legacy"
+      },
+      "version_family": "solidity_08"
+    },
+    {
+      "comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission"
+        ],
+        "finding_count": 1,
+        "matching_functions": [],
+        "target_hit": false
+      },
+      "detector": "Selfdestruct",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "compiler": "0.8.25",
+        "error": null,
+        "raw_ast_keywords": [],
+        "status": "compiled"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 1,
+        "signals": {
+          "uses_selfdestruct": false
+        },
+        "status": "normalized"
+      },
+      "raw_source": {
+        "expected_semantic_signal": false,
+        "fixture": "selfdestruct_fixed.sol",
+        "form": "fixed"
+      },
+      "version_family": "solidity_08"
+    },
+    {
+      "comparator": {
+        "evidence": [
+          {
+            "excerpt": "block.timestamp",
+            "kind": "block_timestamp",
+            "location": "line 5"
+          }
+        ],
+        "reason": "The detector finding is supported by deterministic source evidence",
+        "status": "Confirmed"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "block.timestamp Usage (AST)"
+        ],
+        "finding_count": 2,
+        "matching_functions": [
+          "claim"
+        ],
+        "target_hit": true
+      },
+      "detector": "block.timestamp Usage (AST)",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "compiler": "0.8.25",
+        "error": null,
+        "raw_ast_keywords": [
+          "timestamp"
+        ],
+        "status": "compiled"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 1,
+        "signals": {
+          "uses_block_timestamp": true
+        },
+        "status": "normalized"
+      },
+      "raw_source": {
+        "expected_semantic_signal": true,
+        "fixture": "timestamp_canonical.sol",
+        "form": "canonical"
+      },
+      "version_family": "solidity_08"
+    },
+    {
+      "comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission"
+        ],
+        "finding_count": 1,
+        "matching_functions": [],
+        "target_hit": false
+      },
+      "detector": "block.timestamp Usage (AST)",
+      "historical_compiler": {
+        "compiler": "0.8.25",
+        "error": "  |                ^^^",
+        "raw_ast_keywords": [],
+        "status": "compile_failed"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_block_timestamp": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": true,
+        "fixture": "timestamp_legacy.sol",
+        "form": "legacy"
+      },
+      "version_family": "solidity_08"
+    },
+    {
+      "comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission"
+        ],
+        "finding_count": 1,
+        "matching_functions": [],
+        "target_hit": false
+      },
+      "detector": "block.timestamp Usage (AST)",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "compiler": "0.8.25",
+        "error": null,
+        "raw_ast_keywords": [],
+        "status": "compiled"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 1,
+        "signals": {
+          "uses_block_timestamp": false
+        },
+        "status": "normalized"
+      },
+      "raw_source": {
+        "expected_semantic_signal": false,
+        "fixture": "timestamp_fixed.sol",
+        "form": "fixed"
+      },
+      "version_family": "solidity_08"
+    },
+    {
+      "comparator": {
+        "evidence": [
+          {
+            "excerpt": "delegatecall(",
+            "kind": "delegatecall",
+            "location": "line 9"
+          }
+        ],
+        "reason": "The detector finding is supported by deterministic source evidence",
+        "status": "Confirmed"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "DELEGATECALL Usage (AST)",
+          "Delegatecall to Mutable Address",
+          "Event Emission",
+          "Reentrancy (AST)",
+          "Storage Collision (Delegatecall)"
+        ],
+        "finding_count": 5,
+        "matching_functions": [
+          "execute"
+        ],
+        "target_hit": true
+      },
+      "detector": "DELEGATECALL Usage (AST)",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "compiler": "0.8.25",
+        "error": null,
+        "raw_ast_keywords": [
+          "delegatecall"
+        ],
+        "status": "compiled"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 2,
+        "signals": {
+          "uses_delegatecall": true
+        },
+        "status": "normalized"
+      },
+      "raw_source": {
+        "expected_semantic_signal": true,
+        "fixture": "delegatecall_canonical.sol",
+        "form": "canonical"
+      },
+      "version_family": "solidity_08"
+    },
+    {
+      "comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission"
+        ],
+        "finding_count": 1,
+        "matching_functions": [],
+        "target_hit": false
+      },
+      "detector": "DELEGATECALL Usage (AST)",
+      "historical_compiler": {
+        "compiler": "0.8.25",
+        "error": "  |         ^^^^^^^^^^^^^^^^^^^^^^^",
+        "raw_ast_keywords": [],
+        "status": "compile_failed"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 0,
+        "signals": {
+          "uses_delegatecall": false
+        },
+        "status": "compile_failed"
+      },
+      "raw_source": {
+        "expected_semantic_signal": true,
+        "fixture": "delegatecall_legacy.sol",
+        "form": "legacy"
+      },
+      "version_family": "solidity_08"
+    },
+    {
+      "comparator": {
+        "evidence": [],
+        "reason": "The detector finding has no matching deterministic source evidence",
+        "status": "Rejected"
+      },
+      "current_detector": {
+        "analyzer_solc_version": "0.8.25",
+        "detectors": [
+          "Event Emission",
+          "Reentrancy (AST)"
+        ],
+        "finding_count": 2,
+        "matching_functions": [],
+        "target_hit": false
+      },
+      "detector": "DELEGATECALL Usage (AST)",
+      "historical_compiler": {
+        "artifact_count": 1,
+        "compiler": "0.8.25",
+        "error": null,
+        "raw_ast_keywords": [],
+        "status": "compiled"
+      },
+      "normalized_ast": {
+        "compiler": "0.8.25",
+        "function_count": 2,
+        "signals": {
+          "uses_delegatecall": false
+        },
+        "status": "normalized"
+      },
+      "raw_source": {
+        "expected_semantic_signal": false,
+        "fixture": "delegatecall_fixed.sol",
+        "form": "fixed"
+      },
+      "version_family": "solidity_08"
+    }
+  ],
+  "schema_version": 1
+}

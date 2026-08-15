@@ -1,0 +1,138 @@
+{
+  "current_normalizer_compiler": "0.8.25",
+  "production_changes": [],
+  "read_only_architecture_investigation": true,
+  "rows": [
+    {
+      "current_pipeline_compile_to_ast": {
+        "compiler": "0.8.25",
+        "status": "compile_failed_under_current_path"
+      },
+      "historical_raw_ast": {
+        "artifact_count": 1,
+        "compiler": "0.4.10",
+        "raw_ast_tokens": [
+          "delegatecall",
+          "suicide"
+        ],
+        "status": "compiled"
+      },
+      "label": "parity_suicide_solc_0_4_10",
+      "normalizer_on_historical_raw_ast": {
+        "contract_count": 0,
+        "dict_keys": [
+          [
+            "children",
+            "name"
+          ]
+        ],
+        "function_count": 0,
+        "output_types": [
+          "dict"
+        ],
+        "status": "incompatible_normalizer_container"
+      },
+      "source": "benchmarks/real_world/source_snapshots/parity/WalletLibrary.sol",
+      "source_sha256": "dedb7a47a4a37cf61689e8f655beb58b4fe0e026ef591a93ccb62be4041b2e42"
+    },
+    {
+      "current_pipeline_compile_to_ast": {
+        "compiler": "0.8.25",
+        "status": "compile_failed_under_current_path"
+      },
+      "historical_raw_ast": {
+        "compiler": "0.4.11",
+        "error": "                                    ^----------------------------------------^",
+        "status": "compile_failed"
+      },
+      "label": "parity_suicide_solc_0_4_11",
+      "normalizer_on_historical_raw_ast": {
+        "error": "raw AST unavailable",
+        "status": "not_run"
+      },
+      "source": "benchmarks/real_world/source_snapshots/parity/WalletLibrary.sol",
+      "source_sha256": "dedb7a47a4a37cf61689e8f655beb58b4fe0e026ef591a93ccb62be4041b2e42"
+    },
+    {
+      "current_pipeline_compile_to_ast": {
+        "compiler": "0.8.25",
+        "status": "compile_failed_under_current_path"
+      },
+      "historical_raw_ast": {
+        "artifact_count": 1,
+        "compiler": "0.4.11",
+        "raw_ast_tokens": [
+          "suicide"
+        ],
+        "status": "compiled"
+      },
+      "label": "minimal_suicide_solc_0_4_11",
+      "normalizer_on_historical_raw_ast": {
+        "contract_count": 0,
+        "dict_keys": [
+          [
+            "children",
+            "name"
+          ]
+        ],
+        "function_count": 0,
+        "output_types": [
+          "dict"
+        ],
+        "status": "incompatible_normalizer_container"
+      },
+      "source": "benchmarks/historical_compatibility/architecture_boundary/minimal_suicide_0_4_11.sol",
+      "source_sha256": "16202b77aa46315597a89af8904696189b1ba35974d10d9b415df882ea6f790a"
+    },
+    {
+      "current_pipeline_compile_to_ast": {
+        "compiler": "0.8.25",
+        "status": "compile_failed_under_current_path"
+      },
+      "historical_raw_ast": {
+        "status": "not_run"
+      },
+      "label": "parity_suicide_current_0_8_25_path",
+      "normalizer_on_historical_raw_ast": {
+        "status": "not_run"
+      },
+      "source": "benchmarks/real_world/source_snapshots/parity/WalletLibrary.sol",
+      "source_sha256": "dedb7a47a4a37cf61689e8f655beb58b4fe0e026ef591a93ccb62be4041b2e42"
+    },
+    {
+      "current_pipeline_compile_to_ast": {
+        "compiler": "0.8.25",
+        "contract_count": 1,
+        "function_count": 1,
+        "signals": {
+          "uses_block_timestamp": false,
+          "uses_delegatecall": false,
+          "uses_selfdestruct": true
+        },
+        "status": "normalized_under_current_path"
+      },
+      "historical_raw_ast": {
+        "artifact_count": 1,
+        "compiler": "0.8.25",
+        "raw_ast_tokens": [
+          "selfdestruct"
+        ],
+        "status": "compiled"
+      },
+      "label": "modern_selfdestruct_solc_0_8_25",
+      "normalizer_on_historical_raw_ast": {
+        "contract_count": 1,
+        "function_count": 1,
+        "signals": {
+          "uses_block_timestamp": false,
+          "uses_delegatecall": false,
+          "uses_selfdestruct": true
+        },
+        "status": "normalized_from_historical_raw_ast"
+      },
+      "source": "benchmarks/historical_compatibility/modern_selfdestruct.sol",
+      "source_sha256": "f3c311e72cc67a2622d18f9259223c647f405b80f12eb73fd23eb07a41710319"
+    }
+  ],
+  "schema_version": 1
+}
