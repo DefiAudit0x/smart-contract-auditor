@@ -1,0 +1,651 @@
+{
+  "poc_scope": {
+    "comparator_changed": false,
+    "detector_families": [
+      "Selfdestruct",
+      "block.timestamp",
+      "DELEGATECALL"
+    ],
+    "parity_re_adjudicated": false,
+    "primary_benchmark_changed": false,
+    "production_changes": [],
+    "real_world_adjudications_changed": false
+  },
+  "results": [
+    {
+      "adapter_metadata": {
+        "adapter_name": "legacy",
+        "adapter_version": "canonical-poc-adapter-v1",
+        "diagnostics": [],
+        "status": "CanonicalASTReady",
+        "summary": {
+          "adapter_version": "canonical-poc-adapter-v1",
+          "contract_count": 1,
+          "contracts": [
+            {
+              "functions": [
+                {
+                  "call_kinds": [],
+                  "expressions": [
+                    {
+                      "kind": "destructive_operation",
+                      "member": "selfdestruct",
+                      "source_range": "100:7:-1"
+                    }
+                  ],
+                  "name": "destroy",
+                  "uses_block_timestamp": false,
+                  "uses_selfdestruct": true
+                },
+                {
+                  "call_kinds": [],
+                  "expressions": [
+                    {
+                      "kind": "block_timestamp",
+                      "member": "timestamp",
+                      "source_range": "188:3:-1"
+                    }
+                  ],
+                  "name": "readTime",
+                  "uses_block_timestamp": true,
+                  "uses_selfdestruct": false
+                },
+                {
+                  "call_kinds": [
+                    "delegatecall"
+                  ],
+                  "expressions": [
+                    {
+                      "kind": "external_call",
+                      "member": "delegatecall",
+                      "source_range": "286:15:-1"
+                    }
+                  ],
+                  "name": "delegated",
+                  "uses_block_timestamp": false,
+                  "uses_selfdestruct": false
+                }
+              ],
+              "name": "CanonicalCompatibility"
+            }
+          ],
+          "function_count": 3,
+          "provenance": {
+            "ast_format": "ast-json",
+            "compiler_binary_hash": "f3638225df24f444a72123956033f5743079118f0e1195ce6969aa16a7ef2283",
+            "compiler_build": "solc, the solidity compiler commandline interface\nVersion: 0.4.10+commit.9e8cc01b.Linux.g++",
+            "compiler_version": "0.4.10",
+            "raw_ast_sha256": "990d50631a7cb567fdab99d346ec4d6691bcd036fc058c94ba6079594564f4c6",
+            "source_sha256": "592a73e1c6c06f818335349bd4e9bbd4397cd4a0fc910b95de2b4b8dd0558815"
+          }
+        }
+      },
+      "adapter_status": "CanonicalASTReady",
+      "canonical_semantics": {
+        "DELEGATECALL": {
+          "functions": [
+            "delegated"
+          ],
+          "present": true
+        },
+        "Selfdestruct": {
+          "functions": [
+            "destroy"
+          ],
+          "present": true
+        },
+        "block.timestamp": {
+          "functions": [
+            "readTime"
+          ],
+          "present": true
+        }
+      },
+      "case": "historical",
+      "compiler_status": "Compiled",
+      "detectors": {
+        "DELEGATECALL": {
+          "comparator_implementation_changed": false,
+          "comparator_results": [
+            {
+              "evidence": [],
+              "hypothesis": {
+                "category": "Access Control",
+                "description": "DELEGATECALL in 'delegated' changes storage context",
+                "detector": "DELEGATECALL Usage (AST)",
+                "file": "fixtures/historical.sol",
+                "function": "delegated",
+                "severity": "High"
+              },
+              "reason": "The detector finding has no matching deterministic source evidence",
+              "status": "Rejected",
+              "verification": {
+                "reason": "Registered source pattern is absent",
+                "supported": true
+              }
+            }
+          ],
+          "detector_compiler_knowledge": false,
+          "detector_method": "_check_delegatecall",
+          "family": "DELEGATECALL",
+          "finding_count": 1,
+          "findings": [
+            {
+              "agent_name": "DELEGATECALL Usage (AST)",
+              "category": "Access Control",
+              "code_snippet": "def delegated(): delegatecall",
+              "description": "DELEGATECALL in 'delegated' changes storage context",
+              "file": "fixtures/historical.sol",
+              "fix": "Make sure the target address is trusted",
+              "function_name": "delegated",
+              "line": 0,
+              "severity": "High"
+            }
+          ]
+        },
+        "Selfdestruct": {
+          "comparator_implementation_changed": false,
+          "comparator_results": [
+            {
+              "evidence": [],
+              "hypothesis": {
+                "category": "Access Control",
+                "description": "SELFDESTRUCT in 'destroy' \u2014 can destroy the contract",
+                "detector": "Selfdestruct",
+                "file": "fixtures/historical.sol",
+                "function": "destroy",
+                "severity": "Critical"
+              },
+              "reason": "The detector finding has no matching deterministic source evidence",
+              "status": "Rejected",
+              "verification": {
+                "reason": "Registered source pattern is absent",
+                "supported": true
+              }
+            }
+          ],
+          "detector_compiler_knowledge": false,
+          "detector_method": "_check_selfdestruct",
+          "family": "Selfdestruct",
+          "finding_count": 1,
+          "findings": [
+            {
+              "agent_name": "Selfdestruct",
+              "category": "Access Control",
+              "code_snippet": "",
+              "description": "SELFDESTRUCT in 'destroy' \u2014 can destroy the contract",
+              "file": "fixtures/historical.sol",
+              "fix": "Remove selfdestruct or add protection",
+              "function_name": "destroy",
+              "line": 0,
+              "severity": "Critical"
+            }
+          ]
+        },
+        "block.timestamp": {
+          "comparator_implementation_changed": false,
+          "comparator_results": [
+            {
+              "evidence": [],
+              "hypothesis": {
+                "category": "Timing",
+                "description": "block.timestamp in 'readTime' \u2014 can be manipulated",
+                "detector": "block.timestamp Usage (AST)",
+                "file": "fixtures/historical.sol",
+                "function": "readTime",
+                "severity": "Medium"
+              },
+              "reason": "The detector finding has no matching deterministic source evidence",
+              "status": "Rejected",
+              "verification": {
+                "reason": "Registered source pattern is absent",
+                "supported": true
+              }
+            }
+          ],
+          "detector_compiler_knowledge": false,
+          "detector_method": "_check_block_timestamp",
+          "family": "block.timestamp",
+          "finding_count": 1,
+          "findings": [
+            {
+              "agent_name": "block.timestamp Usage (AST)",
+              "category": "Timing",
+              "code_snippet": "def readTime(): uses block.timestamp",
+              "description": "block.timestamp in 'readTime' \u2014 can be manipulated",
+              "file": "fixtures/historical.sol",
+              "fix": "Do not use it to decide on funds",
+              "function_name": "readTime",
+              "line": 0,
+              "severity": "Medium"
+            }
+          ]
+        }
+      },
+      "expected_findings": 1,
+      "track": "Compatibility"
+    },
+    {
+      "adapter_metadata": {
+        "adapter_name": "modern",
+        "adapter_version": "canonical-poc-adapter-v1",
+        "diagnostics": [],
+        "status": "CanonicalASTReady",
+        "summary": {
+          "adapter_version": "canonical-poc-adapter-v1",
+          "contract_count": 1,
+          "contracts": [
+            {
+              "functions": [
+                {
+                  "call_kinds": [],
+                  "expressions": [
+                    {
+                      "kind": "destructive_operation",
+                      "member": "selfdestruct",
+                      "source_range": "100:12:0"
+                    }
+                  ],
+                  "name": "destroy",
+                  "uses_block_timestamp": false,
+                  "uses_selfdestruct": true
+                },
+                {
+                  "call_kinds": [],
+                  "expressions": [
+                    {
+                      "kind": "block_timestamp",
+                      "member": "timestamp",
+                      "source_range": "202:15:0"
+                    }
+                  ],
+                  "name": "readTime",
+                  "uses_block_timestamp": true,
+                  "uses_selfdestruct": false
+                },
+                {
+                  "call_kinds": [
+                    "delegatecall"
+                  ],
+                  "expressions": [
+                    {
+                      "kind": "external_call",
+                      "member": "delegatecall",
+                      "source_range": "323:19:0"
+                    }
+                  ],
+                  "name": "delegated",
+                  "uses_block_timestamp": false,
+                  "uses_selfdestruct": false
+                }
+              ],
+              "name": "CanonicalCompatibility"
+            }
+          ],
+          "function_count": 3,
+          "provenance": {
+            "ast_format": "ast-compact-json",
+            "compiler_binary_hash": "c42aada7a52057ddbed93ec011235e256c564c440b68dbaac5ae482babbb3d6d",
+            "compiler_build": "solc, the solidity compiler commandline interface\nVersion: 0.8.25+commit.b61c2a91.Linux.g++",
+            "compiler_version": "0.8.25",
+            "raw_ast_sha256": "4bb97d6212090785b43c4dd6d41b5de98574c1fc50e1e6e9897c1ac7dedf6802",
+            "source_sha256": "5a241348aac5174d97e4d927a91ced26d46d99ce4b76dca5ae9190188e489bb8"
+          }
+        }
+      },
+      "adapter_status": "CanonicalASTReady",
+      "canonical_semantics": {
+        "DELEGATECALL": {
+          "functions": [
+            "delegated"
+          ],
+          "present": true
+        },
+        "Selfdestruct": {
+          "functions": [
+            "destroy"
+          ],
+          "present": true
+        },
+        "block.timestamp": {
+          "functions": [
+            "readTime"
+          ],
+          "present": true
+        }
+      },
+      "case": "modern",
+      "compiler_status": "Compiled",
+      "detectors": {
+        "DELEGATECALL": {
+          "comparator_implementation_changed": false,
+          "comparator_results": [
+            {
+              "evidence": [
+                {
+                  "excerpt": "delegatecall(",
+                  "kind": "delegatecall",
+                  "location": "line 14"
+                }
+              ],
+              "hypothesis": {
+                "category": "Access Control",
+                "description": "DELEGATECALL in 'delegated' changes storage context",
+                "detector": "DELEGATECALL Usage (AST)",
+                "file": "fixtures/modern.sol",
+                "function": "delegated",
+                "severity": "High"
+              },
+              "reason": "The detector finding is supported by deterministic source evidence",
+              "status": "Confirmed",
+              "verification": {
+                "reason": "Registered source pattern is present",
+                "supported": true
+              }
+            }
+          ],
+          "detector_compiler_knowledge": false,
+          "detector_method": "_check_delegatecall",
+          "family": "DELEGATECALL",
+          "finding_count": 1,
+          "findings": [
+            {
+              "agent_name": "DELEGATECALL Usage (AST)",
+              "category": "Access Control",
+              "code_snippet": "def delegated(): delegatecall",
+              "description": "DELEGATECALL in 'delegated' changes storage context",
+              "file": "fixtures/modern.sol",
+              "fix": "Make sure the target address is trusted",
+              "function_name": "delegated",
+              "line": 0,
+              "severity": "High"
+            }
+          ]
+        },
+        "Selfdestruct": {
+          "comparator_implementation_changed": false,
+          "comparator_results": [
+            {
+              "evidence": [
+                {
+                  "excerpt": "selfdestruct(",
+                  "kind": "selfdestruct",
+                  "location": "line 5"
+                }
+              ],
+              "hypothesis": {
+                "category": "Access Control",
+                "description": "SELFDESTRUCT in 'destroy' \u2014 can destroy the contract",
+                "detector": "Selfdestruct",
+                "file": "fixtures/modern.sol",
+                "function": "destroy",
+                "severity": "Critical"
+              },
+              "reason": "The detector finding is supported by deterministic source evidence",
+              "status": "Confirmed",
+              "verification": {
+                "reason": "Registered source pattern is present",
+                "supported": true
+              }
+            }
+          ],
+          "detector_compiler_knowledge": false,
+          "detector_method": "_check_selfdestruct",
+          "family": "Selfdestruct",
+          "finding_count": 1,
+          "findings": [
+            {
+              "agent_name": "Selfdestruct",
+              "category": "Access Control",
+              "code_snippet": "",
+              "description": "SELFDESTRUCT in 'destroy' \u2014 can destroy the contract",
+              "file": "fixtures/modern.sol",
+              "fix": "Remove selfdestruct or add protection",
+              "function_name": "destroy",
+              "line": 0,
+              "severity": "Critical"
+            }
+          ]
+        },
+        "block.timestamp": {
+          "comparator_implementation_changed": false,
+          "comparator_results": [
+            {
+              "evidence": [
+                {
+                  "excerpt": "block.timestamp",
+                  "kind": "block_timestamp",
+                  "location": "line 9"
+                }
+              ],
+              "hypothesis": {
+                "category": "Timing",
+                "description": "block.timestamp in 'readTime' \u2014 can be manipulated",
+                "detector": "block.timestamp Usage (AST)",
+                "file": "fixtures/modern.sol",
+                "function": "readTime",
+                "severity": "Medium"
+              },
+              "reason": "The detector finding is supported by deterministic source evidence",
+              "status": "Confirmed",
+              "verification": {
+                "reason": "Registered source pattern is present",
+                "supported": true
+              }
+            }
+          ],
+          "detector_compiler_knowledge": false,
+          "detector_method": "_check_block_timestamp",
+          "family": "block.timestamp",
+          "finding_count": 1,
+          "findings": [
+            {
+              "agent_name": "block.timestamp Usage (AST)",
+              "category": "Timing",
+              "code_snippet": "def readTime(): uses block.timestamp",
+              "description": "block.timestamp in 'readTime' \u2014 can be manipulated",
+              "file": "fixtures/modern.sol",
+              "fix": "Do not use it to decide on funds",
+              "function_name": "readTime",
+              "line": 0,
+              "severity": "Medium"
+            }
+          ]
+        }
+      },
+      "expected_findings": 1,
+      "track": "Compatibility"
+    },
+    {
+      "adapter_metadata": {
+        "adapter_name": "legacy",
+        "adapter_version": "canonical-poc-adapter-v1",
+        "diagnostics": [],
+        "status": "CanonicalASTReady",
+        "summary": {
+          "adapter_version": "canonical-poc-adapter-v1",
+          "contract_count": 1,
+          "contracts": [
+            {
+              "functions": [
+                {
+                  "call_kinds": [],
+                  "expressions": [],
+                  "name": "safe",
+                  "uses_block_timestamp": false,
+                  "uses_selfdestruct": false
+                }
+              ],
+              "name": "CanonicalFixedControl"
+            }
+          ],
+          "function_count": 1,
+          "provenance": {
+            "ast_format": "ast-json",
+            "compiler_binary_hash": "f3638225df24f444a72123956033f5743079118f0e1195ce6969aa16a7ef2283",
+            "compiler_build": "solc, the solidity compiler commandline interface\nVersion: 0.4.10+commit.9e8cc01b.Linux.g++",
+            "compiler_version": "0.4.10",
+            "raw_ast_sha256": "639b02861407a28a10981c0218c21a430c8bdbd3f9fcbc21e4511dce1b3774a3",
+            "source_sha256": "0c9e2d5b544e36d14e8d812ac26373987f83a8fe543ebcc4e47cea007df5bf76"
+          }
+        }
+      },
+      "adapter_status": "CanonicalASTReady",
+      "canonical_semantics": {
+        "DELEGATECALL": {
+          "functions": [],
+          "present": false
+        },
+        "Selfdestruct": {
+          "functions": [],
+          "present": false
+        },
+        "block.timestamp": {
+          "functions": [],
+          "present": false
+        }
+      },
+      "case": "historical_fixed",
+      "compiler_status": "Compiled",
+      "detectors": {
+        "DELEGATECALL": {
+          "comparator_implementation_changed": false,
+          "comparator_results": [],
+          "detector_compiler_knowledge": false,
+          "detector_method": "_check_delegatecall",
+          "family": "DELEGATECALL",
+          "finding_count": 0,
+          "findings": []
+        },
+        "Selfdestruct": {
+          "comparator_implementation_changed": false,
+          "comparator_results": [],
+          "detector_compiler_knowledge": false,
+          "detector_method": "_check_selfdestruct",
+          "family": "Selfdestruct",
+          "finding_count": 0,
+          "findings": []
+        },
+        "block.timestamp": {
+          "comparator_implementation_changed": false,
+          "comparator_results": [],
+          "detector_compiler_knowledge": false,
+          "detector_method": "_check_block_timestamp",
+          "family": "block.timestamp",
+          "finding_count": 0,
+          "findings": []
+        }
+      },
+      "expected_findings": 0,
+      "track": "Compatibility"
+    },
+    {
+      "adapter_metadata": {
+        "adapter_name": "modern",
+        "adapter_version": "canonical-poc-adapter-v1",
+        "diagnostics": [],
+        "status": "CanonicalASTReady",
+        "summary": {
+          "adapter_version": "canonical-poc-adapter-v1",
+          "contract_count": 1,
+          "contracts": [
+            {
+              "functions": [
+                {
+                  "call_kinds": [],
+                  "expressions": [],
+                  "name": "safe",
+                  "uses_block_timestamp": false,
+                  "uses_selfdestruct": false
+                }
+              ],
+              "name": "CanonicalFixedControl"
+            }
+          ],
+          "function_count": 1,
+          "provenance": {
+            "ast_format": "ast-compact-json",
+            "compiler_binary_hash": "c42aada7a52057ddbed93ec011235e256c564c440b68dbaac5ae482babbb3d6d",
+            "compiler_build": "solc, the solidity compiler commandline interface\nVersion: 0.8.25+commit.b61c2a91.Linux.g++",
+            "compiler_version": "0.8.25",
+            "raw_ast_sha256": "043494fc9a222a9b4350a4e6be7b3317444c1064de1c48a3bd10a02cc25e2b71",
+            "source_sha256": "8f1a37c5167b2f49737fe3e6fdb950daf55957a2c45bfd6cfc758bbff8fca65b"
+          }
+        }
+      },
+      "adapter_status": "CanonicalASTReady",
+      "canonical_semantics": {
+        "DELEGATECALL": {
+          "functions": [],
+          "present": false
+        },
+        "Selfdestruct": {
+          "functions": [],
+          "present": false
+        },
+        "block.timestamp": {
+          "functions": [],
+          "present": false
+        }
+      },
+      "case": "modern_fixed",
+      "compiler_status": "Compiled",
+      "detectors": {
+        "DELEGATECALL": {
+          "comparator_implementation_changed": false,
+          "comparator_results": [],
+          "detector_compiler_knowledge": false,
+          "detector_method": "_check_delegatecall",
+          "family": "DELEGATECALL",
+          "finding_count": 0,
+          "findings": []
+        },
+        "Selfdestruct": {
+          "comparator_implementation_changed": false,
+          "comparator_results": [],
+          "detector_compiler_knowledge": false,
+          "detector_method": "_check_selfdestruct",
+          "family": "Selfdestruct",
+          "finding_count": 0,
+          "findings": []
+        },
+        "block.timestamp": {
+          "comparator_implementation_changed": false,
+          "comparator_results": [],
+          "detector_compiler_knowledge": false,
+          "detector_method": "_check_block_timestamp",
+          "family": "block.timestamp",
+          "finding_count": 0,
+          "findings": []
+        }
+      },
+      "expected_findings": 0,
+      "track": "Compatibility"
+    },
+    {
+      "adapter_metadata": {
+        "adapter_version": "canonical-poc-adapter-v1",
+        "diagnostics": [
+          "legacy adapter produced zero contracts; expected at least 1"
+        ],
+        "provenance": {
+          "ast_format": "ast-json",
+          "compiler_binary_hash": "f3638225df24f444a72123956033f5743079118f0e1195ce6969aa16a7ef2283",
+          "compiler_build": "solc, the solidity compiler commandline interface\nVersion: 0.4.10+commit.9e8cc01b.Linux.g++",
+          "compiler_version": "0.4.10",
+          "raw_ast_sha256": "990d50631a7cb567fdab99d346ec4d6691bcd036fc058c94ba6079594564f4c6",
+          "source_sha256": "592a73e1c6c06f818335349bd4e9bbd4397cd4a0fc910b95de2b4b8dd0558815"
+        },
+        "status": "ASTNormalizationFailed"
+      },
+      "adapter_status": "ASTNormalizationFailed",
+      "canonical_program": null,
+      "case": "invalid_ast_container",
+      "compiler_status": "Compiled",
+      "detectors": {},
+      "expected_findings": null,
+      "track": "Compatibility"
+    }
+  ],
+  "schema_version": 1
+}

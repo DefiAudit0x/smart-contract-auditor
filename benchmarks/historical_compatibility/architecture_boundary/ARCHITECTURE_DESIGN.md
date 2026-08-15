@@ -2,7 +2,7 @@
 
 ## Status and scope
 
-This document is a **design proposal only**. It does not implement a compiler resolver, an AST adapter, a canonical AST, new failure states, detector changes, Comparator changes, or architecture refactoring. It follows the read-only boundary investigation and is intended to establish the contract that a later proof of concept can test.
+This document defines the architecture contract and records the result of the isolated proof of concept. The POC implements only compatibility-track compiler invocation, version-specific AST adapters, a minimum semantic Canonical AST, explicit normalization failure states, and a detector bridge. It does **not** implement a production compiler resolver, production analyzer changes, Comparator changes, or architecture refactoring.
 
 The design is deliberately limited to the pipeline below:
 
@@ -212,9 +212,9 @@ The Comparator remains a downstream evidence verifier. Its contract stays:
 
 The Comparator must not become an old-Solidity parser or an AST adapter. If a canonical detector finding has a source range, the Comparator may verify source-level evidence. If upstream normalization failed, the pipeline must preserve that failure state and must not manufacture a rejected finding merely because no detector finding was emitted.
 
-## Proposed proof of concept after design approval
+## Isolated proof of concept and evaluation
 
-The next implementation step should be a small isolated proof of concept, not a production refactor. It should use only the three already measured families: `Selfdestruct`, `block.timestamp`, and `DELEGATECALL`.
+The design-approved implementation is a small isolated proof of concept, not a production refactor. It uses only the three already measured families: `Selfdestruct`, `block.timestamp`, and `DELEGATECALL`. The implementation and machine-readable output are under [`canonical_ast_poc/`](../canonical_ast_poc/), and the evaluation is recorded in [`POC_REPORT.md`](../canonical_ast_poc/POC_REPORT.md).
 
 | POC path | Required observation |
 |---|---|
@@ -223,7 +223,7 @@ The next implementation step should be a small isolated proof of concept, not a 
 | Fixed controls through both adapters | Canonical AST and detectors remain clean on safe controls. |
 | Invalid old AST/container | Pipeline returns `ASTNormalizationFailed`; it does not return zero findings as success. |
 
-The POC should be isolated under the compatibility track. It should not alter the primary benchmark, real-world adjudication status, or production analyzer until its contract is reviewed and explicitly approved.
+The POC remains isolated under the compatibility track. It does not alter the primary benchmark, real-world adjudication status, or production analyzer. Its result is evidence for independent review, not an automatic production merge. Parity remains Quarantined and is not re-adjudicated by this POC.
 
 ## Track separation and decision gates
 
@@ -232,14 +232,14 @@ The project should retain three independent tracks:
 | Track | Purpose | Current status |
 |---|---|---|
 | Controlled track | Synthetic benchmark and deterministic regression | Primary Precision/Recall/F1 remains 1.0/1.0/1.0; compatibility fixtures remain outside it. |
-| Compatibility track | Historical compiler, raw AST, adapter, canonical AST, and failure semantics | Architecture design proposed; POC not yet implemented. |
+| Compatibility track | Historical compiler, raw AST, adapter, canonical AST, and failure semantics | Isolated POC implemented and evaluated; production adoption remains pending independent review. |
 | Real-World track | Independent adjudication and abstention | Nomad, BonqDAO, and Parity remain Quarantined; no Case #4. |
 
-The next gate is design review, followed by approval of the isolated POC. No alias, detector patch, Comparator patch, random compiler fallback, or architecture-wide refactor should be made before that gate.
+The next gate is independent review of the isolated POC, followed by a separate production decision. No alias, detector patch, Comparator patch, random compiler fallback, or architecture-wide refactor is included in this change.
 
 ## Open design questions
 
-The design still requires decisions before implementation: how verified deployment metadata is prioritized over pragma constraints; how multi-file source manifests are normalized; which legacy AST schemas receive first-class adapters; whether canonical statements and expressions should be immutable dataclasses or typed dictionaries; how adapter versioning is released; and how partial source-set failures are represented. These questions are intentionally left open rather than hidden inside a first implementation.
+The design still requires decisions before production adoption: how verified deployment metadata is prioritized over pragma constraints; how multi-file source manifests are normalized; which additional legacy AST schemas receive first-class adapters; whether the minimum semantic contract should expand beyond the POC families; how adapter versioning is released; and how partial source-set failures are represented. These questions remain open rather than being hidden inside the isolated POC.
 
 ## References
 

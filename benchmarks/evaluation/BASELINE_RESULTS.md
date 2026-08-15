@@ -65,6 +65,14 @@ The read-only Compiler/AST boundary investigation traced the actual production p
 
 This confirms a bounded compiler-selection limitation and an old-AST normalizer/container incompatibility, but does not establish a detector-interface failure or justify a fix. The investigation is read-only: no alias, compiler fallback, normalizer adapter, detector, Comparator, or architecture component was changed. See [`architecture_boundary/REPORT.md`](../historical_compatibility/architecture_boundary/REPORT.md) and [`compiler_ast_boundary_experiment.json`](../historical_compatibility/architecture_boundary/metadata/compiler_ast_boundary_experiment.json).
 
+## Isolated Canonical AST POC
+
+The compatibility track now contains an isolated proof of concept for the three measured families: `Selfdestruct`, `block.timestamp`, and `DELEGATECALL`. Explicit solc 0.4.10 and 0.8.25 compiler paths feed version-specific adapters and a minimum semantic Canonical AST. Historical `suicide`, `now`, and `callcode` normalize to the same semantic detector properties as modern `selfdestruct`, `block.timestamp`, and `delegatecall`; fixed controls remain clean on both paths.
+
+The POC ran the existing detector methods without compiler-version branching and left `verification/comparator.py` unchanged. Historical detector findings were produced but remained `Rejected` by the unchanged source-vocabulary Comparator, while modern findings were `Confirmed`. A broken old-AST container returned `ASTNormalizationFailed` with provenance instead of silently becoming zero findings. The POC produced 5 passing regression tests and did not change production analyzers, the primary benchmark, or Real-World adjudication status. See [`POC_REPORT.md`](../historical_compatibility/canonical_ast_poc/POC_REPORT.md) and [`poc_results.json`](../historical_compatibility/canonical_ast_poc/metadata/poc_results.json).
+
+The result is evidence for independent review, not a production merge. Parity remains Quarantined and is not re-adjudicated by this POC; no Case #4 was added.
+
 ## Reproduction
 
 From the repository root, the deterministic cross-track report can be regenerated with:
@@ -75,7 +83,7 @@ PYTHONPATH=. python3 benchmarks/run_track_baseline.py \
   --json-out /path/to/track_baseline_report.json
 ```
 
-The primary benchmark remains runnable independently with `PYTHONPATH=. python3 benchmarks/run_benchmark.py --require-poc`. The Real-World negative-control track is independently runnable with `PYTHONPATH=. python3 benchmarks/real_world/run_negative_controls.py`.
+The primary benchmark remains runnable independently with `PYTHONPATH=. python3 benchmarks/run_benchmark.py --require-poc`. The Real-World negative-control track is independently runnable with `PYTHONPATH=. python3 benchmarks/real_world/run_negative_controls.py`. The isolated compatibility POC is runnable independently with `PYTHONPATH=. python3 -m benchmarks.historical_compatibility.canonical_ast_poc.run_poc` and its focused tests with `PYTHONPATH=. pytest -q tests/test_architecture_poc.py`.
 
 ## References
 
