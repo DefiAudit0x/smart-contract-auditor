@@ -32,10 +32,11 @@ _EXPRESSION_KINDS = {
 }
 
 
-def _to_detector_contracts(program: CanonicalProgram) -> list[ASTContract]:
-    """Project only semantic fields needed by the three existing detector methods."""
+def _to_detector_contracts(program: CanonicalProgram, source_id: str | None = None) -> list[ASTContract]:
+    """Project only semantic fields needed by the detector from one source unit."""
+    units = [unit for unit in program.source_units if source_id is None or unit.source_id == source_id]
     contracts: list[ASTContract] = []
-    for canonical_contract in program.contracts:
+    for canonical_contract in [contract for unit in units for contract in unit.contracts]:
         functions: list[ASTFunction] = []
         for canonical_function in canonical_contract.functions:
             functions.append(
@@ -60,12 +61,17 @@ def _to_detector_contracts(program: CanonicalProgram) -> list[ASTContract]:
     return contracts
 
 
-def make_detector_input(program: CanonicalProgram, source_id: str, source_text: str) -> DetectorInput:
+def make_detector_input(
+    program: CanonicalProgram,
+    source_id: str,
+    source_text: str,
+    source_texts: dict[str, str] | None = None,
+) -> DetectorInput:
     manifest = program.provenance.source_manifest or (SourceManifestEntry(source_id, program.provenance.source_sha256),)
     source_hash = next((entry.source_sha256 for entry in manifest if entry.source_id == source_id), program.provenance.source_sha256)
     return DetectorInput(
         canonical_program=program,
-        source_view=SourceView(source_id, source_text, source_hash, manifest),
+        source_view=SourceView(source_id, source_text, source_hash, manifest, source_texts or {source_id: source_text}),
         detector_version=POC_DETECTOR_VERSION,
     )
 
@@ -75,7 +81,8 @@ def _finding_provenance(detector_input: DetectorInput, family: str, function_nam
     expression_kind = _EXPRESSION_KINDS[family]
     expression = None
     source_range = ""
-    for contract in program.contracts:
+    units = [unit for unit in program.source_units if unit.source_id == detector_input.source_view.source_id]
+    for contract in [contract for unit in units for contract in unit.contracts]:
         for function in contract.functions:
             if function.name == function_name:
                 expression = next((item for item in function.expressions if item.kind == expression_kind), None)
@@ -112,7 +119,7 @@ def run_detector(
     source = detector_input.source_view.source_text
     source_id = detector_input.source_view.source_id
     analyzer = SolidityAnalyzer()
-    analyzer._contracts = _to_detector_contracts(detector_input.canonical_program)
+    analyzer._contracts = _to_detector_contracts(detector_input.canonical_program, source_id)
     check = getattr(analyzer, _DETECTOR_NAMES[family])
     detector_source = "" if family == "Selfdestruct" else source
     findings = check(filename or source_id, detector_source)
@@ -157,6 +164,8 @@ def run_detector(
         "comparator_results": comparisons,
         "detector_input_contract": "CanonicalProgram+SourceView+Provenance",
         "detector_source_policy": "canonical-ast-only",
+        "analyzed_source_id": source_id,
+        "source_text_ids": sorted(detector_input.source_view.source_texts),
         "detector_compiler_knowledge": False,
         "comparator_implementation_changed": False,
     }

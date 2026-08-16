@@ -236,3 +236,41 @@ def test_multifile_slice_preserves_units_manifest_pragma_and_status():
     result = _run_detector(program, "Selfdestruct", sources["Main.sol"], "Main.sol")
     assert result["status"] == AnalysisStatus.ANALYSIS_SUCCEEDED_NO_FINDINGS.value
     assert result["finding_provenance"] == []
+
+
+def test_imported_source_semantic_detection_preserves_lib_attribution_end_to_end():
+    sources = {
+        "Lib.sol": _load("imported_lib_0_8_25.sol"),
+        "Main.sol": _load("imported_main_0_8_25.sol"),
+    }
+    compiled = compile_sources(sources, "0.8.25", "Main.sol")
+    assert compiled.status == AnalysisStatus.COMPILED
+    program, metadata = adapt_modern(compiled)
+    assert metadata["status"] == "CanonicalASTReady"
+    assert [unit.source_id for unit in program.source_units] == ["Lib.sol", "Main.sol"]
+
+    imported = run_detector(
+        make_detector_input(program, "Lib.sol", sources["Lib.sol"], sources),
+        "Selfdestruct",
+        "Lib.sol",
+    )
+    assert imported["status"] == AnalysisStatus.ANALYSIS_SUCCEEDED_WITH_FINDINGS.value
+    assert imported["finding_count"] == 1
+    assert imported["analyzed_source_id"] == "Lib.sol"
+    assert imported["findings"][0]["file"] == "Lib.sol"
+    assert imported["finding_provenance"][0]["source_id"] == "Lib.sol"
+    assert imported["finding_provenance"][0]["source_range"]
+    assert imported["finding_provenance"][0]["canonical_expression_id"].startswith("Lib.sol:")
+    comparator = imported["comparator_results"][0]
+    assert comparator["status"].value == "Confirmed"
+    assert comparator["hypothesis"]["file"] == "Lib.sol"
+    assert comparator["evidence"][0]["kind"] == "selfdestruct"
+    assert comparator["evidence"][0]["location"].startswith("line ")
+
+    entry = run_detector(
+        make_detector_input(program, "Main.sol", sources["Main.sol"], sources),
+        "Selfdestruct",
+        "Main.sol",
+    )
+    assert entry["status"] == AnalysisStatus.ANALYSIS_SUCCEEDED_NO_FINDINGS.value
+    assert entry["finding_count"] == 0

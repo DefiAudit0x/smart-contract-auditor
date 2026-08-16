@@ -1,0 +1,54 @@
+{
+  "bundle": {
+    "adapter_version": "canonical-poc-adapter-v2",
+    "analysis_finding_count": 1,
+    "analysis_source_id": "Lib.sol",
+    "bundle_id": "af92f95b8f7a801298f3ee7f8128bf951391930ade14dcc5fbc8d76417271fab",
+    "canonical_ast_version": "canonical-ast-poc-v2",
+    "canonical_summary_artifact": "canonical_summary.json",
+    "compiler_binary_hash": "c42aada7a52057ddbed93ec011235e256c564c440b68dbaac5ae482babbb3d6d",
+    "compiler_settings_sha256": "6d8a7e5ca403c541f12cfcd8c7745f976b553905281e51929b534d953a5413f1",
+    "compiler_version": "0.8.25",
+    "manifest_path": "/home/ubuntu/defiaudit_baseline/smart-contract-auditor/benchmarks/historical_compatibility/architecture_boundary/metadata/gate3_artifacts/bundles/af92f95b8f7a801298f3ee7f8128bf951391930ade14dcc5fbc8d76417271fab/manifest.json",
+    "raw_ast_artifact": "raw_ast/305bbfb2b3ce3ee7bb1d34d130c8fda265600de094c4f279fe8d3746020b6203.json",
+    "raw_ast_sha256": "305bbfb2b3ce3ee7bb1d34d130c8fda265600de094c4f279fe8d3746020b6203",
+    "source_artifacts": [
+      "sources/fcdc43b96b676511e62c8134a18fbee2d1c0852e1f2ce2d47351cb923b9a0d7d.sol",
+      "sources/2062946f0464ccbb9d66384df219bef6079f8673ec309135d947c171e71b3b79.sol"
+    ],
+    "source_set_sha256": "d88607decf65050f922db9d30af3bc09b478d768c5e696500ad2288bfc584a9d"
+  },
+  "gate": "Gate3",
+  "policy": {
+    "canonical_summary_mode": "persisted-content-addressed",
+    "finding_mode": "persisted-with-provenance",
+    "policy_version": "gate3-retention-v2",
+    "raw_ast_mode": "persisted-content-addressed",
+    "replay_guarantee": "hash-verified-artifact-replay",
+    "retention_days": 2555,
+    "retention_semantics": "Persisted+Replayable",
+    "source_mode": "persisted-content-addressed"
+  },
+  "production_storage_changed": false,
+  "schema_version": 1,
+  "verification": {
+    "initial": {
+      "bundle_id": "af92f95b8f7a801298f3ee7f8128bf951391930ade14dcc5fbc8d76417271fab",
+      "diagnostics": [],
+      "status": "ReplayVerified"
+    },
+    "restored": {
+      "bundle_id": "af92f95b8f7a801298f3ee7f8128bf951391930ade14dcc5fbc8d76417271fab",
+      "diagnostics": [],
+      "status": "ReplayVerified"
+    },
+    "tampered": {
+      "bundle_id": "af92f95b8f7a801298f3ee7f8128bf951391930ade14dcc5fbc8d76417271fab",
+      "diagnostics": [
+        "source hash mismatch: Lib.sol",
+        "source set hash mismatch"
+      ],
+      "status": "ReplayVerificationFailed"
+    }
+  }
+}

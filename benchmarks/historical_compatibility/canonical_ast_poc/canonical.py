@@ -164,6 +164,7 @@ class SourceView:
     source_text: str
     source_sha256: str
     source_manifest: tuple[SourceManifestEntry, ...]
+    source_texts: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

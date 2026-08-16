@@ -1,0 +1,1814 @@
+{
+  "poc_scope": {
+    "comparator_changed": false,
+    "context_safe_mapping": true,
+    "detector_families": [
+      "Selfdestruct",
+      "block.timestamp",
+      "DELEGATECALL"
+    ],
+    "imported_source_semantic_detection": true,
+    "multi_file_slice": true,
+    "parity_re_adjudicated": false,
+    "primary_benchmark_changed": false,
+    "production_changes": [],
+    "provenance_propagation": true,
+    "real_world_adjudications_changed": false,
+    "status_bearing_results": true,
+    "strict_schema_ownership": true,
+    "structural_completeness": true
+  },
+  "results": [
+    {
+      "adapter_metadata": {
+        "adapter_name": "legacy",
+        "adapter_version": "canonical-poc-adapter-v2",
+        "canonical_ast_version": "canonical-ast-poc-v2",
+        "diagnostics": [],
+        "skipped_nodes": [],
+        "status": "CanonicalASTReady",
+        "summary": {
+          "adapter_version": "canonical-poc-adapter-v2",
+          "canonical_ast_version": "canonical-ast-poc-v2",
+          "contract_count": 1,
+          "function_count": 3,
+          "provenance": {
+            "ast_format": "ast-json",
+            "compiler_binary_hash": "f3638225df24f444a72123956033f5743079118f0e1195ce6969aa16a7ef2283",
+            "compiler_build": "solc, the solidity compiler commandline interface\nVersion: 0.4.10+commit.9e8cc01b.Linux.g++",
+            "compiler_settings_sha256": "",
+            "compiler_version": "0.4.10",
+            "raw_ast_sha256": "990d50631a7cb567fdab99d346ec4d6691bcd036fc058c94ba6079594564f4c6",
+            "source_id": "<stdin>",
+            "source_manifest": [
+              {
+                "source_id": "<stdin>",
+                "source_sha256": "592a73e1c6c06f818335349bd4e9bbd4397cd4a0fc910b95de2b4b8dd0558815"
+              }
+            ],
+            "source_sha256": "592a73e1c6c06f818335349bd4e9bbd4397cd4a0fc910b95de2b4b8dd0558815"
+          },
+          "skipped_nodes": [],
+          "source_units": [
+            {
+              "contracts": [
+                {
+                  "functions": [
+                    {
+                      "call_kinds": [],
+                      "expressions": [
+                        {
+                          "arguments": [
+                            "suicide"
+                          ],
+                          "expression_id": "<stdin>:4",
+                          "kind": "destructive_operation",
+                          "member": "selfdestruct",
+                          "source_range": "100:7:-1"
+                        }
+                      ],
+                      "kind": "function",
+                      "name": "destroy",
+                      "source_range": "64:62:-1",
+                      "uses_block_timestamp": false,
+                      "uses_selfdestruct": true
+                    },
+                    {
+                      "call_kinds": [],
+                      "expressions": [
+                        {
+                          "arguments": [
+                            "now"
+                          ],
+                          "expression_id": "<stdin>:15",
+                          "kind": "block_timestamp",
+                          "member": "timestamp",
+                          "source_range": "188:3:-1"
+                        }
+                      ],
+                      "kind": "function",
+                      "name": "readTime",
+                      "source_range": "132:84:-1",
+                      "uses_block_timestamp": true,
+                      "uses_selfdestruct": false
+                    },
+                    {
+                      "call_kinds": [
+                        "delegatecall"
+                      ],
+                      "expressions": [
+                        {
+                          "arguments": [
+                            "callcode"
+                          ],
+                          "expression_id": "<stdin>:29",
+                          "kind": "external_call",
+                          "member": "delegatecall",
+                          "source_range": "286:15:-1"
+                        }
+                      ],
+                      "kind": "function",
+                      "name": "delegated",
+                      "source_range": "222:92:-1",
+                      "uses_block_timestamp": false,
+                      "uses_selfdestruct": false
+                    }
+                  ],
+                  "kind": "contract",
+                  "name": "CanonicalCompatibility",
+                  "source_range": "26:290:-1"
+                }
+              ],
+              "source_id": "<stdin>",
+              "source_range": ""
+            }
+          ],
+          "unknown_nodes": []
+        },
+        "unknown_nodes": []
+      },
+      "adapter_status": "CanonicalASTReady",
+      "canonical_semantics": {
+        "DELEGATECALL": {
+          "functions": [
+            "delegated"
+          ],
+          "present": true
+        },
+        "Selfdestruct": {
+          "functions": [
+            "destroy"
+          ],
+          "present": true
+        },
+        "block.timestamp": {
+          "functions": [
+            "readTime"
+          ],
+          "present": true
+        }
+      },
+      "case": "historical",
+      "compiler_status": "Compiled",
+      "detectors": {
+        "DELEGATECALL": {
+          "analysis_result": {
+            "adapter_version": "canonical-poc-adapter-v2",
+            "canonical_ast_version": "canonical-ast-poc-v2",
+            "comparator_version": "existing-comparator-unchanged",
+            "detector_version": "canonical-poc-detector-bridge-v2",
+            "diagnostics": [],
+            "status": "AnalysisSucceededWithFindings"
+          },
+          "analyzed_source_id": "<stdin>",
+          "comparator_implementation_changed": false,
+          "comparator_results": [
+            {
+              "evidence": [],
+              "hypothesis": {
+                "category": "Access Control",
+                "description": "DELEGATECALL in 'delegated' changes storage context",
+                "detector": "DELEGATECALL Usage (AST)",
+                "file": "fixtures/historical.sol",
+                "function": "delegated",
+                "severity": "High"
+              },
+              "reason": "The detector finding has no matching deterministic source evidence",
+              "status": "Rejected",
+              "verification": {
+                "reason": "Registered source pattern is absent",
+                "supported": true
+              }
+            }
+          ],
+          "detector_compiler_knowledge": false,
+          "detector_input_contract": "CanonicalProgram+SourceView+Provenance",
+          "detector_method": "_check_delegatecall",
+          "detector_source_policy": "canonical-ast-only",
+          "family": "DELEGATECALL",
+          "finding_count": 1,
+          "finding_provenance": [
+            {
+              "adapter_version": "canonical-poc-adapter-v2",
+              "canonical_ast_version": "canonical-ast-poc-v2",
+              "canonical_expression_id": "<stdin>:29",
+              "comparator_version": "existing-comparator-unchanged",
+              "compiler_hash": "f3638225df24f444a72123956033f5743079118f0e1195ce6969aa16a7ef2283",
+              "compiler_version": "0.4.10",
+              "detector_version": "canonical-poc-detector-bridge-v2",
+              "evidence_kind": "external_call",
+              "raw_ast_hash": "990d50631a7cb567fdab99d346ec4d6691bcd036fc058c94ba6079594564f4c6",
+              "source_id": "<stdin>",
+              "source_manifest": [
+                {
+                  "source_id": "<stdin>",
+                  "source_sha256": "592a73e1c6c06f818335349bd4e9bbd4397cd4a0fc910b95de2b4b8dd0558815"
+                }
+              ],
+              "source_range": "286:15:-1",
+              "source_sha256": "592a73e1c6c06f818335349bd4e9bbd4397cd4a0fc910b95de2b4b8dd0558815"
+            }
+          ],
+          "findings": [
+            {
+              "agent_name": "DELEGATECALL Usage (AST)",
+              "category": "Access Control",
+              "code_snippet": "def delegated(): delegatecall",
+              "description": "DELEGATECALL in 'delegated' changes storage context",
+              "file": "fixtures/historical.sol",
+              "fix": "Make sure the target address is trusted",
+              "function_name": "delegated",
+              "line": 0,
+              "severity": "High"
+            }
+          ],
+          "source_text_ids": [
+            "<stdin>"
+          ],
+          "status": "AnalysisSucceededWithFindings"
+        },
+        "Selfdestruct": {
+          "analysis_result": {
+            "adapter_version": "canonical-poc-adapter-v2",
+            "canonical_ast_version": "canonical-ast-poc-v2",
+            "comparator_version": "existing-comparator-unchanged",
+            "detector_version": "canonical-poc-detector-bridge-v2",
+            "diagnostics": [],
+            "status": "AnalysisSucceededWithFindings"
+          },
+          "analyzed_source_id": "<stdin>",
+          "comparator_implementation_changed": false,
+          "comparator_results": [
+            {
+              "evidence": [],
+              "hypothesis": {
+                "category": "Access Control",
+                "description": "SELFDESTRUCT in 'destroy' \u2014 can destroy the contract",
+                "detector": "Selfdestruct",
+                "file": "fixtures/historical.sol",
+                "function": "destroy",
+                "severity": "Critical"
+              },
+              "reason": "The detector finding has no matching deterministic source evidence",
+              "status": "Rejected",
+              "verification": {
+                "reason": "Registered source pattern is absent",
+                "supported": true
+              }
+            }
+          ],
+          "detector_compiler_knowledge": false,
+          "detector_input_contract": "CanonicalProgram+SourceView+Provenance",
+          "detector_method": "_check_selfdestruct",
+          "detector_source_policy": "canonical-ast-only",
+          "family": "Selfdestruct",
+          "finding_count": 1,
+          "finding_provenance": [
+            {
+              "adapter_version": "canonical-poc-adapter-v2",
+              "canonical_ast_version": "canonical-ast-poc-v2",
+              "canonical_expression_id": "<stdin>:4",
+              "comparator_version": "existing-comparator-unchanged",
+              "compiler_hash": "f3638225df24f444a72123956033f5743079118f0e1195ce6969aa16a7ef2283",
+              "compiler_version": "0.4.10",
+              "detector_version": "canonical-poc-detector-bridge-v2",
+              "evidence_kind": "destructive_operation",
+              "raw_ast_hash": "990d50631a7cb567fdab99d346ec4d6691bcd036fc058c94ba6079594564f4c6",
+              "source_id": "<stdin>",
+              "source_manifest": [
+                {
+                  "source_id": "<stdin>",
+                  "source_sha256": "592a73e1c6c06f818335349bd4e9bbd4397cd4a0fc910b95de2b4b8dd0558815"
+                }
+              ],
+              "source_range": "100:7:-1",
+              "source_sha256": "592a73e1c6c06f818335349bd4e9bbd4397cd4a0fc910b95de2b4b8dd0558815"
+            }
+          ],
+          "findings": [
+            {
+              "agent_name": "Selfdestruct",
+              "category": "Access Control",
+              "code_snippet": "",
+              "description": "SELFDESTRUCT in 'destroy' \u2014 can destroy the contract",
+              "file": "fixtures/historical.sol",
+              "fix": "Remove selfdestruct or add protection",
+              "function_name": "destroy",
+              "line": 0,
+              "severity": "Critical"
+            }
+          ],
+          "source_text_ids": [
+            "<stdin>"
+          ],
+          "status": "AnalysisSucceededWithFindings"
+        },
+        "block.timestamp": {
+          "analysis_result": {
+            "adapter_version": "canonical-poc-adapter-v2",
+            "canonical_ast_version": "canonical-ast-poc-v2",
+            "comparator_version": "existing-comparator-unchanged",
+            "detector_version": "canonical-poc-detector-bridge-v2",
+            "diagnostics": [],
+            "status": "AnalysisSucceededWithFindings"
+          },
+          "analyzed_source_id": "<stdin>",
+          "comparator_implementation_changed": false,
+          "comparator_results": [
+            {
+              "evidence": [],
+              "hypothesis": {
+                "category": "Timing",
+                "description": "block.timestamp in 'readTime' \u2014 can be manipulated",
+                "detector": "block.timestamp Usage (AST)",
+                "file": "fixtures/historical.sol",
+                "function": "readTime",
+                "severity": "Medium"
+              },
+              "reason": "The detector finding has no matching deterministic source evidence",
+              "status": "Rejected",
+              "verification": {
+                "reason": "Registered source pattern is absent",
+                "supported": true
+              }
+            }
+          ],
+          "detector_compiler_knowledge": false,
+          "detector_input_contract": "CanonicalProgram+SourceView+Provenance",
+          "detector_method": "_check_block_timestamp",
+          "detector_source_policy": "canonical-ast-only",
+          "family": "block.timestamp",
+          "finding_count": 1,
+          "finding_provenance": [
+            {
+              "adapter_version": "canonical-poc-adapter-v2",
+              "canonical_ast_version": "canonical-ast-poc-v2",
+              "canonical_expression_id": "<stdin>:15",
+              "comparator_version": "existing-comparator-unchanged",
+              "compiler_hash": "f3638225df24f444a72123956033f5743079118f0e1195ce6969aa16a7ef2283",
+              "compiler_version": "0.4.10",
+              "detector_version": "canonical-poc-detector-bridge-v2",
+              "evidence_kind": "block_timestamp",
+              "raw_ast_hash": "990d50631a7cb567fdab99d346ec4d6691bcd036fc058c94ba6079594564f4c6",
+              "source_id": "<stdin>",
+              "source_manifest": [
+                {
+                  "source_id": "<stdin>",
+                  "source_sha256": "592a73e1c6c06f818335349bd4e9bbd4397cd4a0fc910b95de2b4b8dd0558815"
+                }
+              ],
+              "source_range": "188:3:-1",
+              "source_sha256": "592a73e1c6c06f818335349bd4e9bbd4397cd4a0fc910b95de2b4b8dd0558815"
+            }
+          ],
+          "findings": [
+            {
+              "agent_name": "block.timestamp Usage (AST)",
+              "category": "Timing",
+              "code_snippet": "def readTime(): uses block.timestamp",
+              "description": "block.timestamp in 'readTime' \u2014 can be manipulated",
+              "file": "fixtures/historical.sol",
+              "fix": "Do not use it to decide on funds",
+              "function_name": "readTime",
+              "line": 0,
+              "severity": "Medium"
+            }
+          ],
+          "source_text_ids": [
+            "<stdin>"
+          ],
+          "status": "AnalysisSucceededWithFindings"
+        }
+      },
+      "expected_findings": 1,
+      "track": "Compatibility"
+    },
+    {
+      "adapter_metadata": {
+        "adapter_name": "modern",
+        "adapter_version": "canonical-poc-adapter-v2",
+        "canonical_ast_version": "canonical-ast-poc-v2",
+        "diagnostics": [],
+        "skipped_nodes": [],
+        "status": "CanonicalASTReady",
+        "summary": {
+          "adapter_version": "canonical-poc-adapter-v2",
+          "canonical_ast_version": "canonical-ast-poc-v2",
+          "contract_count": 1,
+          "function_count": 3,
+          "provenance": {
+            "ast_format": "ast-compact-json",
+            "compiler_binary_hash": "c42aada7a52057ddbed93ec011235e256c564c440b68dbaac5ae482babbb3d6d",
+            "compiler_build": "solc, the solidity compiler commandline interface\nVersion: 0.8.25+commit.b61c2a91.Linux.g++",
+            "compiler_settings_sha256": "",
+            "compiler_version": "0.8.25",
+            "raw_ast_sha256": "4bb97d6212090785b43c4dd6d41b5de98574c1fc50e1e6e9897c1ac7dedf6802",
+            "source_id": "<stdin>",
+            "source_manifest": [
+              {
+                "source_id": "<stdin>",
+                "source_sha256": "5a241348aac5174d97e4d927a91ced26d46d99ce4b76dca5ae9190188e489bb8"
+              }
+            ],
+            "source_sha256": "5a241348aac5174d97e4d927a91ced26d46d99ce4b76dca5ae9190188e489bb8"
+          },
+          "skipped_nodes": [],
+          "source_units": [
+            {
+              "contracts": [
+                {
+                  "functions": [
+                    {
+                      "call_kinds": [],
+                      "expressions": [
+                        {
+                          "arguments": [
+                            "selfdestruct"
+                          ],
+                          "expression_id": "<stdin>:4",
+                          "kind": "destructive_operation",
+                          "member": "selfdestruct",
+                          "source_range": "100:12:0"
+                        }
+                      ],
+                      "kind": "function",
+                      "name": "destroy",
+                      "source_range": "64:76:0",
+                      "uses_block_timestamp": false,
+                      "uses_selfdestruct": true
+                    },
+                    {
+                      "call_kinds": [],
+                      "expressions": [
+                        {
+                          "arguments": [
+                            "timestamp"
+                          ],
+                          "expression_id": "<stdin>:19",
+                          "kind": "block_timestamp",
+                          "member": "timestamp",
+                          "source_range": "202:15:0"
+                        }
+                      ],
+                      "kind": "function",
+                      "name": "readTime",
+                      "source_range": "146:96:0",
+                      "uses_block_timestamp": true,
+                      "uses_selfdestruct": false
+                    },
+                    {
+                      "call_kinds": [
+                        "delegatecall"
+                      ],
+                      "expressions": [
+                        {
+                          "arguments": [
+                            "delegatecall"
+                          ],
+                          "expression_id": "<stdin>:33",
+                          "kind": "external_call",
+                          "member": "delegatecall",
+                          "source_range": "323:19:0"
+                        }
+                      ],
+                      "kind": "function",
+                      "name": "delegated",
+                      "source_range": "248:107:0",
+                      "uses_block_timestamp": false,
+                      "uses_selfdestruct": false
+                    }
+                  ],
+                  "kind": "contract",
+                  "name": "CanonicalCompatibility",
+                  "source_range": "26:331:0"
+                }
+              ],
+              "source_id": "<stdin>",
+              "source_range": "0:358:0"
+            }
+          ],
+          "unknown_nodes": []
+        },
+        "unknown_nodes": []
+      },
+      "adapter_status": "CanonicalASTReady",
+      "canonical_semantics": {
+        "DELEGATECALL": {
+          "functions": [
+            "delegated"
+          ],
+          "present": true
+        },
+        "Selfdestruct": {
+          "functions": [
+            "destroy"
+          ],
+          "present": true
+        },
+        "block.timestamp": {
+          "functions": [
+            "readTime"
+          ],
+          "present": true
+        }
+      },
+      "case": "modern",
+      "compiler_status": "Compiled",
+      "detectors": {
+        "DELEGATECALL": {
+          "analysis_result": {
+            "adapter_version": "canonical-poc-adapter-v2",
+            "canonical_ast_version": "canonical-ast-poc-v2",
+            "comparator_version": "existing-comparator-unchanged",
+            "detector_version": "canonical-poc-detector-bridge-v2",
+            "diagnostics": [],
+            "status": "AnalysisSucceededWithFindings"
+          },
+          "analyzed_source_id": "<stdin>",
+          "comparator_implementation_changed": false,
+          "comparator_results": [
+            {
+              "evidence": [
+                {
+                  "excerpt": "delegatecall(",
+                  "kind": "delegatecall",
+                  "location": "line 14"
+                }
+              ],
+              "hypothesis": {
+                "category": "Access Control",
+                "description": "DELEGATECALL in 'delegated' changes storage context",
+                "detector": "DELEGATECALL Usage (AST)",
+                "file": "fixtures/modern.sol",
+                "function": "delegated",
+                "severity": "High"
+              },
+              "reason": "The detector finding is supported by deterministic source evidence",
+              "status": "Confirmed",
+              "verification": {
+                "reason": "Registered source pattern is present",
+                "supported": true
+              }
+            }
+          ],
+          "detector_compiler_knowledge": false,
+          "detector_input_contract": "CanonicalProgram+SourceView+Provenance",
+          "detector_method": "_check_delegatecall",
+          "detector_source_policy": "canonical-ast-only",
+          "family": "DELEGATECALL",
+          "finding_count": 1,
+          "finding_provenance": [
+            {
+              "adapter_version": "canonical-poc-adapter-v2",
+              "canonical_ast_version": "canonical-ast-poc-v2",
+              "canonical_expression_id": "<stdin>:33",
+              "comparator_version": "existing-comparator-unchanged",
+              "compiler_hash": "c42aada7a52057ddbed93ec011235e256c564c440b68dbaac5ae482babbb3d6d",
+              "compiler_version": "0.8.25",
+              "detector_version": "canonical-poc-detector-bridge-v2",
+              "evidence_kind": "external_call",
+              "raw_ast_hash": "4bb97d6212090785b43c4dd6d41b5de98574c1fc50e1e6e9897c1ac7dedf6802",
+              "source_id": "<stdin>",
+              "source_manifest": [
+                {
+                  "source_id": "<stdin>",
+                  "source_sha256": "5a241348aac5174d97e4d927a91ced26d46d99ce4b76dca5ae9190188e489bb8"
+                }
+              ],
+              "source_range": "323:19:0",
+              "source_sha256": "5a241348aac5174d97e4d927a91ced26d46d99ce4b76dca5ae9190188e489bb8"
+            }
+          ],
+          "findings": [
+            {
+              "agent_name": "DELEGATECALL Usage (AST)",
+              "category": "Access Control",
+              "code_snippet": "def delegated(): delegatecall",
+              "description": "DELEGATECALL in 'delegated' changes storage context",
+              "file": "fixtures/modern.sol",
+              "fix": "Make sure the target address is trusted",
+              "function_name": "delegated",
+              "line": 0,
+              "severity": "High"
+            }
+          ],
+          "source_text_ids": [
+            "<stdin>"
+          ],
+          "status": "AnalysisSucceededWithFindings"
+        },
+        "Selfdestruct": {
+          "analysis_result": {
+            "adapter_version": "canonical-poc-adapter-v2",
+            "canonical_ast_version": "canonical-ast-poc-v2",
+            "comparator_version": "existing-comparator-unchanged",
+            "detector_version": "canonical-poc-detector-bridge-v2",
+            "diagnostics": [],
+            "status": "AnalysisSucceededWithFindings"
+          },
+          "analyzed_source_id": "<stdin>",
+          "comparator_implementation_changed": false,
+          "comparator_results": [
+            {
+              "evidence": [
+                {
+                  "excerpt": "selfdestruct(",
+                  "kind": "selfdestruct",
+                  "location": "line 5"
+                }
+              ],
+              "hypothesis": {
+                "category": "Access Control",
+                "description": "SELFDESTRUCT in 'destroy' \u2014 can destroy the contract",
+                "detector": "Selfdestruct",
+                "file": "fixtures/modern.sol",
+                "function": "destroy",
+                "severity": "Critical"
+              },
+              "reason": "The detector finding is supported by deterministic source evidence",
+              "status": "Confirmed",
+              "verification": {
+                "reason": "Registered source pattern is present",
+                "supported": true
+              }
+            }
+          ],
+          "detector_compiler_knowledge": false,
+          "detector_input_contract": "CanonicalProgram+SourceView+Provenance",
+          "detector_method": "_check_selfdestruct",
+          "detector_source_policy": "canonical-ast-only",
+          "family": "Selfdestruct",
+          "finding_count": 1,
+          "finding_provenance": [
+            {
+              "adapter_version": "canonical-poc-adapter-v2",
+              "canonical_ast_version": "canonical-ast-poc-v2",
+              "canonical_expression_id": "<stdin>:4",
+              "comparator_version": "existing-comparator-unchanged",
+              "compiler_hash": "c42aada7a52057ddbed93ec011235e256c564c440b68dbaac5ae482babbb3d6d",
+              "compiler_version": "0.8.25",
+              "detector_version": "canonical-poc-detector-bridge-v2",
+              "evidence_kind": "destructive_operation",
+              "raw_ast_hash": "4bb97d6212090785b43c4dd6d41b5de98574c1fc50e1e6e9897c1ac7dedf6802",
+              "source_id": "<stdin>",
+              "source_manifest": [
+                {
+                  "source_id": "<stdin>",
+                  "source_sha256": "5a241348aac5174d97e4d927a91ced26d46d99ce4b76dca5ae9190188e489bb8"
+                }
+              ],
+              "source_range": "100:12:0",
+              "source_sha256": "5a241348aac5174d97e4d927a91ced26d46d99ce4b76dca5ae9190188e489bb8"
+            }
+          ],
+          "findings": [
+            {
+              "agent_name": "Selfdestruct",
+              "category": "Access Control",
+              "code_snippet": "",
+              "description": "SELFDESTRUCT in 'destroy' \u2014 can destroy the contract",
+              "file": "fixtures/modern.sol",
+              "fix": "Remove selfdestruct or add protection",
+              "function_name": "destroy",
+              "line": 0,
+              "severity": "Critical"
+            }
+          ],
+          "source_text_ids": [
+            "<stdin>"
+          ],
+          "status": "AnalysisSucceededWithFindings"
+        },
+        "block.timestamp": {
+          "analysis_result": {
+            "adapter_version": "canonical-poc-adapter-v2",
+            "canonical_ast_version": "canonical-ast-poc-v2",
+            "comparator_version": "existing-comparator-unchanged",
+            "detector_version": "canonical-poc-detector-bridge-v2",
+            "diagnostics": [],
+            "status": "AnalysisSucceededWithFindings"
+          },
+          "analyzed_source_id": "<stdin>",
+          "comparator_implementation_changed": false,
+          "comparator_results": [
+            {
+              "evidence": [
+                {
+                  "excerpt": "block.timestamp",
+                  "kind": "block_timestamp",
+                  "location": "line 9"
+                }
+              ],
+              "hypothesis": {
+                "category": "Timing",
+                "description": "block.timestamp in 'readTime' \u2014 can be manipulated",
+                "detector": "block.timestamp Usage (AST)",
+                "file": "fixtures/modern.sol",
+                "function": "readTime",
+                "severity": "Medium"
+              },
+              "reason": "The detector finding is supported by deterministic source evidence",
+              "status": "Confirmed",
+              "verification": {
+                "reason": "Registered source pattern is present",
+                "supported": true
+              }
+            }
+          ],
+          "detector_compiler_knowledge": false,
+          "detector_input_contract": "CanonicalProgram+SourceView+Provenance",
+          "detector_method": "_check_block_timestamp",
+          "detector_source_policy": "canonical-ast-only",
+          "family": "block.timestamp",
+          "finding_count": 1,
+          "finding_provenance": [
+            {
+              "adapter_version": "canonical-poc-adapter-v2",
+              "canonical_ast_version": "canonical-ast-poc-v2",
+              "canonical_expression_id": "<stdin>:19",
+              "comparator_version": "existing-comparator-unchanged",
+              "compiler_hash": "c42aada7a52057ddbed93ec011235e256c564c440b68dbaac5ae482babbb3d6d",
+              "compiler_version": "0.8.25",
+              "detector_version": "canonical-poc-detector-bridge-v2",
+              "evidence_kind": "block_timestamp",
+              "raw_ast_hash": "4bb97d6212090785b43c4dd6d41b5de98574c1fc50e1e6e9897c1ac7dedf6802",
+              "source_id": "<stdin>",
+              "source_manifest": [
+                {
+                  "source_id": "<stdin>",
+                  "source_sha256": "5a241348aac5174d97e4d927a91ced26d46d99ce4b76dca5ae9190188e489bb8"
+                }
+              ],
+              "source_range": "202:15:0",
+              "source_sha256": "5a241348aac5174d97e4d927a91ced26d46d99ce4b76dca5ae9190188e489bb8"
+            }
+          ],
+          "findings": [
+            {
+              "agent_name": "block.timestamp Usage (AST)",
+              "category": "Timing",
+              "code_snippet": "def readTime(): uses block.timestamp",
+              "description": "block.timestamp in 'readTime' \u2014 can be manipulated",
+              "file": "fixtures/modern.sol",
+              "fix": "Do not use it to decide on funds",
+              "function_name": "readTime",
+              "line": 0,
+              "severity": "Medium"
+            }
+          ],
+          "source_text_ids": [
+            "<stdin>"
+          ],
+          "status": "AnalysisSucceededWithFindings"
+        }
+      },
+      "expected_findings": 1,
+      "track": "Compatibility"
+    },
+    {
+      "adapter_metadata": {
+        "adapter_name": "legacy",
+        "adapter_version": "canonical-poc-adapter-v2",
+        "canonical_ast_version": "canonical-ast-poc-v2",
+        "diagnostics": [],
+        "skipped_nodes": [],
+        "status": "CanonicalASTReady",
+        "summary": {
+          "adapter_version": "canonical-poc-adapter-v2",
+          "canonical_ast_version": "canonical-ast-poc-v2",
+          "contract_count": 1,
+          "function_count": 1,
+          "provenance": {
+            "ast_format": "ast-json",
+            "compiler_binary_hash": "f3638225df24f444a72123956033f5743079118f0e1195ce6969aa16a7ef2283",
+            "compiler_build": "solc, the solidity compiler commandline interface\nVersion: 0.4.10+commit.9e8cc01b.Linux.g++",
+            "compiler_settings_sha256": "",
+            "compiler_version": "0.4.10",
+            "raw_ast_sha256": "639b02861407a28a10981c0218c21a430c8bdbd3f9fcbc21e4511dce1b3774a3",
+            "source_id": "<stdin>",
+            "source_manifest": [
+              {
+                "source_id": "<stdin>",
+                "source_sha256": "0c9e2d5b544e36d14e8d812ac26373987f83a8fe543ebcc4e47cea007df5bf76"
+              }
+            ],
+            "source_sha256": "0c9e2d5b544e36d14e8d812ac26373987f83a8fe543ebcc4e47cea007df5bf76"
+          },
+          "skipped_nodes": [],
+          "source_units": [
+            {
+              "contracts": [
+                {
+                  "functions": [
+                    {
+                      "call_kinds": [],
+                      "expressions": [],
+                      "kind": "function",
+                      "name": "safe",
+                      "source_range": "63:78:-1",
+                      "uses_block_timestamp": false,
+                      "uses_selfdestruct": false
+                    }
+                  ],
+                  "kind": "contract",
+                  "name": "CanonicalFixedControl",
+                  "source_range": "26:117:-1"
+                }
+              ],
+              "source_id": "<stdin>",
+              "source_range": ""
+            }
+          ],
+          "unknown_nodes": []
+        },
+        "unknown_nodes": []
+      },
+      "adapter_status": "CanonicalASTReady",
+      "canonical_semantics": {
+        "DELEGATECALL": {
+          "functions": [],
+          "present": false
+        },
+        "Selfdestruct": {
+          "functions": [],
+          "present": false
+        },
+        "block.timestamp": {
+          "functions": [],
+          "present": false
+        }
+      },
+      "case": "historical_fixed",
+      "compiler_status": "Compiled",
+      "detectors": {
+        "DELEGATECALL": {
+          "analysis_result": {
+            "adapter_version": "canonical-poc-adapter-v2",
+            "canonical_ast_version": "canonical-ast-poc-v2",
+            "comparator_version": "existing-comparator-unchanged",
+            "detector_version": "canonical-poc-detector-bridge-v2",
+            "diagnostics": [],
+            "status": "AnalysisSucceededNoFindings"
+          },
+          "analyzed_source_id": "<stdin>",
+          "comparator_implementation_changed": false,
+          "comparator_results": [],
+          "detector_compiler_knowledge": false,
+          "detector_input_contract": "CanonicalProgram+SourceView+Provenance",
+          "detector_method": "_check_delegatecall",
+          "detector_source_policy": "canonical-ast-only",
+          "family": "DELEGATECALL",
+          "finding_count": 0,
+          "finding_provenance": [],
+          "findings": [],
+          "source_text_ids": [
+            "<stdin>"
+          ],
+          "status": "AnalysisSucceededNoFindings"
+        },
+        "Selfdestruct": {
+          "analysis_result": {
+            "adapter_version": "canonical-poc-adapter-v2",
+            "canonical_ast_version": "canonical-ast-poc-v2",
+            "comparator_version": "existing-comparator-unchanged",
+            "detector_version": "canonical-poc-detector-bridge-v2",
+            "diagnostics": [],
+            "status": "AnalysisSucceededNoFindings"
+          },
+          "analyzed_source_id": "<stdin>",
+          "comparator_implementation_changed": false,
+          "comparator_results": [],
+          "detector_compiler_knowledge": false,
+          "detector_input_contract": "CanonicalProgram+SourceView+Provenance",
+          "detector_method": "_check_selfdestruct",
+          "detector_source_policy": "canonical-ast-only",
+          "family": "Selfdestruct",
+          "finding_count": 0,
+          "finding_provenance": [],
+          "findings": [],
+          "source_text_ids": [
+            "<stdin>"
+          ],
+          "status": "AnalysisSucceededNoFindings"
+        },
+        "block.timestamp": {
+          "analysis_result": {
+            "adapter_version": "canonical-poc-adapter-v2",
+            "canonical_ast_version": "canonical-ast-poc-v2",
+            "comparator_version": "existing-comparator-unchanged",
+            "detector_version": "canonical-poc-detector-bridge-v2",
+            "diagnostics": [],
+            "status": "AnalysisSucceededNoFindings"
+          },
+          "analyzed_source_id": "<stdin>",
+          "comparator_implementation_changed": false,
+          "comparator_results": [],
+          "detector_compiler_knowledge": false,
+          "detector_input_contract": "CanonicalProgram+SourceView+Provenance",
+          "detector_method": "_check_block_timestamp",
+          "detector_source_policy": "canonical-ast-only",
+          "family": "block.timestamp",
+          "finding_count": 0,
+          "finding_provenance": [],
+          "findings": [],
+          "source_text_ids": [
+            "<stdin>"
+          ],
+          "status": "AnalysisSucceededNoFindings"
+        }
+      },
+      "expected_findings": 0,
+      "track": "Compatibility"
+    },
+    {
+      "adapter_metadata": {
+        "adapter_name": "modern",
+        "adapter_version": "canonical-poc-adapter-v2",
+        "canonical_ast_version": "canonical-ast-poc-v2",
+        "diagnostics": [],
+        "skipped_nodes": [],
+        "status": "CanonicalASTReady",
+        "summary": {
+          "adapter_version": "canonical-poc-adapter-v2",
+          "canonical_ast_version": "canonical-ast-poc-v2",
+          "contract_count": 1,
+          "function_count": 1,
+          "provenance": {
+            "ast_format": "ast-compact-json",
+            "compiler_binary_hash": "c42aada7a52057ddbed93ec011235e256c564c440b68dbaac5ae482babbb3d6d",
+            "compiler_build": "solc, the solidity compiler commandline interface\nVersion: 0.8.25+commit.b61c2a91.Linux.g++",
+            "compiler_settings_sha256": "",
+            "compiler_version": "0.8.25",
+            "raw_ast_sha256": "043494fc9a222a9b4350a4e6be7b3317444c1064de1c48a3bd10a02cc25e2b71",
+            "source_id": "<stdin>",
+            "source_manifest": [
+              {
+                "source_id": "<stdin>",
+                "source_sha256": "8f1a37c5167b2f49737fe3e6fdb950daf55957a2c45bfd6cfc758bbff8fca65b"
+              }
+            ],
+            "source_sha256": "8f1a37c5167b2f49737fe3e6fdb950daf55957a2c45bfd6cfc758bbff8fca65b"
+          },
+          "skipped_nodes": [],
+          "source_units": [
+            {
+              "contracts": [
+                {
+                  "functions": [
+                    {
+                      "call_kinds": [],
+                      "expressions": [],
+                      "kind": "function",
+                      "name": "safe",
+                      "source_range": "63:78:0",
+                      "uses_block_timestamp": false,
+                      "uses_selfdestruct": false
+                    }
+                  ],
+                  "kind": "contract",
+                  "name": "CanonicalFixedControl",
+                  "source_range": "26:117:0"
+                }
+              ],
+              "source_id": "<stdin>",
+              "source_range": "0:144:0"
+            }
+          ],
+          "unknown_nodes": []
+        },
+        "unknown_nodes": []
+      },
+      "adapter_status": "CanonicalASTReady",
+      "canonical_semantics": {
+        "DELEGATECALL": {
+          "functions": [],
+          "present": false
+        },
+        "Selfdestruct": {
+          "functions": [],
+          "present": false
+        },
+        "block.timestamp": {
+          "functions": [],
+          "present": false
+        }
+      },
+      "case": "modern_fixed",
+      "compiler_status": "Compiled",
+      "detectors": {
+        "DELEGATECALL": {
+          "analysis_result": {
+            "adapter_version": "canonical-poc-adapter-v2",
+            "canonical_ast_version": "canonical-ast-poc-v2",
+            "comparator_version": "existing-comparator-unchanged",
+            "detector_version": "canonical-poc-detector-bridge-v2",
+            "diagnostics": [],
+            "status": "AnalysisSucceededNoFindings"
+          },
+          "analyzed_source_id": "<stdin>",
+          "comparator_implementation_changed": false,
+          "comparator_results": [],
+          "detector_compiler_knowledge": false,
+          "detector_input_contract": "CanonicalProgram+SourceView+Provenance",
+          "detector_method": "_check_delegatecall",
+          "detector_source_policy": "canonical-ast-only",
+          "family": "DELEGATECALL",
+          "finding_count": 0,
+          "finding_provenance": [],
+          "findings": [],
+          "source_text_ids": [
+            "<stdin>"
+          ],
+          "status": "AnalysisSucceededNoFindings"
+        },
+        "Selfdestruct": {
+          "analysis_result": {
+            "adapter_version": "canonical-poc-adapter-v2",
+            "canonical_ast_version": "canonical-ast-poc-v2",
+            "comparator_version": "existing-comparator-unchanged",
+            "detector_version": "canonical-poc-detector-bridge-v2",
+            "diagnostics": [],
+            "status": "AnalysisSucceededNoFindings"
+          },
+          "analyzed_source_id": "<stdin>",
+          "comparator_implementation_changed": false,
+          "comparator_results": [],
+          "detector_compiler_knowledge": false,
+          "detector_input_contract": "CanonicalProgram+SourceView+Provenance",
+          "detector_method": "_check_selfdestruct",
+          "detector_source_policy": "canonical-ast-only",
+          "family": "Selfdestruct",
+          "finding_count": 0,
+          "finding_provenance": [],
+          "findings": [],
+          "source_text_ids": [
+            "<stdin>"
+          ],
+          "status": "AnalysisSucceededNoFindings"
+        },
+        "block.timestamp": {
+          "analysis_result": {
+            "adapter_version": "canonical-poc-adapter-v2",
+            "canonical_ast_version": "canonical-ast-poc-v2",
+            "comparator_version": "existing-comparator-unchanged",
+            "detector_version": "canonical-poc-detector-bridge-v2",
+            "diagnostics": [],
+            "status": "AnalysisSucceededNoFindings"
+          },
+          "analyzed_source_id": "<stdin>",
+          "comparator_implementation_changed": false,
+          "comparator_results": [],
+          "detector_compiler_knowledge": false,
+          "detector_input_contract": "CanonicalProgram+SourceView+Provenance",
+          "detector_method": "_check_block_timestamp",
+          "detector_source_policy": "canonical-ast-only",
+          "family": "block.timestamp",
+          "finding_count": 0,
+          "finding_provenance": [],
+          "findings": [],
+          "source_text_ids": [
+            "<stdin>"
+          ],
+          "status": "AnalysisSucceededNoFindings"
+        }
+      },
+      "expected_findings": 0,
+      "track": "Compatibility"
+    },
+    {
+      "adapter_metadata": {
+        "adapter_name": "legacy",
+        "adapter_version": "canonical-poc-adapter-v2",
+        "canonical_ast_version": "canonical-ast-poc-v2",
+        "diagnostics": [],
+        "skipped_nodes": [],
+        "status": "CanonicalASTReady",
+        "summary": {
+          "adapter_version": "canonical-poc-adapter-v2",
+          "canonical_ast_version": "canonical-ast-poc-v2",
+          "contract_count": 1,
+          "function_count": 3,
+          "provenance": {
+            "ast_format": "ast-json",
+            "compiler_binary_hash": "f3638225df24f444a72123956033f5743079118f0e1195ce6969aa16a7ef2283",
+            "compiler_build": "solc, the solidity compiler commandline interface\nVersion: 0.4.10+commit.9e8cc01b.Linux.g++",
+            "compiler_settings_sha256": "",
+            "compiler_version": "0.4.10",
+            "raw_ast_sha256": "3796078a0107d2d7f917e18a8f205e91b0f4e481a8e7bdfaa8b4d8d1cfdb7c50",
+            "source_id": "<stdin>",
+            "source_manifest": [
+              {
+                "source_id": "<stdin>",
+                "source_sha256": "050b1405a5252d11e6842d275e3cb74d0685845be18254db9d1ca22948ad8bcf"
+              }
+            ],
+            "source_sha256": "050b1405a5252d11e6842d275e3cb74d0685845be18254db9d1ca22948ad8bcf"
+          },
+          "skipped_nodes": [],
+          "source_units": [
+            {
+              "contracts": [
+                {
+                  "functions": [
+                    {
+                      "call_kinds": [],
+                      "expressions": [],
+                      "kind": "function",
+                      "name": "identifiers",
+                      "source_range": "158:175:-1",
+                      "uses_block_timestamp": false,
+                      "uses_selfdestruct": false
+                    },
+                    {
+                      "call_kinds": [],
+                      "expressions": [],
+                      "kind": "function",
+                      "name": "callShapes",
+                      "source_range": "339:73:-1",
+                      "uses_block_timestamp": false,
+                      "uses_selfdestruct": false
+                    },
+                    {
+                      "call_kinds": [],
+                      "expressions": [],
+                      "kind": "function",
+                      "name": "nested",
+                      "source_range": "418:87:-1",
+                      "uses_block_timestamp": false,
+                      "uses_selfdestruct": false
+                    }
+                  ],
+                  "kind": "contract",
+                  "name": "CanonicalNegative",
+                  "source_range": "26:554:-1"
+                }
+              ],
+              "source_id": "<stdin>",
+              "source_range": ""
+            }
+          ],
+          "unknown_nodes": []
+        },
+        "unknown_nodes": []
+      },
+      "adapter_status": "CanonicalASTReady",
+      "canonical_semantics": {
+        "DELEGATECALL": {
+          "functions": [],
+          "present": false
+        },
+        "Selfdestruct": {
+          "functions": [],
+          "present": false
+        },
+        "block.timestamp": {
+          "functions": [],
+          "present": false
+        }
+      },
+      "case": "historical_negative_context",
+      "compiler_status": "Compiled",
+      "detectors": {
+        "DELEGATECALL": {
+          "analysis_result": {
+            "adapter_version": "canonical-poc-adapter-v2",
+            "canonical_ast_version": "canonical-ast-poc-v2",
+            "comparator_version": "existing-comparator-unchanged",
+            "detector_version": "canonical-poc-detector-bridge-v2",
+            "diagnostics": [],
+            "status": "AnalysisSucceededNoFindings"
+          },
+          "analyzed_source_id": "<stdin>",
+          "comparator_implementation_changed": false,
+          "comparator_results": [],
+          "detector_compiler_knowledge": false,
+          "detector_input_contract": "CanonicalProgram+SourceView+Provenance",
+          "detector_method": "_check_delegatecall",
+          "detector_source_policy": "canonical-ast-only",
+          "family": "DELEGATECALL",
+          "finding_count": 0,
+          "finding_provenance": [],
+          "findings": [],
+          "source_text_ids": [
+            "<stdin>"
+          ],
+          "status": "AnalysisSucceededNoFindings"
+        },
+        "Selfdestruct": {
+          "analysis_result": {
+            "adapter_version": "canonical-poc-adapter-v2",
+            "canonical_ast_version": "canonical-ast-poc-v2",
+            "comparator_version": "existing-comparator-unchanged",
+            "detector_version": "canonical-poc-detector-bridge-v2",
+            "diagnostics": [],
+            "status": "AnalysisSucceededNoFindings"
+          },
+          "analyzed_source_id": "<stdin>",
+          "comparator_implementation_changed": false,
+          "comparator_results": [],
+          "detector_compiler_knowledge": false,
+          "detector_input_contract": "CanonicalProgram+SourceView+Provenance",
+          "detector_method": "_check_selfdestruct",
+          "detector_source_policy": "canonical-ast-only",
+          "family": "Selfdestruct",
+          "finding_count": 0,
+          "finding_provenance": [],
+          "findings": [],
+          "source_text_ids": [
+            "<stdin>"
+          ],
+          "status": "AnalysisSucceededNoFindings"
+        },
+        "block.timestamp": {
+          "analysis_result": {
+            "adapter_version": "canonical-poc-adapter-v2",
+            "canonical_ast_version": "canonical-ast-poc-v2",
+            "comparator_version": "existing-comparator-unchanged",
+            "detector_version": "canonical-poc-detector-bridge-v2",
+            "diagnostics": [],
+            "status": "AnalysisSucceededNoFindings"
+          },
+          "analyzed_source_id": "<stdin>",
+          "comparator_implementation_changed": false,
+          "comparator_results": [],
+          "detector_compiler_knowledge": false,
+          "detector_input_contract": "CanonicalProgram+SourceView+Provenance",
+          "detector_method": "_check_block_timestamp",
+          "detector_source_policy": "canonical-ast-only",
+          "family": "block.timestamp",
+          "finding_count": 0,
+          "finding_provenance": [],
+          "findings": [],
+          "source_text_ids": [
+            "<stdin>"
+          ],
+          "status": "AnalysisSucceededNoFindings"
+        }
+      },
+      "expected_findings": 0,
+      "track": "Compatibility"
+    },
+    {
+      "adapter_metadata": {
+        "adapter_name": "modern",
+        "adapter_version": "canonical-poc-adapter-v2",
+        "canonical_ast_version": "canonical-ast-poc-v2",
+        "diagnostics": [],
+        "skipped_nodes": [],
+        "status": "CanonicalASTReady",
+        "summary": {
+          "adapter_version": "canonical-poc-adapter-v2",
+          "canonical_ast_version": "canonical-ast-poc-v2",
+          "contract_count": 1,
+          "function_count": 3,
+          "provenance": {
+            "ast_format": "ast-compact-json",
+            "compiler_binary_hash": "c42aada7a52057ddbed93ec011235e256c564c440b68dbaac5ae482babbb3d6d",
+            "compiler_build": "solc, the solidity compiler commandline interface\nVersion: 0.8.25+commit.b61c2a91.Linux.g++",
+            "compiler_settings_sha256": "",
+            "compiler_version": "0.8.25",
+            "raw_ast_sha256": "fa03fc04132365ea1cb31f9cf7fb194a90c4fd0da5228632016e7a93869ec5e3",
+            "source_id": "<stdin>",
+            "source_manifest": [
+              {
+                "source_id": "<stdin>",
+                "source_sha256": "082bed64fd920843c5a4de525d56003607bb21934ec3c8d3d34b3f9ebd8997ed"
+              }
+            ],
+            "source_sha256": "082bed64fd920843c5a4de525d56003607bb21934ec3c8d3d34b3f9ebd8997ed"
+          },
+          "skipped_nodes": [],
+          "source_units": [
+            {
+              "contracts": [
+                {
+                  "functions": [
+                    {
+                      "call_kinds": [],
+                      "expressions": [],
+                      "kind": "function",
+                      "name": "identifiers",
+                      "source_range": "158:181:0",
+                      "uses_block_timestamp": false,
+                      "uses_selfdestruct": false
+                    },
+                    {
+                      "call_kinds": [],
+                      "expressions": [],
+                      "kind": "function",
+                      "name": "callShapes",
+                      "source_range": "345:75:0",
+                      "uses_block_timestamp": false,
+                      "uses_selfdestruct": false
+                    },
+                    {
+                      "call_kinds": [],
+                      "expressions": [],
+                      "kind": "function",
+                      "name": "nested",
+                      "source_range": "426:93:0",
+                      "uses_block_timestamp": false,
+                      "uses_selfdestruct": false
+                    }
+                  ],
+                  "kind": "contract",
+                  "name": "CanonicalNegative",
+                  "source_range": "26:568:0"
+                }
+              ],
+              "source_id": "<stdin>",
+              "source_range": "0:595:0"
+            }
+          ],
+          "unknown_nodes": []
+        },
+        "unknown_nodes": []
+      },
+      "adapter_status": "CanonicalASTReady",
+      "canonical_semantics": {
+        "DELEGATECALL": {
+          "functions": [],
+          "present": false
+        },
+        "Selfdestruct": {
+          "functions": [],
+          "present": false
+        },
+        "block.timestamp": {
+          "functions": [],
+          "present": false
+        }
+      },
+      "case": "modern_negative_context",
+      "compiler_status": "Compiled",
+      "detectors": {
+        "DELEGATECALL": {
+          "analysis_result": {
+            "adapter_version": "canonical-poc-adapter-v2",
+            "canonical_ast_version": "canonical-ast-poc-v2",
+            "comparator_version": "existing-comparator-unchanged",
+            "detector_version": "canonical-poc-detector-bridge-v2",
+            "diagnostics": [],
+            "status": "AnalysisSucceededNoFindings"
+          },
+          "analyzed_source_id": "<stdin>",
+          "comparator_implementation_changed": false,
+          "comparator_results": [],
+          "detector_compiler_knowledge": false,
+          "detector_input_contract": "CanonicalProgram+SourceView+Provenance",
+          "detector_method": "_check_delegatecall",
+          "detector_source_policy": "canonical-ast-only",
+          "family": "DELEGATECALL",
+          "finding_count": 0,
+          "finding_provenance": [],
+          "findings": [],
+          "source_text_ids": [
+            "<stdin>"
+          ],
+          "status": "AnalysisSucceededNoFindings"
+        },
+        "Selfdestruct": {
+          "analysis_result": {
+            "adapter_version": "canonical-poc-adapter-v2",
+            "canonical_ast_version": "canonical-ast-poc-v2",
+            "comparator_version": "existing-comparator-unchanged",
+            "detector_version": "canonical-poc-detector-bridge-v2",
+            "diagnostics": [],
+            "status": "AnalysisSucceededNoFindings"
+          },
+          "analyzed_source_id": "<stdin>",
+          "comparator_implementation_changed": false,
+          "comparator_results": [],
+          "detector_compiler_knowledge": false,
+          "detector_input_contract": "CanonicalProgram+SourceView+Provenance",
+          "detector_method": "_check_selfdestruct",
+          "detector_source_policy": "canonical-ast-only",
+          "family": "Selfdestruct",
+          "finding_count": 0,
+          "finding_provenance": [],
+          "findings": [],
+          "source_text_ids": [
+            "<stdin>"
+          ],
+          "status": "AnalysisSucceededNoFindings"
+        },
+        "block.timestamp": {
+          "analysis_result": {
+            "adapter_version": "canonical-poc-adapter-v2",
+            "canonical_ast_version": "canonical-ast-poc-v2",
+            "comparator_version": "existing-comparator-unchanged",
+            "detector_version": "canonical-poc-detector-bridge-v2",
+            "diagnostics": [],
+            "status": "AnalysisSucceededNoFindings"
+          },
+          "analyzed_source_id": "<stdin>",
+          "comparator_implementation_changed": false,
+          "comparator_results": [],
+          "detector_compiler_knowledge": false,
+          "detector_input_contract": "CanonicalProgram+SourceView+Provenance",
+          "detector_method": "_check_block_timestamp",
+          "detector_source_policy": "canonical-ast-only",
+          "family": "block.timestamp",
+          "finding_count": 0,
+          "finding_provenance": [],
+          "findings": [],
+          "source_text_ids": [
+            "<stdin>"
+          ],
+          "status": "AnalysisSucceededNoFindings"
+        }
+      },
+      "expected_findings": 0,
+      "track": "Compatibility"
+    },
+    {
+      "adapter_metadata": {
+        "adapter_version": "canonical-poc-adapter-v2",
+        "analysis_result": {
+          "diagnostics": [
+            "Legacy AST container is malformed"
+          ],
+          "findings": [],
+          "provenance": {
+            "ast_format": "ast-json",
+            "compiler_binary_hash": "f3638225df24f444a72123956033f5743079118f0e1195ce6969aa16a7ef2283",
+            "compiler_build": "solc, the solidity compiler commandline interface\nVersion: 0.4.10+commit.9e8cc01b.Linux.g++",
+            "compiler_settings_sha256": "",
+            "compiler_version": "0.4.10",
+            "raw_ast_sha256": "990d50631a7cb567fdab99d346ec4d6691bcd036fc058c94ba6079594564f4c6",
+            "source_id": "<stdin>",
+            "source_manifest": [
+              {
+                "source_id": "<stdin>",
+                "source_sha256": "592a73e1c6c06f818335349bd4e9bbd4397cd4a0fc910b95de2b4b8dd0558815"
+              }
+            ],
+            "source_sha256": "592a73e1c6c06f818335349bd4e9bbd4397cd4a0fc910b95de2b4b8dd0558815"
+          },
+          "status": "ASTNormalizationFailed"
+        },
+        "canonical_ast_version": "canonical-ast-poc-v2",
+        "diagnostics": [
+          "Legacy AST container is malformed"
+        ],
+        "provenance": {
+          "ast_format": "ast-json",
+          "compiler_binary_hash": "f3638225df24f444a72123956033f5743079118f0e1195ce6969aa16a7ef2283",
+          "compiler_build": "solc, the solidity compiler commandline interface\nVersion: 0.4.10+commit.9e8cc01b.Linux.g++",
+          "compiler_settings_sha256": "",
+          "compiler_version": "0.4.10",
+          "raw_ast_sha256": "990d50631a7cb567fdab99d346ec4d6691bcd036fc058c94ba6079594564f4c6",
+          "source_id": "<stdin>",
+          "source_manifest": [
+            {
+              "source_id": "<stdin>",
+              "source_sha256": "592a73e1c6c06f818335349bd4e9bbd4397cd4a0fc910b95de2b4b8dd0558815"
+            }
+          ],
+          "source_sha256": "592a73e1c6c06f818335349bd4e9bbd4397cd4a0fc910b95de2b4b8dd0558815"
+        },
+        "status": "ASTNormalizationFailed"
+      },
+      "adapter_status": "ASTNormalizationFailed",
+      "case": "invalid_ast_container",
+      "compiler_status": "Compiled",
+      "detectors": {},
+      "expected_findings": null,
+      "track": "Compatibility"
+    },
+    {
+      "analysis_result": {
+        "diagnostics": [
+          "No compiler binary is registered for requested version 0.3.0"
+        ],
+        "findings": [],
+        "provenance": {
+          "ast_format": "unavailable",
+          "compiler_binary_hash": "",
+          "compiler_build": "",
+          "compiler_settings_sha256": "",
+          "compiler_version": "0.3.0",
+          "raw_ast_sha256": "",
+          "source_id": "<stdin>",
+          "source_manifest": [
+            {
+              "source_id": "<stdin>",
+              "source_sha256": "592a73e1c6c06f818335349bd4e9bbd4397cd4a0fc910b95de2b4b8dd0558815"
+            }
+          ],
+          "source_sha256": "592a73e1c6c06f818335349bd4e9bbd4397cd4a0fc910b95de2b4b8dd0558815"
+        },
+        "status": "UnsupportedCompiler"
+      },
+      "case": "unsupported_compiler",
+      "status": "UnsupportedCompiler"
+    },
+    {
+      "analysis_result": {
+        "diagnostics": [
+          "<stdin>:1:26: Error: Source \"Missing.sol\" not found: File not found.",
+          "pragma solidity ^0.4.10; import \"Missing.sol\"; contract C {}",
+          "                         ^-------------------^"
+        ],
+        "findings": [],
+        "provenance": {
+          "ast_format": "ast-json",
+          "compiler_binary_hash": "f3638225df24f444a72123956033f5743079118f0e1195ce6969aa16a7ef2283",
+          "compiler_build": "solc, the solidity compiler commandline interface\nVersion: 0.4.10+commit.9e8cc01b.Linux.g++",
+          "compiler_settings_sha256": "",
+          "compiler_version": "0.4.10",
+          "raw_ast_sha256": "",
+          "source_id": "<stdin>",
+          "source_manifest": [
+            {
+              "source_id": "<stdin>",
+              "source_sha256": "13cb7588b80ae6ce9eb09b3cdb43adc5ba3084ae08a7e4e28903592be047a5d1"
+            }
+          ],
+          "source_sha256": "13cb7588b80ae6ce9eb09b3cdb43adc5ba3084ae08a7e4e28903592be047a5d1"
+        },
+        "status": "CompilationFailed"
+      },
+      "case": "compilation_failed",
+      "status": "CompilationFailed"
+    },
+    {
+      "analysis_result": {
+        "diagnostics": [
+          "raw AST unavailable"
+        ],
+        "findings": [],
+        "provenance": {
+          "ast_format": "unavailable",
+          "compiler_binary_hash": "",
+          "compiler_build": "",
+          "compiler_settings_sha256": "",
+          "compiler_version": "0.3.0",
+          "raw_ast_sha256": "",
+          "source_id": "<stdin>",
+          "source_manifest": [
+            {
+              "source_id": "<stdin>",
+              "source_sha256": "592a73e1c6c06f818335349bd4e9bbd4397cd4a0fc910b95de2b4b8dd0558815"
+            }
+          ],
+          "source_sha256": "592a73e1c6c06f818335349bd4e9bbd4397cd4a0fc910b95de2b4b8dd0558815"
+        },
+        "status": "ASTUnavailable"
+      },
+      "case": "ast_unavailable",
+      "status": "ASTUnavailable"
+    },
+    {
+      "analysis_result": {
+        "diagnostics": [
+          "Legacy adapter received a non-legacy AST schema"
+        ],
+        "findings": [],
+        "provenance": {
+          "ast_format": "unknown",
+          "compiler_binary_hash": "f3638225df24f444a72123956033f5743079118f0e1195ce6969aa16a7ef2283",
+          "compiler_build": "solc, the solidity compiler commandline interface\nVersion: 0.4.10+commit.9e8cc01b.Linux.g++",
+          "compiler_settings_sha256": "",
+          "compiler_version": "0.4.10",
+          "raw_ast_sha256": "raw",
+          "source_id": "<stdin>",
+          "source_manifest": [
+            {
+              "source_id": "<stdin>",
+              "source_sha256": "592a73e1c6c06f818335349bd4e9bbd4397cd4a0fc910b95de2b4b8dd0558815"
+            }
+          ],
+          "source_sha256": "592a73e1c6c06f818335349bd4e9bbd4397cd4a0fc910b95de2b4b8dd0558815"
+        },
+        "status": "UnsupportedASTVersion"
+      },
+      "case": "unsupported_ast_version",
+      "status": "UnsupportedASTVersion"
+    },
+    {
+      "analysis_result": {
+        "diagnostics": [
+          "Adapter encountered unknown contract nodes: UnknownNode"
+        ],
+        "findings": [],
+        "provenance": {
+          "ast_format": "ast-compact-json",
+          "compiler_binary_hash": "c42aada7a52057ddbed93ec011235e256c564c440b68dbaac5ae482babbb3d6d",
+          "compiler_build": "solc, the solidity compiler commandline interface\nVersion: 0.8.25+commit.b61c2a91.Linux.g++",
+          "compiler_settings_sha256": "",
+          "compiler_version": "0.8.25",
+          "raw_ast_sha256": "043494fc9a222a9b4350a4e6be7b3317444c1064de1c48a3bd10a02cc25e2b71",
+          "source_id": "<stdin>",
+          "source_manifest": [
+            {
+              "source_id": "<stdin>",
+              "source_sha256": "8f1a37c5167b2f49737fe3e6fdb950daf55957a2c45bfd6cfc758bbff8fca65b"
+            }
+          ],
+          "source_sha256": "8f1a37c5167b2f49737fe3e6fdb950daf55957a2c45bfd6cfc758bbff8fca65b"
+        },
+        "status": "Inconclusive"
+      },
+      "case": "unknown_ast_node",
+      "status": "Inconclusive"
+    },
+    {
+      "adapter_status": "CanonicalASTReady",
+      "case": "multi_file_import_graph",
+      "compiler_status": "Compiled",
+      "detector": {
+        "analysis_result": {
+          "adapter_version": "canonical-poc-adapter-v2",
+          "canonical_ast_version": "canonical-ast-poc-v2",
+          "comparator_version": "existing-comparator-unchanged",
+          "detector_version": "canonical-poc-detector-bridge-v2",
+          "diagnostics": [],
+          "status": "AnalysisSucceededNoFindings"
+        },
+        "analyzed_source_id": "Main.sol",
+        "comparator_implementation_changed": false,
+        "comparator_results": [],
+        "detector_compiler_knowledge": false,
+        "detector_input_contract": "CanonicalProgram+SourceView+Provenance",
+        "detector_method": "_check_selfdestruct",
+        "detector_source_policy": "canonical-ast-only",
+        "family": "Selfdestruct",
+        "finding_count": 0,
+        "finding_provenance": [],
+        "findings": [],
+        "source_text_ids": [
+          "Main.sol"
+        ],
+        "status": "AnalysisSucceededNoFindings"
+      },
+      "pragma_constraints": {
+        "Lib.sol": [
+          "^0.8.25"
+        ],
+        "Main.sol": [
+          "^0.8.25"
+        ]
+      },
+      "source_manifest": [
+        {
+          "source_id": "Lib.sol",
+          "source_sha256": "badce4b4a137f079306abb13892e549e01fd2a89321099f71aec5a759c1d6801"
+        },
+        {
+          "source_id": "Main.sol",
+          "source_sha256": "3f5b05e25834c26455360900a565b3627bafafc6bfca3d3e0a5c08f5f1388b12"
+        }
+      ],
+      "source_units": [
+        "Lib.sol",
+        "Main.sol"
+      ],
+      "track": "Compatibility"
+    },
+    {
+      "adapter_status": "CanonicalASTReady",
+      "case": "multi_file_imported_semantic_detection",
+      "compiler_status": "Compiled",
+      "entry_detector": {
+        "analysis_result": {
+          "adapter_version": "canonical-poc-adapter-v2",
+          "canonical_ast_version": "canonical-ast-poc-v2",
+          "comparator_version": "existing-comparator-unchanged",
+          "detector_version": "canonical-poc-detector-bridge-v2",
+          "diagnostics": [],
+          "status": "AnalysisSucceededNoFindings"
+        },
+        "analyzed_source_id": "Main.sol",
+        "comparator_implementation_changed": false,
+        "comparator_results": [],
+        "detector_compiler_knowledge": false,
+        "detector_input_contract": "CanonicalProgram+SourceView+Provenance",
+        "detector_method": "_check_selfdestruct",
+        "detector_source_policy": "canonical-ast-only",
+        "family": "Selfdestruct",
+        "finding_count": 0,
+        "finding_provenance": [],
+        "findings": [],
+        "source_text_ids": [
+          "Lib.sol",
+          "Main.sol"
+        ],
+        "status": "AnalysisSucceededNoFindings"
+      },
+      "entry_source_id": "Main.sol",
+      "imported_detector": {
+        "analysis_result": {
+          "adapter_version": "canonical-poc-adapter-v2",
+          "canonical_ast_version": "canonical-ast-poc-v2",
+          "comparator_version": "existing-comparator-unchanged",
+          "detector_version": "canonical-poc-detector-bridge-v2",
+          "diagnostics": [],
+          "status": "AnalysisSucceededWithFindings"
+        },
+        "analyzed_source_id": "Lib.sol",
+        "comparator_implementation_changed": false,
+        "comparator_results": [
+          {
+            "evidence": [
+              {
+                "excerpt": "selfdestruct(",
+                "kind": "selfdestruct",
+                "location": "line 5"
+              }
+            ],
+            "hypothesis": {
+              "category": "Access Control",
+              "description": "SELFDESTRUCT in 'destroyImported' \u2014 can destroy the contract",
+              "detector": "Selfdestruct",
+              "file": "Lib.sol",
+              "function": "destroyImported",
+              "severity": "Critical"
+            },
+            "reason": "The detector finding is supported by deterministic source evidence",
+            "status": "Confirmed",
+            "verification": {
+              "reason": "Registered source pattern is present",
+              "supported": true
+            }
+          }
+        ],
+        "detector_compiler_knowledge": false,
+        "detector_input_contract": "CanonicalProgram+SourceView+Provenance",
+        "detector_method": "_check_selfdestruct",
+        "detector_source_policy": "canonical-ast-only",
+        "family": "Selfdestruct",
+        "finding_count": 1,
+        "finding_provenance": [
+          {
+            "adapter_version": "canonical-poc-adapter-v2",
+            "canonical_ast_version": "canonical-ast-poc-v2",
+            "canonical_expression_id": "Lib.sol:4",
+            "comparator_version": "existing-comparator-unchanged",
+            "compiler_hash": "c42aada7a52057ddbed93ec011235e256c564c440b68dbaac5ae482babbb3d6d",
+            "compiler_version": "0.8.25",
+            "detector_version": "canonical-poc-detector-bridge-v2",
+            "evidence_kind": "destructive_operation",
+            "raw_ast_hash": "305bbfb2b3ce3ee7bb1d34d130c8fda265600de094c4f279fe8d3746020b6203",
+            "source_id": "Lib.sol",
+            "source_manifest": [
+              {
+                "source_id": "Lib.sol",
+                "source_sha256": "fcdc43b96b676511e62c8134a18fbee2d1c0852e1f2ce2d47351cb923b9a0d7d"
+              },
+              {
+                "source_id": "Main.sol",
+                "source_sha256": "2062946f0464ccbb9d66384df219bef6079f8673ec309135d947c171e71b3b79"
+              }
+            ],
+            "source_range": "109:12:0",
+            "source_sha256": "fcdc43b96b676511e62c8134a18fbee2d1c0852e1f2ce2d47351cb923b9a0d7d"
+          }
+        ],
+        "findings": [
+          {
+            "agent_name": "Selfdestruct",
+            "category": "Access Control",
+            "code_snippet": "",
+            "description": "SELFDESTRUCT in 'destroyImported' \u2014 can destroy the contract",
+            "file": "Lib.sol",
+            "fix": "Remove selfdestruct or add protection",
+            "function_name": "destroyImported",
+            "line": 0,
+            "severity": "Critical"
+          }
+        ],
+        "source_text_ids": [
+          "Lib.sol",
+          "Main.sol"
+        ],
+        "status": "AnalysisSucceededWithFindings"
+      },
+      "pragma_constraints": {
+        "Lib.sol": [
+          "^0.8.25"
+        ],
+        "Main.sol": [
+          "^0.8.25"
+        ]
+      },
+      "source_manifest": [
+        {
+          "source_id": "Lib.sol",
+          "source_sha256": "fcdc43b96b676511e62c8134a18fbee2d1c0852e1f2ce2d47351cb923b9a0d7d"
+        },
+        {
+          "source_id": "Main.sol",
+          "source_sha256": "2062946f0464ccbb9d66384df219bef6079f8673ec309135d947c171e71b3b79"
+        }
+      ],
+      "source_units": [
+        "Lib.sol",
+        "Main.sol"
+      ],
+      "track": "Compatibility",
+      "vulnerability_source_id": "Lib.sol"
+    }
+  ],
+  "schema_version": 2
+}

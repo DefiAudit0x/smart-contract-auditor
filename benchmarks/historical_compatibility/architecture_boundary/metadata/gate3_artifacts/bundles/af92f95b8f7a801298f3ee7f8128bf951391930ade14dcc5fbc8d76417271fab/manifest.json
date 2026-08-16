@@ -1,0 +1,230 @@
+{
+  "analysis": {
+    "comparator_results": [
+      {
+        "evidence": [
+          {
+            "excerpt": "selfdestruct(",
+            "kind": "selfdestruct",
+            "location": "line 5"
+          }
+        ],
+        "hypothesis": {
+          "category": "Access Control",
+          "description": "SELFDESTRUCT in 'destroyImported' \u2014 can destroy the contract",
+          "detector": "Selfdestruct",
+          "file": "Lib.sol",
+          "function": "destroyImported",
+          "severity": "Critical"
+        },
+        "reason": "The detector finding is supported by deterministic source evidence",
+        "status": "Confirmed",
+        "verification": {
+          "reason": "Registered source pattern is present",
+          "supported": true
+        }
+      }
+    ],
+    "finding_count": 1,
+    "finding_provenance": [
+      {
+        "adapter_version": "canonical-poc-adapter-v2",
+        "canonical_ast_version": "canonical-ast-poc-v2",
+        "canonical_expression_id": "Lib.sol:4",
+        "comparator_version": "existing-comparator-unchanged",
+        "compiler_hash": "c42aada7a52057ddbed93ec011235e256c564c440b68dbaac5ae482babbb3d6d",
+        "compiler_version": "0.8.25",
+        "detector_version": "canonical-poc-detector-bridge-v2",
+        "evidence_kind": "destructive_operation",
+        "raw_ast_hash": "305bbfb2b3ce3ee7bb1d34d130c8fda265600de094c4f279fe8d3746020b6203",
+        "source_id": "Lib.sol",
+        "source_manifest": [
+          {
+            "source_id": "Lib.sol",
+            "source_sha256": "fcdc43b96b676511e62c8134a18fbee2d1c0852e1f2ce2d47351cb923b9a0d7d"
+          },
+          {
+            "source_id": "Main.sol",
+            "source_sha256": "2062946f0464ccbb9d66384df219bef6079f8673ec309135d947c171e71b3b79"
+          }
+        ],
+        "source_range": "109:12:0",
+        "source_sha256": "fcdc43b96b676511e62c8134a18fbee2d1c0852e1f2ce2d47351cb923b9a0d7d"
+      }
+    ],
+    "findings": [
+      {
+        "agent_name": "Selfdestruct",
+        "category": "Access Control",
+        "code_snippet": "",
+        "description": "SELFDESTRUCT in 'destroyImported' \u2014 can destroy the contract",
+        "file": "Lib.sol",
+        "fix": "Remove selfdestruct or add protection",
+        "function_name": "destroyImported",
+        "line": 0,
+        "severity": "Critical"
+      }
+    ],
+    "source_id": "Lib.sol",
+    "status": "AnalysisSucceededWithFindings"
+  },
+  "analysis_artifact": {
+    "path": "analysis_payload.json",
+    "sha256": "81b8e26ca6d04ba889921f8cf09db9613d025eaed387bc35f99cd7dc1ada121b"
+  },
+  "bundle_id": "af92f95b8f7a801298f3ee7f8128bf951391930ade14dcc5fbc8d76417271fab",
+  "bundle_identity": {
+    "adapter_version": "canonical-poc-adapter-v2",
+    "analysis_payload": {
+      "comparator_results": [
+        {
+          "evidence": [
+            {
+              "excerpt": "selfdestruct(",
+              "kind": "selfdestruct",
+              "location": "line 5"
+            }
+          ],
+          "hypothesis": {
+            "category": "Access Control",
+            "description": "SELFDESTRUCT in 'destroyImported' \u2014 can destroy the contract",
+            "detector": "Selfdestruct",
+            "file": "Lib.sol",
+            "function": "destroyImported",
+            "severity": "Critical"
+          },
+          "reason": "The detector finding is supported by deterministic source evidence",
+          "status": "Confirmed",
+          "verification": {
+            "reason": "Registered source pattern is present",
+            "supported": true
+          }
+        }
+      ],
+      "finding_count": 1,
+      "finding_provenance": [
+        {
+          "adapter_version": "canonical-poc-adapter-v2",
+          "canonical_ast_version": "canonical-ast-poc-v2",
+          "canonical_expression_id": "Lib.sol:4",
+          "comparator_version": "existing-comparator-unchanged",
+          "compiler_hash": "c42aada7a52057ddbed93ec011235e256c564c440b68dbaac5ae482babbb3d6d",
+          "compiler_version": "0.8.25",
+          "detector_version": "canonical-poc-detector-bridge-v2",
+          "evidence_kind": "destructive_operation",
+          "raw_ast_hash": "305bbfb2b3ce3ee7bb1d34d130c8fda265600de094c4f279fe8d3746020b6203",
+          "source_id": "Lib.sol",
+          "source_manifest": [
+            {
+              "source_id": "Lib.sol",
+              "source_sha256": "fcdc43b96b676511e62c8134a18fbee2d1c0852e1f2ce2d47351cb923b9a0d7d"
+            },
+            {
+              "source_id": "Main.sol",
+              "source_sha256": "2062946f0464ccbb9d66384df219bef6079f8673ec309135d947c171e71b3b79"
+            }
+          ],
+          "source_range": "109:12:0",
+          "source_sha256": "fcdc43b96b676511e62c8134a18fbee2d1c0852e1f2ce2d47351cb923b9a0d7d"
+        }
+      ],
+      "findings": [
+        {
+          "agent_name": "Selfdestruct",
+          "category": "Access Control",
+          "code_snippet": "",
+          "description": "SELFDESTRUCT in 'destroyImported' \u2014 can destroy the contract",
+          "file": "Lib.sol",
+          "fix": "Remove selfdestruct or add protection",
+          "function_name": "destroyImported",
+          "line": 0,
+          "severity": "Critical"
+        }
+      ],
+      "source_id": "Lib.sol",
+      "status": "AnalysisSucceededWithFindings"
+    },
+    "analysis_payload_sha256": "81b8e26ca6d04ba889921f8cf09db9613d025eaed387bc35f99cd7dc1ada121b",
+    "canonical_ast_version": "canonical-ast-poc-v2",
+    "canonical_summary_sha256": "0dc85b01d544bae1b0d7decd7b235320678d366ca3d9c51802e405eaefcdfed8",
+    "compiler_binary_hash": "c42aada7a52057ddbed93ec011235e256c564c440b68dbaac5ae482babbb3d6d",
+    "compiler_build": "solc, the solidity compiler commandline interface\nVersion: 0.8.25+commit.b61c2a91.Linux.g++",
+    "compiler_settings_sha256": "6d8a7e5ca403c541f12cfcd8c7745f976b553905281e51929b534d953a5413f1",
+    "compiler_version": "0.8.25",
+    "raw_ast_sha256": "305bbfb2b3ce3ee7bb1d34d130c8fda265600de094c4f279fe8d3746020b6203",
+    "retention_policy": {
+      "canonical_summary_mode": "persisted-content-addressed",
+      "finding_mode": "persisted-with-provenance",
+      "policy_version": "gate3-retention-v2",
+      "raw_ast_mode": "persisted-content-addressed",
+      "replay_guarantee": "hash-verified-artifact-replay",
+      "retention_days": 2555,
+      "retention_semantics": "Persisted+Replayable",
+      "source_mode": "persisted-content-addressed"
+    },
+    "source_set_sha256": "d88607decf65050f922db9d30af3bc09b478d768c5e696500ad2288bfc584a9d"
+  },
+  "canonical_ast": {
+    "adapter_version": "canonical-poc-adapter-v2",
+    "artifact": "canonical_summary.json",
+    "sha256": "0dc85b01d544bae1b0d7decd7b235320678d366ca3d9c51802e405eaefcdfed8",
+    "version": "canonical-ast-poc-v2"
+  },
+  "compiler_provenance": {
+    "ast_format": "standard-json-modern-ast",
+    "compiler_binary_hash": "c42aada7a52057ddbed93ec011235e256c564c440b68dbaac5ae482babbb3d6d",
+    "compiler_build": "solc, the solidity compiler commandline interface\nVersion: 0.8.25+commit.b61c2a91.Linux.g++",
+    "compiler_settings_sha256": "6d8a7e5ca403c541f12cfcd8c7745f976b553905281e51929b534d953a5413f1",
+    "compiler_version": "0.8.25",
+    "raw_ast_sha256": "305bbfb2b3ce3ee7bb1d34d130c8fda265600de094c4f279fe8d3746020b6203",
+    "source_id": "Main.sol",
+    "source_manifest": [
+      {
+        "source_id": "Lib.sol",
+        "source_sha256": "fcdc43b96b676511e62c8134a18fbee2d1c0852e1f2ce2d47351cb923b9a0d7d"
+      },
+      {
+        "source_id": "Main.sol",
+        "source_sha256": "2062946f0464ccbb9d66384df219bef6079f8673ec309135d947c171e71b3b79"
+      }
+    ],
+    "source_sha256": "d88607decf65050f922db9d30af3bc09b478d768c5e696500ad2288bfc584a9d"
+  },
+  "raw_ast": {
+    "artifact_path": "raw_ast/305bbfb2b3ce3ee7bb1d34d130c8fda265600de094c4f279fe8d3746020b6203.json",
+    "format": "standard-json-modern-ast",
+    "sha256": "305bbfb2b3ce3ee7bb1d34d130c8fda265600de094c4f279fe8d3746020b6203"
+  },
+  "replay_status": "ReplayVerified",
+  "retention_policy": {
+    "canonical_summary_mode": "persisted-content-addressed",
+    "finding_mode": "persisted-with-provenance",
+    "policy_version": "gate3-retention-v2",
+    "raw_ast_mode": "persisted-content-addressed",
+    "replay_guarantee": "hash-verified-artifact-replay",
+    "retention_days": 2555,
+    "retention_semantics": "Persisted+Replayable",
+    "source_mode": "persisted-content-addressed"
+  },
+  "schema_version": 2,
+  "source_manifest": [
+    {
+      "artifact_path": "sources/fcdc43b96b676511e62c8134a18fbee2d1c0852e1f2ce2d47351cb923b9a0d7d.sol",
+      "byte_length": 152,
+      "content_sha256": "fcdc43b96b676511e62c8134a18fbee2d1c0852e1f2ce2d47351cb923b9a0d7d",
+      "source_id": "Lib.sol"
+    },
+    {
+      "artifact_path": "sources/2062946f0464ccbb9d66384df219bef6079f8673ec309135d947c171e71b3b79.sol",
+      "byte_length": 161,
+      "content_sha256": "2062946f0464ccbb9d66384df219bef6079f8673ec309135d947c171e71b3b79",
+      "source_id": "Main.sol"
+    }
+  ],
+  "source_set_sha256": "d88607decf65050f922db9d30af3bc09b478d768c5e696500ad2288bfc584a9d",
+  "verification": {
+    "bundle_id": "af92f95b8f7a801298f3ee7f8128bf951391930ade14dcc5fbc8d76417271fab",
+    "diagnostics": [],
+    "status": "ReplayVerified"
+  }
+}

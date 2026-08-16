@@ -15,7 +15,7 @@
 
 تقترح هذه الوثيقة إدخال هذه الفكرة إلى production على مراحل، وليس عبر استبدال مسار التحليل دفعة واحدة. يبدأ التصميم بـ`CompilerResolver` و`CompilationResult` و`VersionedAdapter` و`DetectorInput`، ثم يمر عبر detector واحد مختار، ثم عائلات detectors، ثم إزالة compatibility bridge فقط بعد تحقق مستقل من parity وعدم تدهور الـControlled Track.
 
-يجب تسجيل حد مهم بوضوح: الـmulti-file slice الحالي أثبت **compilation وsource-unit preservation وmanifest وno-findings** فقط. لم يثبت بعد semantic detection عبر imported source أو انتقال finding من source unit مستورد إلى detector ثم Comparator. لذلك لا تُعدّ multi-file semantic analysis محلولة في هذه الوثيقة؛ بل تُعرّف كـproduction gate لاحق.[1]
+يجب تسجيل حد مهم بوضوح: الـmulti-file slice الأساسي أثبت **compilation وsource-unit preservation وmanifest وno-findings** فقط. وقد أُغلق الآن Gate 1 داخل isolated POC بإضافة fixture فيها vulnerability داخل `Lib.sol` المستوردة: detector finding أصبح source-scoped إلى `Lib.sol`، وfinding provenance حمل `source_id = Lib.sol` وsource range، والـunchanged Comparator أكد evidence من `Lib.sol`. هذا يثبت Gate 1 ضمن نطاق الـPOC، لكنه لا يثبت بعد production orchestration أو imported-source semantic analysis لعائلات متعددة أو artifact retention بعد process boundary. لذلك تبقى Gate 2 وGate 3 مفتوحتين.[1]
 
 ---
 
@@ -495,7 +495,9 @@ Rollback أو Comparator لا يجوز أن يحول أي failure state إلى `
 | Structural completeness | source units/contracts/function-like nodes/modifiers/ranges/unknown nodes تتحقق AST-native. |
 | Status semantics | الحالات الثماني تظهر end-to-end ولا يتحول failure إلى no findings. |
 | Provenance | finding يعيد trace إلى canonical expression وsource manifest وraw AST/compiler artifact. |
-| Imported semantic detection | finding من imported source يعود إلى imported `source_id` وrange ويمر عبر Comparator boundary. هذا gate **غير مثبت بعد**. |
+| Imported semantic detection | **Passed داخل isolated POC**: finding من `Lib.sol` يعود إلى `source_id = Lib.sol` وraw-AST range `109:12:0`، والـComparator يؤكد evidence في `Lib.sol` line 5. Production orchestration والعائلات المتعددة ما زالت خارج الإثبات. |
+| Compiler resolution policy | **Passed داخل isolated validation**: explicit/verified versions، ambiguity، pragma conflict، unavailable compiler، no-pragma، وcompilation failure لها حالات قابلة للتفسير؛ production resolver لم يُنفذ. |
+| Provenance/raw-AST retention contract | **Passed داخل isolated validation**: source/raw-AST/canonical/finding artifacts persisted content-addressed مع replay وtamper verification؛ production storage lifecycle لم يُنفذ. |
 | Detector migration | detector production واحد على الأقل يعمل عبر `DetectorInput` في shadow mode مع parity evidence. |
 | Comparator policy | evidence identity وhistorical rejection policy موثقتان دون patch غير مبرر. |
 | Rollout safety | feature flag وrollback path وfailure visibility مثبتة. |
@@ -503,9 +505,22 @@ Rollback أو Comparator لا يجوز أن يحول أي failure state إلى `
 
 ---
 
-## 17. قرار الوثيقة
+## 17. Gate status بعد Adopt المعماري
 
-هذه الوثيقة تنقل المشروع من Revised POC إلى **Production Architecture Proposal** فقط. وهي لا تعني Adopt ولا تبدأ implementation. القرار المقترح للمراجعة هو:
+| Gate | الحالة | الملاحظة |
+|---|---|---|
+| Gate 1 — Imported-source semantic detection | **Passed داخل POC** | `Main.sol → Lib.sol`، vulnerability داخل `Lib.sol`، finding وprovenance وComparator evidence تعود إلى `Lib.sol`. |
+| Gate 2 — Production compiler-resolution policy | **Passed as isolated policy validation** | Matrix أثبت explicit/verified selection، ambiguity، pragma conflict، unavailable compiler، no-pragma policy، compilation failure، وno silent fallback. Production resolver implementation ما زالت خارج النطاق. |
+| Gate 3 — Provenance/raw-AST contract | **Passed as isolated contract/evidence** | Retention contract يحفظ source/raw AST/canonical summary/finding provenance ويثبت replay وtamper detection. Production artifact store وoperational lifecycle ما زالا خارج النطاق. |
+| Stage 1 production implementation | **Not started** | لا production code changes قبل إغلاق Gate 2 وGate 3 ومراجعة مستقلة. |
+
+التفصيل الكامل للبوابات موجود في [`GATE1_IMPORTED_SOURCE_REPORT.md`](GATE1_IMPORTED_SOURCE_REPORT.md)، [`GATE2_COMPILER_RESOLUTION_REPORT.md`](GATE2_COMPILER_RESOLUTION_REPORT.md)، [`GATE3_PROVENANCE_RETENTION_REPORT.md`](GATE3_PROVENANCE_RETENTION_REPORT.md)، والـmachine-readable artifacts في `metadata/`.
+
+## 18. قرار الوثيقة
+
+هذه الوثيقة تمثل **Adopt على مستوى المعمارية** وفق القرار المستقل، مع إبقاء production implementation gated. Gate 1 أُغلق داخل isolated POC، وGate 2 وGate 3 اجتازا validation/contract داخل المسار المعزول. لذلك لا تبدأ Stage 1 implementation قبل مراجعة مستقلة لمخرجاتهما، وقبل اعتماد operational details الخاصة بالـproduction resolver والـartifact store.
+
+القرار التشغيلي المقترح للمراجعة هو:
 
 | القرار | معنى القرار |
 |---|---|
@@ -513,7 +528,7 @@ Rollback أو Comparator لا يجوز أن يحول أي failure state إلى `
 | **Revise** | بقاء الفكرة صالحة، لكن تعديل resolver أو Canonical Contract أو provenance أو multi-file policy قبل أي implementation. |
 | **Reject** | رفض abstraction إذا اتضح أن fields أو adapters تتحول إلى AST ثانية ضخمة أو لا يمكنها الحفاظ على failure/evidence semantics. |
 
-الاقتراح الحالي هو **فتح مراجعة القرار فقط**، وليس تسجيل Adopt مسبقًا. وبالأخص، لا تزال imported-source semantic detection وproduction compiler candidate policy وraw-AST retention implementation مسائل تحتاج قرارًا تفصيليًا.
+الاقتراح الحالي هو **فتح مراجعة القرار فقط**، وليس تسجيل Adopt مسبقًا. وبالأخص، لا تزال production compiler resolver implementation وartifact-store backend وaccess-control/encryption/deletion workflow وFinding schema migration مسائل تحتاج قرارًا تفصيليًا قبل Stage 1.
 
 ---
 

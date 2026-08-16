@@ -81,23 +81,32 @@ This is not a complete compiler resolver. It intentionally does not implement ve
 |---|---|
 | `metadata/revised_poc_results.json` | Revised POC output with all cases, statuses, multi-file manifest, and provenance. |
 | `metadata/poc_results.json` | Preserved initial v1 POC output from commit `f1418a4`. |
-| `tests/test_architecture_poc.py` | Twelve regression tests covering the original contract and revised gates. |
+| `tests/test_architecture_poc.py` | Thirteen regression tests covering the original contract, revised gates, and imported-source attribution. |
 | `fixtures/negative_0_4_10.sol` | Historical context, identifier, call-shape, string, and comment negative controls. |
 | `fixtures/negative_0_8_25.sol` | Modern equivalent negative controls. |
+| `fixtures/imported_lib_0_8_25.sol` and `fixtures/imported_main_0_8_25.sol` | Gate 1 imported-source semantic fixture. |
+| `metadata/gate1_imported_source_results.json` | Gate 1 machine-readable finding/provenance/Comparator trace. |
+| `../architecture_boundary/GATE1_IMPORTED_SOURCE_REPORT.md` | Gate 1 scope and evidence report. |
 
 ## Validation
 
 | Command | Result |
 |---|---|
 | `PYTHONPATH=. python3 -m benchmarks.historical_compatibility.canonical_ast_poc.run_poc` | Passed; wrote the revised machine-readable result before preserving it as `revised_poc_results.json`. |
-| `PYTHONPATH=. pytest -q tests/test_architecture_poc.py` | **12 passed**. |
+| `PYTHONPATH=. pytest -q tests/test_architecture_poc.py` | **13 passed** after the Gate 1 imported-source extension. |
 | Production analyzer and Comparator diff | None. |
 | Primary benchmark | Not modified. |
 | Real-World track | Nomad, BonqDAO, and Parity remain Quarantined; no Case #4. |
 
+## Gate 1 extension
+
+The imported-source extension compiles `Main.sol` importing `Lib.sol`, where the vulnerability exists only in `Lib.sol`. A source-scoped `DetectorInput` analyzes `Lib.sol`, produces one `Selfdestruct` finding with `source_id = Lib.sol`, carries a canonical source range and expression ID beginning with `Lib.sol:`, and sends `Lib.sol` text to the unchanged Comparator. The Comparator returns `Confirmed` with `selfdestruct` evidence at `line 5`. Running the same detector against `Main.sol` returns `AnalysisSucceededNoFindings`.
+
+This closes Gate 1 within the isolated POC. It does not close Production compiler resolution or production provenance/raw-AST retention policy, and it does not authorize Stage 1 implementation.
+
 ## Next gate
 
-The revised POC is strong enough to begin a **Production Architecture Proposal**, not production implementation. That proposal must specify the real multi-file compiler resolver, production provenance retention, detector migration strategy, Comparator identity/versioning, and rollout/rollback boundaries. The current work remains local until independently reviewed; no commit or push is part of this revised stage.
+Gate 1 is now passed within the isolated POC. The next gates are the production compiler-resolution policy and the production provenance/raw-AST retention policy. Stage 1 implementation remains blocked until those gates are defined, tested, and independently reviewed; no production code or Comparator change is part of this extension.
 
 ## References
 

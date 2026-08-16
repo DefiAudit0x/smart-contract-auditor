@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "document_type": "ProductionArchitectureProposal",
-  "decision_status": "Pending independent architecture decision",
+  "decision_status": "Adopted architecture; production implementation gated",
   "proposal_scope": {
     "production_implementation": false,
     "production_code_changes": [],
@@ -15,7 +15,7 @@
     "revised_poc_gates_passed_within_scope": true,
     "tested_compiler_versions": ["0.4.10", "0.8.25"],
     "tested_semantic_families": ["Selfdestruct", "block.timestamp", "DELEGATECALL"],
-    "full_regression_tests": 334,
+    "full_regression_tests": 344,
     "warnings": 70,
     "primary_metrics": {
       "precision": 1.0,
@@ -25,11 +25,18 @@
   },
   "explicit_boundary": {
     "multi_file_compilation_and_source_unit_preservation": true,
-    "multi_file_imported_source_semantic_detection": false,
-    "multi_file_imported_source_comparator_trace": false,
+    "multi_file_imported_source_semantic_detection": true,
+    "multi_file_imported_source_comparator_trace": true,
+    "imported_source_gate_scope": "isolated POC only; Lib.sol finding and Comparator evidence traced to Lib.sol",
     "production_detector_migration": false,
     "production_compiler_candidate_resolution": false,
-    "production_raw_ast_retention_policy_implemented": false
+    "production_raw_ast_retention_policy_implemented": false,
+    "gate2_policy_validation": true,
+    "gate3_contract_validation": true,
+    "gate3_tamper_matrix_validation": true,
+    "gate3_finding_level_provenance_validation": true,
+    "gate3_failure_provenance_validation": true,
+    "gate3_full_regression_passed": 344
   },
   "proposed_components": [
     "SourceManifest",
@@ -81,5 +88,18 @@
     {"solidity_family": "0.8.25", "ast_schema": "modern compact/standard-json", "poc_tested": true, "production_supported": "TBD"},
     {"solidity_family": "other 0.8.x", "ast_schema": "candidate-specific", "poc_tested": false, "production_supported": "TBD"}
   ],
-  "next_action": "Independent review of this proposal; no commit or push included"
+  "gate_status": {
+    "gate_1_imported_source_semantic_detection": {
+      "status": "Passed within isolated POC",
+      "vulnerability_source_id": "Lib.sol",
+      "finding_source_id": "Lib.sol",
+      "raw_ast_source_range": "109:12:0",
+      "comparator_status": "Confirmed",
+      "comparator_evidence_location": "line 5"
+    },
+    "gate_2_production_compiler_resolution": "Passed within isolated policy validation; production resolver not implemented",
+    "gate_3_production_provenance_raw_ast_policy": "Passed within isolated contract/evidence; v2 tamper matrix and finding-level provenance verified; production artifact store not implemented",
+    "stage_1_production_implementation": "Not started"
+  },
+  "next_action": "Independent final review of Gate 1/2/3 evidence, then explicit user decision before Stage 1; no production implementation in this change"
 }

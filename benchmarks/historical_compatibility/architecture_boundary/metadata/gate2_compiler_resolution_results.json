@@ -1,0 +1,555 @@
+{
+  "gate": "Gate2",
+  "no_compiler_guess": true,
+  "no_silent_fallback": true,
+  "policy_version": "gate2-policy-v1",
+  "production_resolver_changed": false,
+  "results": [
+    {
+      "case": "single_file_0_8_x_explicit",
+      "kind": "resolution",
+      "request": {
+        "allow_highest_compatible": false,
+        "entry_source_id": "Main.sol",
+        "explicit_version": "0.8.25",
+        "sources": {
+          "Main.sol": "pragma solidity ^0.8.25; contract Main {}"
+        },
+        "verified_version": ""
+      },
+      "result": {
+        "candidates_considered": [
+          "0.4.10",
+          "0.6.12",
+          "0.8.24",
+          "0.8.25",
+          "0.8.26"
+        ],
+        "compatible_candidates": [
+          "0.8.25"
+        ],
+        "constraints_by_source": {
+          "Main.sol": [
+            "^0.8.25"
+          ]
+        },
+        "diagnostics": [],
+        "policy_version": "gate2-policy-v1",
+        "request_source_set_sha256": "6257dff0d359619ceb2fa7e02981dc5099904016ee643ebdbe9bd41e5269d9ef",
+        "selected": {
+          "available": true,
+          "binary_hash": "modern-binary-hash",
+          "binary_path": "/home/ubuntu/.solcx/solc-v0.8.25",
+          "build": "",
+          "support_status": "registered",
+          "version": "0.8.25"
+        },
+        "selection_reason": "explicit-version",
+        "status": "Resolved"
+      }
+    },
+    {
+      "case": "single_file_0_4_x_explicit",
+      "kind": "resolution",
+      "request": {
+        "allow_highest_compatible": false,
+        "entry_source_id": "Legacy.sol",
+        "explicit_version": "0.4.10",
+        "sources": {
+          "Legacy.sol": "pragma solidity ^0.4.10; contract Legacy {}"
+        },
+        "verified_version": ""
+      },
+      "result": {
+        "candidates_considered": [
+          "0.4.10",
+          "0.6.12",
+          "0.8.24",
+          "0.8.25",
+          "0.8.26"
+        ],
+        "compatible_candidates": [
+          "0.4.10"
+        ],
+        "constraints_by_source": {
+          "Legacy.sol": [
+            "^0.4.10"
+          ]
+        },
+        "diagnostics": [],
+        "policy_version": "gate2-policy-v1",
+        "request_source_set_sha256": "8ca78fb70a25ba0d5d6097b160fc6955184df0afe032cde656cf47c7fa29eb25",
+        "selected": {
+          "available": true,
+          "binary_hash": "legacy-binary-hash",
+          "binary_path": "/home/ubuntu/.solcx/solc-v0.4.10",
+          "build": "",
+          "support_status": "registered",
+          "version": "0.4.10"
+        },
+        "selection_reason": "explicit-version",
+        "status": "Resolved"
+      }
+    },
+    {
+      "case": "two_files_same_pragma",
+      "kind": "resolution",
+      "request": {
+        "allow_highest_compatible": false,
+        "entry_source_id": "A.sol",
+        "explicit_version": "",
+        "sources": {
+          "A.sol": "pragma solidity ^0.8.25; contract A {}",
+          "B.sol": "pragma solidity ^0.8.25; contract B {}"
+        },
+        "verified_version": "0.8.25"
+      },
+      "result": {
+        "candidates_considered": [
+          "0.4.10",
+          "0.6.12",
+          "0.8.24",
+          "0.8.25",
+          "0.8.26"
+        ],
+        "compatible_candidates": [
+          "0.8.25"
+        ],
+        "constraints_by_source": {
+          "A.sol": [
+            "^0.8.25"
+          ],
+          "B.sol": [
+            "^0.8.25"
+          ]
+        },
+        "diagnostics": [],
+        "policy_version": "gate2-policy-v1",
+        "request_source_set_sha256": "a03caf9bf029a4dac4cbb5c15ce43c2ae62fc911810cc749c8a4e04747029282",
+        "selected": {
+          "available": true,
+          "binary_hash": "modern-binary-hash",
+          "binary_path": "/home/ubuntu/.solcx/solc-v0.8.25",
+          "build": "",
+          "support_status": "registered",
+          "version": "0.8.25"
+        },
+        "selection_reason": "verified-version",
+        "status": "Resolved"
+      }
+    },
+    {
+      "case": "partially_compatible_explicit_highest_policy",
+      "kind": "resolution",
+      "request": {
+        "allow_highest_compatible": true,
+        "entry_source_id": "A.sol",
+        "explicit_version": "",
+        "sources": {
+          "A.sol": "pragma solidity >=0.8.0 <0.8.27; contract A {}"
+        },
+        "verified_version": ""
+      },
+      "result": {
+        "candidates_considered": [
+          "0.4.10",
+          "0.6.12",
+          "0.8.24",
+          "0.8.25",
+          "0.8.26"
+        ],
+        "compatible_candidates": [
+          "0.8.24",
+          "0.8.25",
+          "0.8.26"
+        ],
+        "constraints_by_source": {
+          "A.sol": [
+            ">=0.8.0 <0.8.27"
+          ]
+        },
+        "diagnostics": [
+          "Multiple compatible candidates resolved by explicit highest-compatible policy"
+        ],
+        "policy_version": "gate2-policy-v1",
+        "request_source_set_sha256": "33c1b5c42600272284a4d9c6a52d18b392aab6e63aca126b48d550bfa0c66f07",
+        "selected": {
+          "available": true,
+          "binary_hash": "candidate-0.8.26",
+          "binary_path": "/poc/solc-v0.8.26",
+          "build": "",
+          "support_status": "registered",
+          "version": "0.8.26"
+        },
+        "selection_reason": "highest-compatible-explicit-policy",
+        "status": "Resolved"
+      }
+    },
+    {
+      "case": "partially_compatible_without_explicit_policy",
+      "kind": "resolution",
+      "request": {
+        "allow_highest_compatible": false,
+        "entry_source_id": "A.sol",
+        "explicit_version": "",
+        "sources": {
+          "A.sol": "pragma solidity >=0.8.0 <0.8.27; contract A {}"
+        },
+        "verified_version": ""
+      },
+      "result": {
+        "candidates_considered": [
+          "0.4.10",
+          "0.6.12",
+          "0.8.24",
+          "0.8.25",
+          "0.8.26"
+        ],
+        "compatible_candidates": [
+          "0.8.24",
+          "0.8.25",
+          "0.8.26"
+        ],
+        "constraints_by_source": {
+          "A.sol": [
+            ">=0.8.0 <0.8.27"
+          ]
+        },
+        "diagnostics": [
+          "Multiple compatible candidates exist; no implicit compiler guess is allowed"
+        ],
+        "policy_version": "gate2-policy-v1",
+        "request_source_set_sha256": "33c1b5c42600272284a4d9c6a52d18b392aab6e63aca126b48d550bfa0c66f07",
+        "selected": null,
+        "selection_reason": "multiple-compatible-candidates-require-explicit-policy",
+        "status": "AmbiguousCandidates"
+      }
+    },
+    {
+      "case": "conflicting_pragmas",
+      "kind": "resolution",
+      "request": {
+        "allow_highest_compatible": false,
+        "entry_source_id": "A.sol",
+        "explicit_version": "",
+        "sources": {
+          "A.sol": "pragma solidity ^0.8.25; contract A {}",
+          "B.sol": "pragma solidity ^0.4.10; contract B {}"
+        },
+        "verified_version": ""
+      },
+      "result": {
+        "candidates_considered": [
+          "0.4.10",
+          "0.6.12",
+          "0.8.24",
+          "0.8.25",
+          "0.8.26"
+        ],
+        "compatible_candidates": [],
+        "constraints_by_source": {
+          "A.sol": [
+            "^0.8.25"
+          ],
+          "B.sol": [
+            "^0.4.10"
+          ]
+        },
+        "diagnostics": [
+          "No available compiler candidate satisfies every source pragma"
+        ],
+        "policy_version": "gate2-policy-v1",
+        "request_source_set_sha256": "441cb27d3aacf2f177744400563c3b32169efc16e5f90b7acb9fcf970bb50fc3",
+        "selected": null,
+        "selection_reason": "no-compatible-candidate",
+        "status": "PragmaConflict"
+      }
+    },
+    {
+      "case": "compiler_not_available",
+      "kind": "resolution",
+      "request": {
+        "allow_highest_compatible": false,
+        "entry_source_id": "Legacy.sol",
+        "explicit_version": "0.6.12",
+        "sources": {
+          "Legacy.sol": "pragma solidity ^0.6.12; contract Legacy {}"
+        },
+        "verified_version": ""
+      },
+      "result": {
+        "candidates_considered": [
+          "0.4.10",
+          "0.6.12",
+          "0.8.24",
+          "0.8.25",
+          "0.8.26"
+        ],
+        "compatible_candidates": [],
+        "constraints_by_source": {
+          "Legacy.sol": [
+            "^0.6.12"
+          ]
+        },
+        "diagnostics": [
+          "Requested compiler 0.6.12 is not available in the registered candidate set"
+        ],
+        "policy_version": "gate2-policy-v1",
+        "request_source_set_sha256": "cd574d0de9a99696029e4fd2e2fb5010e183d958fef73827d60a5e91b089bcd4",
+        "selected": null,
+        "selection_reason": "explicit-or-verified-version-unavailable",
+        "status": "UnsupportedCompiler"
+      }
+    },
+    {
+      "case": "no_pragma_requires_policy",
+      "kind": "resolution",
+      "request": {
+        "allow_highest_compatible": false,
+        "entry_source_id": "NoPragma.sol",
+        "explicit_version": "",
+        "sources": {
+          "NoPragma.sol": "contract NoPragma {}"
+        },
+        "verified_version": ""
+      },
+      "result": {
+        "candidates_considered": [
+          "0.4.10",
+          "0.6.12",
+          "0.8.24",
+          "0.8.25",
+          "0.8.26"
+        ],
+        "compatible_candidates": [],
+        "constraints_by_source": {
+          "NoPragma.sol": []
+        },
+        "diagnostics": [
+          "No explicit/verified compiler and no Solidity pragma constraints were provided"
+        ],
+        "policy_version": "gate2-policy-v1",
+        "request_source_set_sha256": "a2402f01210382dcdb2ffa641c90c5984d64bbe7915cbe8db034039c2e1b8322",
+        "selected": null,
+        "selection_reason": "no-pragma-requires-explicit-configuration",
+        "status": "NoPragmaPolicy"
+      }
+    },
+    {
+      "case": "explicit_version_violates_pragma",
+      "kind": "resolution",
+      "request": {
+        "allow_highest_compatible": false,
+        "entry_source_id": "Main.sol",
+        "explicit_version": "0.4.10",
+        "sources": {
+          "Main.sol": "pragma solidity ^0.8.25; contract Main {}"
+        },
+        "verified_version": ""
+      },
+      "result": {
+        "candidates_considered": [
+          "0.4.10",
+          "0.6.12",
+          "0.8.24",
+          "0.8.25",
+          "0.8.26"
+        ],
+        "compatible_candidates": [],
+        "constraints_by_source": {
+          "Main.sol": [
+            "^0.8.25"
+          ]
+        },
+        "diagnostics": [
+          "Requested compiler 0.4.10 violates at least one source pragma"
+        ],
+        "policy_version": "gate2-policy-v1",
+        "request_source_set_sha256": "6257dff0d359619ceb2fa7e02981dc5099904016ee643ebdbe9bd41e5269d9ef",
+        "selected": null,
+        "selection_reason": "explicit-or-verified-version-rejected-by-pragma",
+        "status": "PragmaConflict"
+      }
+    },
+    {
+      "case": "verified_explicit_conflict",
+      "kind": "resolution",
+      "request": {
+        "allow_highest_compatible": false,
+        "entry_source_id": "Main.sol",
+        "explicit_version": "0.8.26",
+        "sources": {
+          "Main.sol": "pragma solidity ^0.8.25; contract Main {}"
+        },
+        "verified_version": "0.8.25"
+      },
+      "result": {
+        "candidates_considered": [
+          "0.4.10",
+          "0.6.12",
+          "0.8.24",
+          "0.8.25",
+          "0.8.26"
+        ],
+        "compatible_candidates": [],
+        "constraints_by_source": {
+          "Main.sol": [
+            "^0.8.25"
+          ]
+        },
+        "diagnostics": [
+          "Explicit compiler 0.8.26 conflicts with verified compiler 0.8.25; no precedence is applied"
+        ],
+        "policy_version": "gate2-policy-v1",
+        "request_source_set_sha256": "6257dff0d359619ceb2fa7e02981dc5099904016ee643ebdbe9bd41e5269d9ef",
+        "selected": null,
+        "selection_reason": "explicit-verified-conflict",
+        "status": "VersionConflict"
+      }
+    },
+    {
+      "case": "verified_explicit_agreement",
+      "kind": "resolution",
+      "request": {
+        "allow_highest_compatible": false,
+        "entry_source_id": "Main.sol",
+        "explicit_version": "0.8.25",
+        "sources": {
+          "Main.sol": "pragma solidity ^0.8.25; contract Main {}"
+        },
+        "verified_version": "0.8.25"
+      },
+      "result": {
+        "candidates_considered": [
+          "0.4.10",
+          "0.6.12",
+          "0.8.24",
+          "0.8.25",
+          "0.8.26"
+        ],
+        "compatible_candidates": [
+          "0.8.25"
+        ],
+        "constraints_by_source": {
+          "Main.sol": [
+            "^0.8.25"
+          ]
+        },
+        "diagnostics": [],
+        "policy_version": "gate2-policy-v1",
+        "request_source_set_sha256": "6257dff0d359619ceb2fa7e02981dc5099904016ee643ebdbe9bd41e5269d9ef",
+        "selected": {
+          "available": true,
+          "binary_hash": "modern-binary-hash",
+          "binary_path": "/home/ubuntu/.solcx/solc-v0.8.25",
+          "build": "",
+          "support_status": "registered",
+          "version": "0.8.25"
+        },
+        "selection_reason": "explicit-and-verified-agree",
+        "status": "Resolved"
+      }
+    },
+    {
+      "case": "multi_file_same_pragma",
+      "compilation": {
+        "source_manifest": [
+          {
+            "source_id": "Lib.sol",
+            "source_sha256": "badce4b4a137f079306abb13892e549e01fd2a89321099f71aec5a759c1d6801"
+          },
+          {
+            "source_id": "Main.sol",
+            "source_sha256": "3f5b05e25834c26455360900a565b3627bafafc6bfca3d3e0a5c08f5f1388b12"
+          }
+        ],
+        "source_units": [
+          "Lib.sol",
+          "Main.sol"
+        ],
+        "status": "Compiled"
+      },
+      "kind": "resolution_then_compilation",
+      "resolution": {
+        "candidates_considered": [
+          "0.4.10",
+          "0.6.12",
+          "0.8.24",
+          "0.8.25",
+          "0.8.26"
+        ],
+        "compatible_candidates": [
+          "0.8.25"
+        ],
+        "constraints_by_source": {
+          "Lib.sol": [
+            "^0.8.25"
+          ],
+          "Main.sol": [
+            "^0.8.25"
+          ]
+        },
+        "diagnostics": [],
+        "policy_version": "gate2-policy-v1",
+        "request_source_set_sha256": "57b407d8d57281746347b6eaf802338e07f9e76aaca59e0169ea293510e5cacd",
+        "selected": {
+          "available": true,
+          "binary_hash": "modern-binary-hash",
+          "binary_path": "/home/ubuntu/.solcx/solc-v0.8.25",
+          "build": "",
+          "support_status": "registered",
+          "version": "0.8.25"
+        },
+        "selection_reason": "verified-version",
+        "status": "Resolved"
+      }
+    },
+    {
+      "case": "compiler_available_compilation_fails",
+      "compilation": {
+        "compiler_hash": "c42aada7a52057ddbed93ec011235e256c564c440b68dbaac5ae482babbb3d6d",
+        "compiler_version": "0.8.25",
+        "diagnostics": [
+          "Error: Expected identifier but got '{'",
+          " --> <stdin>:1:53:",
+          "  |",
+          "1 | pragma solidity ^0.8.25; contract Broken { function { } }",
+          "  |                                                     ^"
+        ],
+        "status": "CompilationFailed"
+      },
+      "kind": "resolution_then_compilation",
+      "resolution": {
+        "candidates_considered": [
+          "0.4.10",
+          "0.6.12",
+          "0.8.24",
+          "0.8.25",
+          "0.8.26"
+        ],
+        "compatible_candidates": [
+          "0.8.25"
+        ],
+        "constraints_by_source": {
+          "Broken.sol": [
+            "^0.8.25"
+          ]
+        },
+        "diagnostics": [],
+        "policy_version": "gate2-policy-v1",
+        "request_source_set_sha256": "e3e8fda4032f3db3f78442f3126ba83cf65ea22ebe5d0b8b9c946a999320c8bb",
+        "selected": {
+          "available": true,
+          "binary_hash": "modern-binary-hash",
+          "binary_path": "/home/ubuntu/.solcx/solc-v0.8.25",
+          "build": "",
+          "support_status": "registered",
+          "version": "0.8.25"
+        },
+        "selection_reason": "explicit-version",
+        "status": "Resolved"
+      }
+    }
+  ],
+  "schema_version": 1
+}

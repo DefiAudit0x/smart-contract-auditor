@@ -64,8 +64,15 @@ def _canonical_semantics(program: Any) -> dict[str, dict[str, Any]]:
     return semantics
 
 
-def _run_family(program: Any, family: str, source: str, source_id: str, filename: str) -> dict[str, Any]:
-    detector_input = make_detector_input(program, source_id, source)
+def _run_family(
+    program: Any,
+    family: str,
+    source: str,
+    source_id: str,
+    filename: str,
+    source_texts: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    detector_input = make_detector_input(program, source_id, source, source_texts)
     return run_detector(detector_input, family, filename)
 
 
@@ -214,6 +221,64 @@ def _multi_file_case() -> dict[str, Any]:
     }
 
 
+def _imported_source_semantic_case() -> dict[str, Any]:
+    sources = {
+        "Lib.sol": (FIXTURE_ROOT / "imported_lib_0_8_25.sol").read_text(encoding="utf-8"),
+        "Main.sol": (FIXTURE_ROOT / "imported_main_0_8_25.sol").read_text(encoding="utf-8"),
+    }
+    compiled = compile_sources(sources, "0.8.25", "Main.sol")
+    assert compiled.status == AnalysisStatus.COMPILED, compiled.diagnostics
+    program, metadata = adapt_modern(compiled)
+    assert program is not None, metadata
+    assert metadata["status"] == "CanonicalASTReady"
+    assert [unit.source_id for unit in program.source_units] == ["Lib.sol", "Main.sol"]
+
+    imported_detector = _run_family(
+        program,
+        "Selfdestruct",
+        sources["Lib.sol"],
+        "Lib.sol",
+        "Lib.sol",
+        sources,
+    )
+    assert imported_detector["status"] == AnalysisStatus.ANALYSIS_SUCCEEDED_WITH_FINDINGS.value
+    assert imported_detector["finding_count"] == 1
+    assert imported_detector["analyzed_source_id"] == "Lib.sol"
+    assert imported_detector["findings"][0]["file"] == "Lib.sol"
+    assert imported_detector["finding_provenance"][0]["source_id"] == "Lib.sol"
+    assert imported_detector["finding_provenance"][0]["source_range"]
+    assert imported_detector["finding_provenance"][0]["canonical_expression_id"].startswith("Lib.sol:")
+    assert imported_detector["comparator_results"][0]["status"].value == "Confirmed"
+    assert imported_detector["comparator_results"][0]["evidence"]
+    assert imported_detector["comparator_results"][0]["evidence"][0]["kind"] == "selfdestruct"
+    assert imported_detector["comparator_results"][0]["evidence"][0]["location"].startswith("line ")
+
+    entry_detector = _run_family(
+        program,
+        "Selfdestruct",
+        sources["Main.sol"],
+        "Main.sol",
+        "Main.sol",
+        sources,
+    )
+    assert entry_detector["status"] == AnalysisStatus.ANALYSIS_SUCCEEDED_NO_FINDINGS.value
+    assert entry_detector["finding_count"] == 0
+
+    return {
+        "case": "multi_file_imported_semantic_detection",
+        "track": "Compatibility",
+        "compiler_status": compiled.status.value,
+        "adapter_status": metadata["status"],
+        "vulnerability_source_id": "Lib.sol",
+        "entry_source_id": "Main.sol",
+        "imported_detector": imported_detector,
+        "entry_detector": entry_detector,
+        "source_units": [unit.source_id for unit in program.source_units],
+        "source_manifest": [entry.__dict__ for entry in program.provenance.source_manifest],
+        "pragma_constraints": compiled.raw_ast["pragma_constraints"],
+    }
+
+
 def main() -> int:
     results: list[dict[str, Any]] = []
     for case_name, version, filename, vulnerable in CASES:
@@ -222,6 +287,7 @@ def main() -> int:
     results.append(_invalid_ast_case())
     results.extend(_failure_state_cases())
     results.append(_multi_file_case())
+    results.append(_imported_source_semantic_case())
 
     payload = {
         "schema_version": 2,
@@ -234,6 +300,7 @@ def main() -> int:
             "status_bearing_results": True,
             "provenance_propagation": True,
             "multi_file_slice": True,
+            "imported_source_semantic_detection": True,
             "primary_benchmark_changed": False,
             "real_world_adjudications_changed": False,
             "comparator_changed": False,
