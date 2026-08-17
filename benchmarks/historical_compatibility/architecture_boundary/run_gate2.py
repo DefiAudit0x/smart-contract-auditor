@@ -42,22 +42,44 @@ def _resolution_case(name: str, request: CompilerResolutionRequest) -> dict[str,
     }
 
 
+def _compile_after_resolution(
+    request: CompilerResolutionRequest,
+    resolution,
+):
+    """Compile only with the compiler selected by the resolution result."""
+    assert resolution.status == ResolutionStatus.RESOLVED
+    assert resolution.selected is not None
+    version = resolution.selected.version
+    if len(request.sources) == 1:
+        source = request.sources[request.entry_source_id]
+        compiled = compile_source(source, version, request.entry_source_id)
+    else:
+        compiled = compile_sources(request.sources, version, request.entry_source_id)
+    if compiled.provenance is not None:
+        assert compiled.provenance.compiler_version == version
+    return compiled
+
+
 def _compile_failure_case() -> dict[str, object]:
     source = "pragma solidity ^0.8.25; contract Broken { function { } }"
     request = CompilerResolutionRequest({"Broken.sol": source}, "Broken.sol", explicit_version="0.8.25")
     resolution = resolve_compiler(request, CANDIDATES)
-    compiled = compile_source(source, "0.8.25", "Broken.sol")
-    assert resolution.status == ResolutionStatus.RESOLVED
+    compiled = _compile_after_resolution(request, resolution)
     assert compiled.status.value == "CompilationFailed"
+    assert compiled.raw_ast is None
+    assert compiled.provenance is not None
+    assert compiled.provenance.compiler_version == resolution.selected.version
     return {
         "case": "compiler_available_compilation_fails",
         "kind": "resolution_then_compilation",
         "resolution": resolution.to_dict(),
         "compilation": {
             "status": compiled.status.value,
+            "raw_ast_present": compiled.raw_ast is not None,
             "diagnostics": list(compiled.diagnostics),
-            "compiler_version": compiled.provenance.compiler_version if compiled.provenance else "",
-            "compiler_hash": compiled.provenance.compiler_binary_hash if compiled.provenance else "",
+            "compiler_version": compiled.provenance.compiler_version,
+            "compiler_hash": compiled.provenance.compiler_binary_hash,
+            "bound_to_selected_version": compiled.provenance.compiler_version == resolution.selected.version,
         },
     }
 
@@ -69,15 +91,20 @@ def _multi_file_success_case() -> dict[str, object]:
     }
     request = CompilerResolutionRequest(sources, "Main.sol", verified_version="0.8.25")
     resolution = resolve_compiler(request, CANDIDATES)
-    compiled = compile_sources(sources, "0.8.25", "Main.sol")
-    assert resolution.status == ResolutionStatus.RESOLVED
+    compiled = _compile_after_resolution(request, resolution)
     assert compiled.status.value == "Compiled"
+    assert compiled.provenance is not None
+    assert compiled.provenance.compiler_version == resolution.selected.version
+    assert sorted(compiled.raw_ast["source_units"]) == ["Lib.sol", "Main.sol"]
     return {
         "case": "multi_file_same_pragma",
         "kind": "resolution_then_compilation",
         "resolution": resolution.to_dict(),
         "compilation": {
             "status": compiled.status.value,
+            "compiler_version": compiled.provenance.compiler_version,
+            "selected_version": resolution.selected.version,
+            "bound_to_selected_version": compiled.provenance.compiler_version == resolution.selected.version,
             "source_units": sorted(compiled.raw_ast["source_units"]),
             "source_manifest": [entry.__dict__ for entry in compiled.provenance.source_manifest],
         },
@@ -166,11 +193,13 @@ def main() -> int:
         _compile_failure_case(),
     ]
     payload = {
-        "schema_version": 1,
+        "schema_version": 2,
         "gate": "Gate2",
         "policy_version": "gate2-policy-v1",
         "no_compiler_guess": True,
         "no_silent_fallback": True,
+        "resolution_compilation_binding": True,
+        "compilation_failure_raw_ast_forbidden": True,
         "production_resolver_changed": False,
         "results": results,
     }

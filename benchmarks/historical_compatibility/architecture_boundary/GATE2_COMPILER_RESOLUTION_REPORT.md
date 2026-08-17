@@ -33,8 +33,33 @@
 | Explicit `0.4.10` مع pragma `^0.8.25` | `PragmaConflict` | explicit version لا يتجاوز source constraints، و`compatible_candidates` فارغة. |
 | Explicit `0.8.26` مع verified `0.8.25` وpragma `^0.8.25` | `VersionConflict` | لا precedence صامتة؛ selected = null وdiagnostic يشرح التعارض. |
 | Explicit وverified كلاهما `0.8.25` | `Resolved` | اتفاق موثق عبر `explicit-and-verified-agree`. |
-| Compiler `0.8.25` متوفر لكن source malformed | resolution `Resolved` ثم compilation `CompilationFailed` | compilation failure طبقة مستقلة، ولا تتحول إلى no findings. |
-| Multi-file `Main.sol → Lib.sol` بنفس pragma | `Resolved` ثم `Compiled` | source manifest and AST source units preserved. |
+| Compiler `0.8.25` متوفر لكن source malformed | resolution `Resolved` ثم compilation `CompilationFailed` | compiler المستخدم هو نفسه `resolution.selected.version`، و`raw_ast` يبقى `None`. |
+| Multi-file `Main.sol → Lib.sol` بنفس pragma | `Resolved` ثم `Compiled` | compiler المستخدم هو نفسه `resolution.selected.version`، وsource manifest وAST source units preserved. |
+
+## Resolution → compilation binding
+
+النسخة السابقة من هذا runner كانت تحسب `resolution` ثم تستدعي compiler بإصدار hardcoded في fixtures. تم إغلاق هذه الفجوة داخل الـPOC: `_compile_after_resolution()` لا يقبل compilation إلا بعد `Resolved` مع `selected`، ويأخذ `resolution.selected.version` مباشرةً إلى `compile_source()` أو `compile_sources()`.
+
+بعد compilation، توجد assertion على `compiled.provenance.compiler_version == resolution.selected.version` عندما تتوفر provenance. لذلك لم يعد artifact يصف مجرد اتساق fixture؛ بل يختبر الربط بين قرار resolver والcompiler الذي استُخدم فعليًا داخل الـPOC.
+
+هذا ما يزال **isolated POC binding** وليس Production CompilerResolver. لا توجد بعد compiler registry حقيقية أو attestation تشغيلية للـbinary خارج نطاق الـPOC.
+
+## Compilation failure contract
+
+عند نجاح resolution ثم فشل compilation، النتيجة المطلوبة هي:
+
+```text
+Resolved
+  ↓ selected compiler
+CompilationFailed
+  ↓
+raw_ast = None
+  ↓
+no CanonicalASTReady
+no detector execution
+```
+
+تم تثبيت هذا invariant في runner وفي regression test مستقل. فشل compilation لا ينتج AST قابلًا للاستهلاك، ولا يجوز أن يتحول downstream إلى `AnalysisSucceededNoFindings`.
 
 ## Invariants
 
@@ -48,19 +73,24 @@
 
 ## حدود Gate 2
 
-هذا validation لا يمثل production resolver implementation، ولا يثبت بعد استخراج verified deployment metadata من external registry، أو البحث عن binaries في production artifact store، أو cryptographic attestation للـcompiler build، أو full Solidity pragma grammar لكل إصدار تاريخي. لكنه يغلق contract ambiguity الخاص بتعارض explicit/verified ويثبت أن `compatible_candidates` لا تضم مرشحًا مرفوضًا بسبب pragma. هذه العناصر التشغيلية يجب أن تدخل Production Architecture Proposal قبل Stage 1 implementation.
+هذا validation لا يمثل production resolver implementation، ولا يثبت بعد استخراج verified deployment metadata من external registry، أو البحث عن binaries في production artifact store، أو cryptographic attestation للـcompiler build، أو full Solidity pragma grammar لكل إصدار تاريخي. candidate paths/hashes في بعض المرشحين ما تزال POC placeholders وليست compiler attestation حقيقية.
+
+كذلك لا يحسم Gate 2 وحده منع downstream normalization في كل production path بعد compilation failure؛ الـPOC يثبت الآن `raw_ast is None` عند compile failure، بينما منع الاستهلاك downstream وتكامل failure state machine الكامل يبقيان جزءًا من compile/Canonical AST production contract.
+
+هذه العناصر التشغيلية يجب أن تدخل Production Architecture Proposal قبل Stage 1 implementation.
 
 ## النتيجة
 
 > **Gate 2 — Passed as a deterministic policy validation inside the isolated track.**
 
-نجاح Gate 2 لا يصرح ببدء production resolver. بل يثبت أن policy المقترحة يمكن أن تكون deterministic وfail-closed قبل تنفيذها production.
+نجاح Gate 2 لا يصرح ببدء production resolver. بل يثبت أن policy المقترحة يمكن أن تكون deterministic وfail-closed، وأن قرار resolution مربوط بالcompiler المستخدم فعليًا داخل الـPOC، قبل تنفيذها production.
 
 ## Artifacts
 
 | Artifact | الغرض |
 |---|---|
 | `canonical_ast_poc/compiler_resolution_policy.py` | Policy contract المعزول. |
-| `run_gate2.py` | Matrix runner. |
-| `metadata/gate2_compiler_resolution_results.json` | Machine-readable outcomes والـrejection reasons. |
-| `tests/test_architecture_gates.py` | Regression tests للـresolution boundaries. |
+| `run_gate2.py` | Matrix runner مع resolution→compilation binding. |
+| `metadata/gate2_compiler_resolution_results.json` | Machine-readable outcomes والـrejection reasons والbinding evidence. |
+| `tests/test_gate2_resolution_binding.py` | Regression tests لربط compiler بالقرار ومنع raw AST بعد compilation failure. |
+| `tests/test_architecture_gates.py` | Regression tests العامة للـresolution boundaries وGate 3. |
