@@ -47,8 +47,9 @@ jobs:
         with:
           version: ${{ env.FOUNDRY_VERSION }}
 
-      - name: Install pinned Solidity compiler
-        run: python -c "import solcx; solcx.install_solc('0.8.25')"
+      - name: Install pinned Solidity compilers
+        run: |
+          python -c "import solcx; solcx.install_solc('0.4.10'); solcx.install_solc('0.8.25')"
 
       - name: Run tests
         run: python -m pytest tests/ -v --tb=short
@@ -88,8 +89,9 @@ jobs:
         with:
           version: ${{ env.FOUNDRY_VERSION }}
 
-      - name: Install pinned Solidity compiler
-        run: python -c "import solcx; solcx.install_solc('0.8.25')"
+      - name: Install pinned Solidity compilers
+        run: |
+          python -c "import solcx; solcx.install_solc('0.4.10'); solcx.install_solc('0.8.25')"
 
       - name: Run strict benchmark
         run: PYTHONPATH=. python benchmarks/run_benchmark.py --require-poc
