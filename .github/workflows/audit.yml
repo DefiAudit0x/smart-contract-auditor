@@ -31,11 +31,11 @@ jobs:
         run: |
           files=$(git diff --name-only ${{ github.event.pull_request.base.sha || 'HEAD~1' }} HEAD -- '*.sol' '*.vy' '*.move' 2>/dev/null || echo "")
           if [ -z "$files" ]; then
-            files=$(find . -name "*.sol" -o -name "*.vy" -o -name "*.move" | head -5)
+            files=$(find . \( -name "*.sol" -o -name "*.vy" -o -name "*.move" \) | head -5)
           fi
-          echo "files<<EOF" >> $GITHUB_OUTPUT
-          echo "$files" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          echo "files<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$files" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
 
       - name: Run Audit
         id: audit
@@ -45,10 +45,16 @@ jobs:
           AUDITOR_API_KEY: ${{ secrets.AUDITOR_API_KEY }}
         run: |
           echo "Auditing contracts..."
-          for file in ${{ steps.find.outputs.files }}; do
+          if [ -z "$AUDITOR_API_KEY" ]; then
+            echo "AUDITOR_API_KEY is not configured; external audit step skipped." | tee audit-report.md
+            exit 0
+          fi
+          : > audit-report.md
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
             if [ -f "$file" ]; then
               code=$(cat "$file")
-              result=$(curl -s -X POST "$AUDITOR_API_URL/api/analyze/json" \
+              result=$(curl --fail-with-body -sS -X POST "$AUDITOR_API_URL/api/analyze/json" \
                 -H "Content-Type: application/json" \
                 -H "Authorization: Bearer $AUDITOR_API_KEY" \
                 -d "{\"code\": $(echo "$code" | head -c 4000 | jq -Rs .), \"type\": \"audit\"}")
@@ -56,7 +62,9 @@ jobs:
               echo "$result" | jq -r '.report // .result // .error // "Unknown"' >> audit-report.md
               echo "" >> audit-report.md
             fi
-          done
+          done <<'EOF'
+${{ steps.find.outputs.files }}
+EOF
 
       - name: Post PR Comment
         if: github.event_name == 'pull_request' && steps.audit.outcome == 'success'
