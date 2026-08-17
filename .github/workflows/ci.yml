@@ -142,14 +142,19 @@ jobs:
     if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
     needs: [test, benchmark]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
 
     steps:
       - uses: actions/checkout@v4
-      - name: Log in to DockerHub
+
+      - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
@@ -157,5 +162,5 @@ jobs:
           context: .
           push: true
           tags: |
-            ${{ secrets.DOCKER_USERNAME }}/auditor-bot:latest
-            ${{ secrets.DOCKER_USERNAME }}/auditor-bot:${{ github.sha }}
+            ghcr.io/defiaudit0x/auditor-bot:latest
+            ghcr.io/defiaudit0x/auditor-bot:${{ github.sha }}
