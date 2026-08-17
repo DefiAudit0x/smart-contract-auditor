@@ -19,7 +19,7 @@ RESULT_PATH = ROOT.parent / "metadata" / "stage2_timestamp_shadow_results.json"
 def _production_timestamp(source_id: str, source: str) -> dict[str, Any]:
     analyzer = SolidityAnalyzer()
     findings = analyzer.analyze_file(source_id, source)
-    timestamp_findings = [finding for finding in findings if finding.agent == "block.timestamp Usage (AST)"]
+    timestamp_findings = [finding for finding in findings if finding.agent_name == "block.timestamp Usage (AST)"]
     return {
         "status": "AnalysisSucceededWithFindings" if timestamp_findings else "AnalysisSucceededNoFindings",
         "finding_count": len(timestamp_findings),
@@ -77,7 +77,7 @@ def run() -> dict[str, Any]:
         "Lib.sol": (ROOT / "imported_timestamp_lib_0_8_25.sol").read_text(),
     }
     imported_compiled = compile_sources(imported_sources, "0.8.25", "Main.sol")
-    imported_program, imported_metadata = adapt_modern(imported_compiled) if imported_compiled.status == AnalysisStatus.COMPILED else (None, {})
+    imported_program, _ = adapt_modern(imported_compiled) if imported_compiled.status == AnalysisStatus.COMPILED else (None, {})
     if imported_program is not None:
         imported_result = run_detector(make_detector_input(imported_program, "Lib.sol", imported_sources["Lib.sol"], imported_sources), "block.timestamp", "Lib.sol")
         main_result = run_detector(make_detector_input(imported_program, "Main.sol", imported_sources["Main.sol"], imported_sources), "block.timestamp", "Main.sol")
