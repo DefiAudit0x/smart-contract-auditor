@@ -49,7 +49,14 @@ jobs:
 
       - name: Install pinned Solidity compilers
         run: |
-          python -c "import solcx; solcx.install_solc('0.4.10'); solcx.install_solc('0.8.25')"
+          SOLCX_DIR="$(python -c "import solcx; print(solcx.get_solcx_install_folder())")"
+          mkdir -p "$SOLCX_DIR"
+          curl --fail --location --silent --show-error \
+            "https://binaries.soliditylang.org/linux-amd64/solc-linux-amd64-v0.4.10+commit.9e8cc01b" \
+            --output "$SOLCX_DIR/solc-v0.4.10"
+          echo "f3638225df24f444a72123956033f5743079118f0e1195ce6969aa16a7ef2283  $SOLCX_DIR/solc-v0.4.10" | sha256sum --check --status
+          chmod +x "$SOLCX_DIR/solc-v0.4.10"
+          python -c "import solcx; solcx.install_solc('0.8.25'); print(solcx.get_installed_solc_versions())"
 
       - name: Run tests
         run: python -m pytest tests/ -v --tb=short
@@ -91,7 +98,14 @@ jobs:
 
       - name: Install pinned Solidity compilers
         run: |
-          python -c "import solcx; solcx.install_solc('0.4.10'); solcx.install_solc('0.8.25')"
+          SOLCX_DIR="$(python -c "import solcx; print(solcx.get_solcx_install_folder())")"
+          mkdir -p "$SOLCX_DIR"
+          curl --fail --location --silent --show-error \
+            "https://binaries.soliditylang.org/linux-amd64/solc-linux-amd64-v0.4.10+commit.9e8cc01b" \
+            --output "$SOLCX_DIR/solc-v0.4.10"
+          echo "f3638225df24f444a72123956033f5743079118f0e1195ce6969aa16a7ef2283  $SOLCX_DIR/solc-v0.4.10" | sha256sum --check --status
+          chmod +x "$SOLCX_DIR/solc-v0.4.10"
+          python -c "import solcx; solcx.install_solc('0.8.25'); print(solcx.get_installed_solc_versions())"
 
       - name: Run strict benchmark
         run: PYTHONPATH=. python benchmarks/run_benchmark.py --require-poc
