@@ -177,7 +177,7 @@ jobs:
 ${analysisType === 'deep' ? `          pip install slither-analyzer mythril\n` : ''}
       - name: Run Smart Contract Auditor
         env:
-          AUDITOR_API_KEY: \${{ secrets.AUDITOR_API_KEY }}
+          AUDITOR_API_KEY: \{% raw %}${{ secrets.AUDITOR_API_KEY }}{% endraw %}
           AUDITOR_API_URL: https://auditor-bot.onrender.com
         run: |
           python -c "

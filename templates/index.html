@@ -14,16 +14,29 @@
 
 <!-- ─── Top Bar ─── -->
 <header class="topbar">
-  <div class="topbar-brand">
-    <span class="shield">&#128737;</span>
-    <span>Smart Contract Auditor</span>
-  </div>
+  <a class="topbar-brand" href="/" aria-label="Return to AuditAI home" style="text-decoration:none;">
+    <span class="shield"><i class="fas fa-shield-alt"></i></span>
+    <span>AuditAI <small class="workspace-subtitle">Review workspace</small></span>
+  </a>
   <div class="topbar-center">
-    <button class="btn btn-sm btn-ghost" id="knowledgeBtn" title="Knowledge Base"><i class="fas fa-book"></i></button>
-    <button class="btn btn-sm btn-ghost" id="historyBtn" title="History"><i class="fas fa-history"></i></button>
+    <span class="workspace-state"><i class="fas fa-circle"></i> Review assistance</span>
+    <button class="btn btn-sm btn-ghost" id="knowledgeBtn" title="Knowledge Base"><i class="fas fa-book"></i><span>Evidence</span></button>
+    <button class="btn btn-sm btn-ghost" id="historyBtn" title="History"><i class="fas fa-history"></i><span>History</span></button>
+    <details class="tool-menu">
+      <summary class="btn btn-sm btn-ghost"><i class="fas fa-grid-2"></i><span>Tools</span><i class="fas fa-chevron-down tool-menu-chevron"></i></summary>
+      <div class="tool-menu-panel">
+        <a href="/report/list"><i class="fas fa-folder-open"></i> Report library</a>
+        <a href="/explorer"><i class="fas fa-link"></i> Address explorer</a>
+        <a href="/batch"><i class="fas fa-layer-group"></i> Batch review</a>
+        <a href="/gas"><i class="fas fa-gas-pump"></i> Gas profile</a>
+        <a href="/rules"><i class="fas fa-list-check"></i> Rule library</a>
+        <a href="/cicd"><i class="fas fa-code-branch"></i> CI/CD guide</a>
+      </div>
+    </details>
   </div>
   <div class="topbar-right">
     <span id="quotaDisplay" style="display:inline-flex;align-items:center;gap:4px;"></span>
+    <a href="/docs" class="btn btn-sm btn-ghost" style="text-decoration:none;padding:4px 10px;" title="Methodology and limits"><i class="fas fa-circle-info"></i><span>Limits</span></a>
     <a href="/account" class="btn btn-sm btn-ghost" style="text-decoration:none;padding:4px 10px;" title="Account"><i class="fas fa-user"></i></a>
     <button class="btn-icon" id="themeToggle" title="Toggle theme"><i class="fas fa-moon"></i></button>
   </div>
@@ -46,7 +59,7 @@
   <section class="editor-pane">
     <div class="editor-toolbar">
       <div class="editor-toolbar-left">
-        <span class="editor-status" id="fileInfo"></span>
+        <span class="editor-status" id="fileInfo">Select a source, then review the evidence before acting on any result.</span>
       </div>
       <div class="editor-toolbar-right">
         <select id="analysisType">
@@ -54,7 +67,7 @@
           <option value="quick">Quick Scan</option>
           <option value="deep">Deep Analysis</option>
         </select>
-        <button class="btn btn-primary" id="analyzeBtn"><i class="fas fa-play"></i> Analyze</button>
+        <button class="btn btn-primary" id="analyzeBtn"><i class="fas fa-play"></i> Start review</button>
         <button class="btn btn-danger" id="stopBtn" style="display:none;"><i class="fas fa-stop"></i> Stop</button>
       </div>
     </div>
@@ -132,16 +145,16 @@
     <div class="results-body" id="resultsBody">
       <div class="results-empty" id="featuresShowcase">
         <i class="fas fa-shield-alt" style="font-size:32px;color:var(--accent);margin-bottom:8px;"></i>
-        <p style="margin-bottom:16px;">Paste your code and click <strong>Analyze</strong>, or explore what this tool can do:</p>
+        <p style="margin-bottom:16px;">Choose a source and start a review. Results are prioritization evidence and must be verified in contract and deployment context.</p>
         <div class="features-mini-grid">
-          <div class="feature-mini"><i class="fas fa-microchip"></i><div><strong>Multi-Pass AI</strong><span>3-pass LLM + validation + gate scoring</span></div></div>
-          <div class="feature-mini"><i class="fas fa-project-diagram"></i><div><strong>CFG/DFG</strong><span>Control &amp; data flow graph analysis</span></div></div>
-          <div class="feature-mini"><i class="fas fa-shield-alt"></i><div><strong>CVSS 4.0</strong><span>Industry-standard severity scoring</span></div></div>
-          <div class="feature-mini"><i class="fas fa-database"></i><div><strong>OSV Database</strong><span>Real-time vulnerability lookups</span></div></div>
-          <div class="feature-mini"><i class="fas fa-file-export"></i><div><strong>Multi-Format</strong><span>SARIF, PDF, MD, HackerOne export</span></div></div>
-          <div class="feature-mini"><i class="fas fa-code-branch"></i><div><strong>Diff Auditor</strong><span>Compare original vs modified code</span></div></div>
-          <div class="feature-mini"><i class="fas fa-gas-pump"></i><div><strong>Gas Profiler</strong><span>solc-based gas optimization reports</span></div></div>
-          <div class="feature-mini"><i class="fas fa-book"></i><div><strong>Knowledge Base</strong><span>Self-learning pattern discovery</span></div></div>
+          <div class="feature-mini"><i class="fas fa-microchip"></i><div><strong>Analysis passes</strong><span>Surface evidence for security triage</span></div></div>
+          <div class="feature-mini"><i class="fas fa-project-diagram"></i><div><strong>Flow context</strong><span>Inspect control and data relationships</span></div></div>
+          <div class="feature-mini"><i class="fas fa-shield-alt"></i><div><strong>Severity support</strong><span>Keep a reviewer in the decision loop</span></div></div>
+          <div class="feature-mini"><i class="fas fa-database"></i><div><strong>Source-aware scope</strong><span>Know what input was actually examined</span></div></div>
+          <div class="feature-mini"><i class="fas fa-file-export"></i><div><strong>Review exports</strong><span>Document evidence and unresolved questions</span></div></div>
+          <div class="feature-mini"><i class="fas fa-code-branch"></i><div><strong>Change review</strong><span>Compare source revisions before deployment</span></div></div>
+          <div class="feature-mini"><i class="fas fa-gas-pump"></i><div><strong>Optional profiling</strong><span>Interpret cost output alongside security context</span></div></div>
+          <div class="feature-mini"><i class="fas fa-book"></i><div><strong>Research context</strong><span>Use approved reference material with care</span></div></div>
         </div>
       </div>
     </div>

@@ -612,6 +612,11 @@ def privacy_page():
     return render_template('privacy.html')
 
 
+@app.route('/methodology')
+def methodology_page():
+    return render_template('methodology.html')
+
+
 @app.route('/docs')
 def api_docs():
     return render_template('swagger.html')

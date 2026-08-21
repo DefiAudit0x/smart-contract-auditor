@@ -1,360 +1,140 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en" data-theme="dark">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Smart Contract Auditor — AI-Powered Security</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
-<link rel="stylesheet" href="{{ url_for('static', filename='vendor/fontawesome.min.css') }}">
-<style nonce="{{ csp_nonce }}">
-:root {
-  --bg: #0d1117; --bg2: #161b22; --bg3: #21262d;
-  --border: #30363d; --text: #e6edf3; --text2: #8b949e;
-  --accent: #58a6ff; --green: #3fb950; --red: #da3633;
-}
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: var(--bg); color: var(--text);
-}
-nav {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 1rem 2rem; border-bottom: 1px solid var(--border);
-  max-width: 1200px; margin: 0 auto;
-}
-nav .logo { font-size: 1.2rem; font-weight: 700; }
-nav .logo span { color: var(--accent); }
-nav .nav-links { display: flex; gap: 1.5rem; align-items: center; }
-nav .nav-links a { color: var(--text2); text-decoration: none; font-size: 0.85rem; }
-nav .nav-links a:hover { color: var(--text); }
-.hero {
-  max-width: 1100px; margin: 0 auto; padding: 5rem 2rem 3rem;
-  display: flex; align-items: center; gap: 3rem;
-}
-.hero-text { flex: 1; }
-.hero-text h1 { font-size: 2.8rem; font-weight: 800; line-height: 1.2; margin-bottom: 1rem; }
-.hero-text h1 span { color: var(--accent); }
-.hero-text p { font-size: 1.05rem; color: var(--text2); line-height: 1.7; margin-bottom: 2rem; max-width: 540px; }
-.hero-actions { display: flex; gap: 1rem; flex-wrap: wrap; }
-.btn {
-  display: inline-flex; align-items: center; gap: 0.5rem;
-  padding: 0.8rem 2rem; border-radius: 8px; border: none;
-  font-size: 1rem; font-weight: 600; cursor: pointer;
-  text-decoration: none; transition: all 0.2s;
-}
-.btn-primary { background: var(--accent); color: #fff; }
-.btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
-.btn-secondary { background: var(--bg3); color: var(--text); border: 1px solid var(--border); }
-.btn-secondary:hover { border-color: var(--accent); }
-.hero-demo {
-  flex: 1; background: var(--bg2); border: 1px solid var(--border);
-  border-radius: 12px; padding: 1.5rem; min-height: 300px;
-  display: flex; flex-direction: column; gap: 0.8rem;
-}
-.hero-demo .demo-line { display: flex; gap: 0.5rem; align-items: center; }
-.hero-demo .demo-line i { width: 20px; color: var(--accent); font-size: 0.9rem; }
-.hero-demo .demo-line .badge {
-  font-size: 0.65rem; padding: 0.15rem 0.5rem; border-radius: 4px;
-  font-weight: 600;
-}
-.badge-critical { background: #da363333; color: #da3633; }
-.badge-high { background: #d2992233; color: #d29922; }
-.badge-medium { background: #58a6ff33; color: #58a6ff; }
-.badge-low { background: #3fb95033; color: #3fb950; }
-.hero-demo .demo-code {
-  font-family: monospace; font-size: 0.75rem;
-  background: var(--bg3); padding: 0.8rem; border-radius: 6px;
-  color: var(--text2); line-height: 1.6;
-}
-.stats {
-  display: flex; justify-content: center; gap: 3rem;
-  padding: 3rem 2rem; max-width: 1100px; margin: 0 auto;
-}
-.stat { text-align: center; }
-.stat .num { font-size: 2rem; font-weight: 800; color: var(--accent); }
-.stat .label { font-size: 0.85rem; color: var(--text2); }
-.section {
-  max-width: 1100px; margin: 0 auto; padding: 3rem 2rem;
-}
-.section h2 { text-align: center; font-size: 1.8rem; margin-bottom: 0.5rem; }
-.section .subtitle { text-align: center; color: var(--text2); margin-bottom: 2.5rem; font-size: 0.95rem; }
-.features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
-.feature-card {
-  background: var(--bg2); border: 1px solid var(--border); border-radius: 10px;
-  padding: 1.25rem; text-align: center;
-}
-.feature-card i { font-size: 1.6rem; color: var(--accent); margin-bottom: 0.6rem; }
-.feature-card h3 { font-size: 0.95rem; margin-bottom: 0.4rem; }
-.feature-card p { font-size: 0.8rem; color: var(--text2); }
-.pricing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.5rem; }
-.pricing-card {
-  background: var(--bg2); border: 1px solid var(--border); border-radius: 12px;
-  padding: 2rem; text-align: center;
-}
-.pricing-card.featured { border-color: var(--accent); position: relative; }
-.pricing-card.featured::before {
-  content: 'Popular'; position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
-  background: var(--accent); color: #fff; font-size: 0.7rem; padding: 0.15rem 1rem; border-radius: 20px;
-}
-.pricing-card .price { font-size: 2.2rem; font-weight: 800; margin: 1rem 0; }
-.pricing-card .price span { font-size: 0.9rem; color: var(--text2); font-weight: 400; }
-.pricing-card ul { list-style: none; text-align: left; margin: 1rem 0 1.5rem; }
-.pricing-card ul li { padding: 0.35rem 0; font-size: 0.85rem; color: var(--text2); }
-.pricing-card ul li i { color: var(--green); margin-right: 0.5rem; width: 16px; }
-.modal {
-  display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6);
-  z-index: 100; align-items: center; justify-content: center;
-}
-.modal.show { display: flex; }
-.modal-box {
-  background: var(--bg2); border: 1px solid var(--border); border-radius: 12px;
-  padding: 2rem; width: 400px; max-width: 90%;
-}
-.modal-box h2 { margin-bottom: 1rem; font-size: 1.1rem; }
-.modal-box input {
-  width: 100%; padding: 0.7rem 1rem; border-radius: 6px;
-  border: 1px solid var(--border); background: var(--bg3);
-  color: var(--text); font-size: 1rem; margin-bottom: 1rem;
-}
-.modal-box input:focus { outline: none; border-color: var(--accent); }
-.error-msg { color: var(--red); font-size: 0.85rem; margin-bottom: 0.5rem; display: none; }
-footer { text-align: center; padding: 2rem; color: var(--text2); font-size: 0.8rem; border-top: 1px solid var(--border); }
-
-@media (max-width: 768px) {
-  nav { flex-direction: column; gap: 0.75rem; padding: 1rem; }
-  nav .nav-links { gap: 0.75rem; }
-  .hero { flex-direction: column; padding: 2rem 1.5rem; gap: 2rem; }
-  .hero-text h1 { font-size: 1.8rem; }
-  .hero-text p { font-size: 0.9rem; }
-  .stats { flex-wrap: wrap; gap: 1.5rem; padding: 2rem 1rem; }
-  .section { padding: 2rem 1rem; }
-  .section h2 { font-size: 1.4rem; }
-  .pricing-grid { grid-template-columns: 1fr; }
-}
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Evidence-oriented smart contract analysis for security review teams.">
+  <title>AuditAI — Smart Contract Auditor Review Workspace</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath fill='%2355d6ff' d='M50 5 87 19v29c0 24-16 39-37 47C29 87 13 72 13 48V19z'/%3E%3Cpath fill='%230b0e14' d='M50 18 74 27v20c0 15-9 26-24 33-15-7-24-18-24-33V27z'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/fontawesome.min.css') }}">
+  <style nonce="{{ csp_nonce }}">
+    :root { --ink:#eef4f8; --muted:#a8b3c1; --dim:#718096; --canvas:#090d13; --surface:#101720; --surface-2:#151f2a; --line:rgba(177,204,224,.16); --cyan:#55d6ff; --cyan-soft:rgba(85,214,255,.12); --lime:#aeea82; --amber:#f9c96c; --danger:#ff7f7f; --radius:16px; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    html { scroll-behavior:smooth; }
+    body { background:var(--canvas); color:var(--ink); font-family:Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height:1.5; }
+    a { color:inherit; }
+    .shell { width:min(1180px, calc(100% - 40px)); margin:0 auto; }
+    .topline { height:4px; background:linear-gradient(90deg, var(--cyan) 0 30%, var(--lime) 30% 44%, var(--amber) 44% 52%, rgba(255,255,255,.16) 52%); }
+    nav { min-height:76px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--line); gap:18px; }
+    .brand { display:flex; align-items:center; gap:11px; text-decoration:none; min-width:max-content; }
+    .brand-mark { width:33px; height:36px; display:grid; place-items:center; color:var(--cyan); background:linear-gradient(145deg,rgba(85,214,255,.2),rgba(85,214,255,.03)); border:1px solid rgba(85,214,255,.55); clip-path:polygon(50% 0,96% 16%,88% 78%,50% 100%,12% 78%,4% 16%); }
+    .brand-mark i { font-size:14px; }
+    .brand-wordmark { display:flex; flex-direction:column; font-size:14px; font-weight:760; letter-spacing:-.02em; }
+    .brand-wordmark small { color:var(--dim); font-size:10px; font-weight:700; letter-spacing:.13em; text-transform:uppercase; }
+    .nav-links { display:flex; align-items:center; gap:20px; color:var(--muted); font-size:13px; }
+    .nav-links a { text-decoration:none; }
+    .nav-links a:hover { color:var(--ink); }
+    .button { border:1px solid transparent; border-radius:10px; padding:10px 15px; background:transparent; color:var(--ink); font:inherit; font-size:13px; font-weight:720; display:inline-flex; align-items:center; justify-content:center; gap:8px; cursor:pointer; text-decoration:none; transition:transform 160ms ease, border-color 160ms ease, background 160ms ease; }
+    .button:active { transform:scale(.97); }
+    .button:focus-visible { outline:2px solid var(--cyan); outline-offset:3px; }
+    .button-primary { background:var(--cyan); color:#071017; border-color:var(--cyan); }
+    .button-primary:hover { background:#8de3ff; border-color:#8de3ff; }
+    .button-secondary { border-color:var(--line); background:rgba(255,255,255,.025); }
+    .button-secondary:hover { border-color:rgba(85,214,255,.48); background:var(--cyan-soft); }
+    .hero { position:relative; padding:84px 0 58px; overflow:hidden; }
+    .hero::before { content:""; position:absolute; inset:-14% -13% auto 43%; height:620px; opacity:.42; background-image:radial-gradient(circle at 1px 1px, rgba(174,234,130,.55) 1px, transparent 1.5px), linear-gradient(125deg, transparent 0 48%, rgba(85,214,255,.2) 49% 50%, transparent 51%); background-size:22px 22px, 100% 100%; mask-image:radial-gradient(ellipse at center,black 0,transparent 68%); pointer-events:none; }
+    .hero-grid { display:grid; grid-template-columns:1.08fr .92fr; align-items:center; gap:52px; position:relative; }
+    .eyebrow { display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border:1px solid var(--line); border-radius:999px; color:var(--lime); background:rgba(174,234,130,.07); font-size:11px; font-weight:760; letter-spacing:.11em; text-transform:uppercase; }
+    .eyebrow i { font-size:8px; }
+    h1 { max-width:720px; margin:18px 0; font-size:clamp(40px,6vw,72px); line-height:.98; letter-spacing:-.064em; }
+    h1 strong { color:var(--cyan); font-weight:inherit; }
+    .hero-copy { max-width:630px; color:var(--muted); font-size:17px; line-height:1.7; }
+    .actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:28px; }
+    .trust-line { display:flex; align-items:flex-start; gap:10px; max-width:600px; margin-top:25px; color:var(--dim); font-size:12px; }
+    .trust-line i { color:var(--amber); margin-top:3px; }
+    .signal-panel { min-height:410px; padding:20px; border:1px solid var(--line); border-radius:var(--radius); background:linear-gradient(155deg,rgba(21,31,42,.94),rgba(11,16,23,.94)); box-shadow:0 26px 60px rgba(0,0,0,.3); position:relative; overflow:hidden; }
+    .signal-panel::after { content:""; position:absolute; inset:0; border-radius:inherit; background:linear-gradient(115deg,transparent 43%,rgba(85,214,255,.08) 44% 45%,transparent 46%); pointer-events:none; }
+    .panel-head, .scan-row, .evidence-card { position:relative; z-index:1; }
+    .panel-head { display:flex; justify-content:space-between; align-items:center; padding-bottom:14px; border-bottom:1px solid var(--line); font-size:12px; }
+    .panel-head span:first-child { font-weight:760; }
+    .pill { color:var(--lime); background:rgba(174,234,130,.1); border:1px solid rgba(174,234,130,.22); border-radius:999px; padding:4px 8px; font-size:10px; font-weight:760; text-transform:uppercase; letter-spacing:.08em; }
+    .code-sample { margin:17px 0 14px; padding:16px; background:#090e14; border:1px solid rgba(177,204,224,.11); border-radius:10px; color:#b9c9d9; font:12px/1.75 "SFMono-Regular",Consolas,monospace; overflow:auto; }
+    .code-sample .danger { color:#ff9595; } .code-sample .comment { color:#68798c; }
+    .scan-row { display:grid; grid-template-columns:26px 1fr auto; align-items:center; gap:9px; padding:10px 0; border-top:1px solid rgba(177,204,224,.1); color:var(--muted); font-size:12px; }
+    .scan-row i { color:var(--cyan); } .scan-row strong { font-size:10px; color:var(--amber); text-transform:uppercase; letter-spacing:.08em; }
+    .evidence-card { margin-top:14px; padding:10px 12px; border-left:2px solid var(--amber); background:rgba(249,201,108,.06); color:#cfdae4; font-size:11px; }
+    .metrics { display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:14px; overflow:hidden; margin:10px 0 72px; }
+    .metric { padding:18px; background:var(--surface); } .metric strong { display:block; font-size:13px; color:var(--ink); } .metric span { display:block; color:var(--dim); font-size:11px; margin-top:3px; }
+    .section { padding:72px 0; border-top:1px solid var(--line); }
+    .section-head { display:flex; justify-content:space-between; align-items:flex-end; gap:24px; margin-bottom:30px; }
+    .section-head h2 { font-size:clamp(27px,3vw,40px); letter-spacing:-.05em; line-height:1.04; max-width:560px; }
+    .section-head p { max-width:420px; color:var(--muted); font-size:14px; }
+    .workflow { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
+    .workflow-card { min-height:196px; padding:18px; border:1px solid var(--line); border-radius:14px; background:var(--surface); position:relative; overflow:hidden; }
+    .workflow-card::after { content:""; position:absolute; height:1px; width:46%; right:-26%; top:34px; background:linear-gradient(90deg,var(--cyan),transparent); }
+    .workflow-card:last-child::after { display:none; }
+    .step { color:var(--cyan); font-size:11px; font-weight:800; letter-spacing:.12em; } .workflow-card h3 { margin:28px 0 8px; font-size:16px; } .workflow-card p { color:var(--muted); font-size:13px; line-height:1.6; }
+    .capabilities { display:grid; grid-template-columns:1.25fr .75fr; gap:18px; }
+    .capability-panel, .limits-panel { border:1px solid var(--line); border-radius:16px; padding:26px; background:var(--surface); }
+    .capability-panel h3, .limits-panel h3 { font-size:20px; margin-bottom:10px; letter-spacing:-.03em; }
+    .capability-panel p, .limits-panel p { color:var(--muted); font-size:13px; line-height:1.65; }
+    .capability-list { display:grid; grid-template-columns:1fr 1fr; gap:9px; margin-top:20px; }
+    .capability-list div { padding:10px; background:rgba(255,255,255,.025); border:1px solid var(--line); border-radius:9px; color:#ced9e3; font-size:12px; }
+    .capability-list i { color:var(--lime); margin-right:7px; }
+    .limits-panel { background:linear-gradient(155deg,rgba(249,201,108,.085),var(--surface)); } .limits-panel h3 { color:var(--amber); }
+    .limits-panel .button { margin-top:20px; width:100%; }
+    footer { border-top:1px solid var(--line); padding:30px 0 42px; color:var(--dim); font-size:12px; } .footer-grid { display:flex; justify-content:space-between; align-items:center; gap:15px; } .footer-links { display:flex; gap:15px; } .footer-links a { text-decoration:none; }
+    .modal { display:none; position:fixed; inset:0; z-index:20; padding:20px; align-items:center; justify-content:center; background:rgba(1,4,8,.72); backdrop-filter:blur(8px); } .modal.show { display:flex; }
+    .modal-box { width:min(460px,100%); padding:26px; border:1px solid var(--line); border-radius:16px; background:var(--surface-2); box-shadow:0 24px 80px rgba(0,0,0,.45); } .modal-box h2 { font-size:22px; margin-bottom:10px; letter-spacing:-.03em; } .modal-box p { color:var(--muted); font-size:13px; line-height:1.65; margin-bottom:18px; } .modal-box input { width:100%; padding:12px; color:var(--ink); background:#091018; border:1px solid var(--line); border-radius:9px; font:inherit; margin:7px 0; } .modal-box input:focus { outline:2px solid var(--cyan); outline-offset:2px; } .error-msg { min-height:20px; color:var(--danger); font-size:12px; }
+    @media (max-width:900px) { .hero-grid,.capabilities { grid-template-columns:1fr; } .signal-panel { min-height:0; } .workflow { grid-template-columns:1fr 1fr; } .metrics { grid-template-columns:1fr 1fr; margin-bottom:42px; } .workflow-card::after { display:none; } }
+    @media (max-width:640px) { .shell { width:min(100% - 28px,1180px); } nav { min-height:70px; } .nav-links a:not(.button) { display:none; } .hero { padding-top:54px; } .hero-copy { font-size:15px; } .section { padding:54px 0; } .section-head { align-items:flex-start; flex-direction:column; } .workflow,.capability-list { grid-template-columns:1fr; } .metrics { margin-top:0; } .metric { padding:14px; } .footer-grid { align-items:flex-start; flex-direction:column; } }
+  </style>
 </head>
 <body>
-<nav>
-  <div class="logo"><span>🛡️</span> AuditAI</div>
-  <div class="nav-links">
-    <a href="#features">Features</a>
-    <a href="#pricing">Pricing</a>
-    <a href="/docs">Docs</a>
-    {% if has_github_oauth %}
-    <a class="btn btn-primary" href="/login/github" style="padding:0.4rem 1.2rem;font-size:0.8rem;"><i class="fab fa-github"></i> Sign In</a>
-    {% else %}
-    <a class="btn btn-primary" onclick="showModal('access')" style="padding:0.4rem 1.2rem;font-size:0.8rem;">Sign In</a>
-    {% endif %}
+  <div class="topline"></div>
+  <div class="shell">
+    <nav aria-label="Primary navigation">
+      <a class="brand" href="/" aria-label="AuditAI home"><span class="brand-mark"><i class="fas fa-shield-alt"></i></span><span class="brand-wordmark">AuditAI<small>Proofline console</small></span></a>
+      <div class="nav-links">
+        <a href="#workflow">Workflow</a><a href="#limits">Limits</a><a href="/methodology">Methodology</a>
+        {% if has_github_oauth %}<a class="button button-primary" href="/login/github"><i class="fab fa-github"></i> Sign in to audit</a>{% else %}<button class="button button-primary" type="button" onclick="showModal('access')"><i class="fas fa-key"></i> Enter workspace</button>{% endif %}
+      </div>
+    </nav>
   </div>
-</nav>
 
-<div class="hero">
-  <div class="hero-text">
-    <h1>AI-Powered <span>Smart Contract</span> Security Audits</h1>
-    <p>Detect vulnerabilities before deployment with multi-pass LLM validation, CFG/DFG flow analysis, and real-time OSV database integration. Trusted by developers worldwide.</p>
-    <div class="hero-actions">
-      {% if has_github_oauth %}
-      <a class="btn btn-primary" href="/login/github"><i class="fab fa-github"></i> Start Free</a>
-      {% else %}
-      <button class="btn btn-primary" onclick="showModal('access')"><i class="fas fa-key"></i> Start Free</button>
-      {% endif %}
-      <button class="btn btn-secondary" onclick="showModal('demo')"><i class="fas fa-play"></i> Live Demo</button>
-    </div>
-  </div>
-  <div class="hero-demo">
-    <div style="display:flex;justify-content:space-between;align-items:center;">
-      <span style="font-size:0.8rem;font-weight:600;">Reentrancy Detection</span>
-      <span class="badge badge-critical">Critical</span>
-    </div>
-    <div class="demo-code">
-<span style="color:#ff7b72;">function</span> withdraw() <span style="color:#79c0ff;">external</span> {<br>
-&nbsp;&nbsp;<span style="color:#ffa657;">uint</span> bal = balances[msg.sender];<br>
-&nbsp;&nbsp;(<span style="color:#79c0ff;">bool ok,</span>) = msg.sender.call{value: bal}(<span style="color:#a5d6ff;">""</span>);<br>
-&nbsp;&nbsp;<span style="color:#ff7b72;font-weight:700;">← CEI Violation</span><br>
-&nbsp;&nbsp;balances[msg.sender] = 0;<br>
-}
-    </div>
-    <div class="demo-line">
-      <i class="fas fa-search"></i><span style="font-size:0.8rem;">Pre-scan: 3 patterns matched</span>
-    </div>
-    <div class="demo-line">
-      <i class="fas fa-project-diagram"></i><span style="font-size:0.8rem;">CFG: call→state-write path detected</span>
-    </div>
-    <div class="demo-line">
-      <i class="fas fa-robot"></i><span style="font-size:0.8rem;">AI: Reentrancy confirmed (CVSS 8.5)</span>
-    </div>
-  </div>
-</div>
+  <main>
+    <section class="hero"><div class="shell hero-grid">
+      <div>
+        <span class="eyebrow"><i class="fas fa-circle"></i> Evidence-oriented review</span>
+        <h1>Find <strong>reviewable signals</strong> before contracts reach production.</h1>
+        <p class="hero-copy">AuditAI brings source intake, static checks, streamed model analysis, and report export into one traceable workspace. It helps teams prioritize review; it does not certify a contract as secure.</p>
+        <div class="actions">
+          {% if has_github_oauth %}<a class="button button-primary" href="/login/github"><i class="fas fa-arrow-right"></i> Start an audit</a>{% else %}<button class="button button-primary" type="button" onclick="showModal('access')"><i class="fas fa-arrow-right"></i> Start an audit</button>{% endif %}
+          <a class="button button-secondary" href="#workflow"><i class="fas fa-route"></i> See the workflow</a>
+        </div>
+        <p class="trust-line"><i class="fas fa-triangle-exclamation"></i><span>Every result needs contextual human review. Findings, generated fixes, and proof-of-concept material are decision support—not an approval to deploy.</span></p>
+      </div>
+      <aside class="signal-panel" aria-label="Example review evidence panel">
+        <div class="panel-head"><span>EXAMPLE REVIEW TRACE</span><span class="pill">sample only</span></div>
+        <div class="code-sample"><span class="comment">// external call occurs before balance update</span><br>function withdraw() external {<br>&nbsp;&nbsp;uint bal = balances[msg.sender];<br>&nbsp;&nbsp;<span class="danger">msg.sender.call{value: bal}("");</span><br>&nbsp;&nbsp;balances[msg.sender] = 0;<br>}</div>
+        <div class="scan-row"><i class="fas fa-code-branch"></i><span>Static path check surfaces a call-to-state-write sequence.</span><strong>signal</strong></div>
+        <div class="scan-row"><i class="fas fa-magnifying-glass"></i><span>Validation asks whether the observed path is reachable in context.</span><strong>review</strong></div>
+        <div class="scan-row"><i class="fas fa-file-lines"></i><span>Export keeps the evidence, scope, and uncertainty with the report.</span><strong>trace</strong></div>
+        <div class="evidence-card">This illustrative trace is not a live result and does not establish exploitability for any deployed contract.</div>
+      </aside>
+    </div></section>
 
-<div class="stats">
-  <div class="stat"><div class="num">17K+</div><div class="label">Patterns in KB</div></div>
-  <div class="stat"><div class="num">3</div><div class="label">Validation Passes</div></div>
-  <div class="stat"><div class="num">4</div><div class="label">Languages Supported</div></div>
-  <div class="stat"><div class="num">99%</div><div class="label">Uptime</div></div>
-</div>
+    <div class="shell"><section class="metrics" aria-label="Workspace principles"><div class="metric"><strong>Code & repository input</strong><span>Paste, upload, project ZIP, GitHub, or diff.</span></div><div class="metric"><strong>Evidence before severity</strong><span>Show paths, checks, and report context.</span></div><div class="metric"><strong>Review-state clarity</strong><span>Separate signal, validation, and conclusion.</span></div><div class="metric"><strong>Exportable output</strong><span>Use reports as review material, not deployment proof.</span></div></section></div>
 
-<div class="section" id="features">
-  <h2>Enterprise-Grade Analysis</h2>
-  <p class="subtitle">Four-pass pipeline combining the best of static and AI-driven analysis</p>
-  <div class="features-grid">
-    <div class="feature-card">
-      <i class="fas fa-microchip"></i>
-      <h3>Multi-Pass AI Validation</h3>
-      <p>3-pass pipeline with LLM, validation, and gate scoring for minimal false positives.</p>
-    </div>
-    <div class="feature-card">
-      <i class="fas fa-project-diagram"></i>
-      <h3>CFG/DFG Analysis</h3>
-      <p>Control flow and data flow graphs for precise reentrancy and CEI violation detection.</p>
-    </div>
-    <div class="feature-card">
-      <i class="fas fa-shield-alt"></i>
-      <h3>CVSS 4.0 Scoring</h3>
-      <p>Industry-standard severity scoring with detailed vector explanations.</p>
-    </div>
-    <div class="feature-card">
-      <i class="fas fa-database"></i>
-      <h3>OSV Integration</h3>
-      <p>Real-time vulnerability lookups against the Open Source Vulnerabilities database.</p>
-    </div>
-    <div class="feature-card">
-      <i class="fas fa-file-export"></i>
-      <h3>Multi-Format Reports</h3>
-      <p>Export to SARIF, GitHub Discussions, Markdown, interactive HTML, and PDF.</p>
-    </div>
-    <div class="feature-card">
-      <i class="fas fa-code-branch"></i>
-      <h3>Diff Auditor</h3>
-      <p>Compare original and modified code to catch regression vulnerabilities.</p>
-    </div>
-    <div class="feature-card">
-      <i class="fas fa-gas-pump"></i>
-      <h3>Gas Profiler</h3>
-      <p>Optimize gas usage with precise solc-based gas reports.</p>
-    </div>
-    <div class="feature-card">
-      <i class="fas fa-book"></i>
-      <h3>Knowledge Base</h3>
-      <p>Self-learning pattern discovery that improves with every audit.</p>
-    </div>
-  </div>
-</div>
+    <section class="section" id="workflow"><div class="shell">
+      <div class="section-head"><h2>A workflow that keeps uncertainty visible.</h2><p>Inputs move through explicit stages so an engineer can inspect why a result appeared and what must happen next.</p></div>
+      <div class="workflow"><article class="workflow-card"><span class="step">01 · DEFINE SCOPE</span><h3>Choose the source</h3><p>Start from a single file, a repository, a project archive, or a change set.</p></article><article class="workflow-card"><span class="step">02 · MAP SIGNALS</span><h3>Run analysis</h3><p>Use available static and model-assisted passes to surface potential issues for triage.</p></article><article class="workflow-card"><span class="step">03 · REVIEW EVIDENCE</span><h3>Challenge the result</h3><p>Read the contract context, scope limitations, and generated rationale before acting.</p></article><article class="workflow-card"><span class="step">04 · DOCUMENT DECISIONS</span><h3>Export responsibly</h3><p>Capture findings and unresolved questions for the security review process.</p></article></div>
+    </div></section>
 
-<div class="section" id="pricing">
-  <h2>Simple Pricing</h2>
-  <p class="subtitle">Start free, scale as you grow</p>
-  <div class="pricing-grid">
-    <div class="pricing-card">
-      <h3>Starter</h3>
-      <div class="price">$0<span>/mo</span></div>
-      <ul>
-        <li><i class="fas fa-check"></i> 50 audits per month</li>
-        <li><i class="fas fa-check"></i> Web UI access</li>
-        <li><i class="fas fa-check"></i> Markdown & PDF reports</li>
-        <li><i class="fas fa-check"></i> Community support</li>
-      </ul>
-      {% if has_github_oauth %}
-      <a class="btn btn-primary" href="/login/github" style="width:100%;justify-content:center;">Get Started</a>
-      {% else %}
-      <button class="btn btn-primary" onclick="showModal('access')" style="width:100%;justify-content:center;">Get Started</button>
-      {% endif %}
-    </div>
-    <div class="pricing-card featured">
-      <h3>Pro</h3>
-      <div class="price">$49<span>/mo</span></div>
-      <ul>
-        <li><i class="fas fa-check"></i> Unlimited audits</li>
-        <li><i class="fas fa-check"></i> GitHub Actions integration</li>
-        <li><i class="fas fa-check"></i> SARIF & HackerOne export</li>
-        <li><i class="fas fa-check"></i> Priority support</li>
-      </ul>
-      <button class="btn btn-primary" onclick="showModal('access')" style="width:100%;justify-content:center;">Coming Soon</button>
-    </div>
-    <div class="pricing-card">
-      <h3>Enterprise</h3>
-      <div class="price">Custom</div>
-      <ul>
-        <li><i class="fas fa-check"></i> On-premise deployment</li>
-        <li><i class="fas fa-check"></i> Custom detectors</li>
-        <li><i class="fas fa-check"></i> SLA guarantee</li>
-        <li><i class="fas fa-check"></i> Dedicated support</li>
-      </ul>
-      <button class="btn btn-secondary" onclick="showModal('request')" style="width:100%;justify-content:center;">Contact Us</button>
-    </div>
-  </div>
-</div>
+    <section class="section" id="limits"><div class="shell capabilities">
+      <article class="capability-panel"><h3>Designed for the review loop.</h3><p>The workspace preserves the existing modes for code, archive, repository, and diff review while giving the operator a clearer place to see analysis state, historical reports, and follow-up actions.</p><div class="capability-list"><div><i class="fas fa-file-code"></i>Multi-source intake</div><div><i class="fas fa-satellite-dish"></i>Streamed analysis state</div><div><i class="fas fa-code-branch"></i>Version-diff review</div><div><i class="fas fa-file-export"></i>Report export paths</div></div></article>
+      <aside class="limits-panel"><h3>Limits are part of the interface.</h3><p>Detector output can depend on source coverage, toolchain versions, inheritance, deployment context, and model behavior. A reported issue must be reproduced and assessed by qualified reviewers.</p><a class="button button-secondary" href="/methodology"><i class="fas fa-book-open"></i> Read methodology &amp; limits</a></aside>
+    </div></section>
+  </main>
 
-<div class="modal" id="accessModal">
-  <div class="modal-box">
-    <h2>Enter Access Code</h2>
-    <p style="color:var(--text2);font-size:0.85rem;margin-bottom:1rem;">Enter your access code to start auditing contracts.</p>
-    <div class="error-msg" id="accessError"></div>
-    <input type="text" id="accessCodeInput" placeholder="SCA-XXXX-XXXX" maxlength="30" autocomplete="off" onkeydown="if(event.key==='Enter')verifyAccess()">
-    <button class="btn btn-primary" onclick="verifyAccess()" style="width:100%;justify-content:center;">Verify & Enter</button>
-  </div>
-</div>
+  <footer><div class="shell footer-grid"><span>AuditAI · Smart contract review workspace</span><div class="footer-links"><a href="/methodology">Methodology</a><a href="/docs">API docs</a><a href="/privacy">Privacy</a><a href="https://github.com/DefiAudit0x/smart-contract-auditor">Source</a></div></div></footer>
 
-<div class="modal" id="demoModal">
-  <div class="modal-box">
-    <h2>Live Demo</h2>
-    <p style="color:var(--text2);font-size:0.85rem;margin-bottom:1rem;">Watch how AuditAI detects a critical reentrancy vulnerability in real-time.</p>
-    <div style="background:var(--bg3);padding:1rem;border-radius:8px;margin-bottom:1rem;font-family:monospace;font-size:0.75rem;line-height:1.8;">
-<span style="color:#ff7b72;">Step 1:</span> Code submitted<br>
-<span style="color:#79c0ff;">Step 2:</span> Pre-scan — 7 detectors running...<br>
-<span style="color:#79c0ff;">Step 3:</span> CFG analysis — external call → state write path found<br>
-<span style="color:#d29922;">Step 4:</span> AI analysis — Reentrancy confirmed<br>
-<span style="color:#da3633;">Result:</span> Critical: Reentrancy (CVSS 8.5)
-    </div>
-    <button class="btn btn-primary" onclick="showModal('access')" style="width:100%;justify-content:center;"><i class="fas fa-key"></i> Try It Now</button>
-  </div>
-</div>
-
-<div class="modal" id="requestModal">
-  <div class="modal-box">
-    <h2>Contact Sales</h2>
-    <p style="color:var(--text2);font-size:0.85rem;margin-bottom:1rem;">For enterprise inquiries, custom deployments, and partnership opportunities.</p>
-    <p style="color:var(--text2);font-size:0.85rem;">Reach out to us with your requirements and we will get back to you within 24 hours.</p>
-    <button class="btn btn-secondary" onclick="closeModal('request')" style="width:100%;justify-content:center;margin-top:1rem;">Got it</button>
-  </div>
-</div>
-
-<footer>
-  Developed by AI &bull; DefiAudit0x &bull; Powered by GPT-OSS:120b &bull; Multi-Pass AI Validation &bull; CFG/DFG Level 3 Analysis &bull; OSV Integrated
-</footer>
-
-<script nonce="{{ csp_nonce }}">
-function showModal(type) {
-  document.getElementById(type + 'Modal').classList.add('show');
-  if (type === 'access') {
-    var inp = document.getElementById('accessCodeInput');
-    if (inp) setTimeout(function() { inp.focus(); }, 100);
-  }
-}
-function closeModal(type) {
-  document.getElementById(type + 'Modal').classList.remove('show');
-}
-['accessModal', 'demoModal', 'requestModal'].forEach(function(id) {
-  document.getElementById(id).addEventListener('click', function(e) {
-    if (e.target === this) closeModal(id.replace('Modal', '').toLowerCase());
-  });
-});
-function verifyAccess() {
-  var code = document.getElementById('accessCodeInput').value.trim();
-  var errEl = document.getElementById('accessError');
-  if (!code) { errEl.textContent = 'Please enter an access code.'; errEl.style.display = 'block'; return; }
-  errEl.style.display = 'none';
-  fetch('/api/auth/verify', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code: code })
-  }).then(function(r) { return r.json(); }).then(function(data) {
-    if (data.success) { window.location.href = '/app'; }
-    else { errEl.textContent = data.error || 'Invalid access code.'; errEl.style.display = 'block'; }
-  }).catch(function() {
-    errEl.textContent = 'Network error. Please try again.';
-    errEl.style.display = 'block';
-  });
-}
-</script>
+  <div class="modal" id="accessModal" role="dialog" aria-modal="true" aria-labelledby="accessTitle"><div class="modal-box"><h2 id="accessTitle">Enter the review workspace</h2><p>Use a valid access code to open the analysis interface. The workspace supports review assistance and does not provide an automatic security certification.</p><div class="error-msg" id="accessError" role="status"></div><input type="text" id="accessCodeInput" placeholder="SCA-XXXX-XXXX" maxlength="30" autocomplete="off" onkeydown="if(event.key==='Enter')verifyAccess()"><button class="button button-primary" type="button" onclick="verifyAccess()" style="width:100%;margin-top:8px;"><i class="fas fa-arrow-right"></i> Verify and enter</button></div></div>
+  <script nonce="{{ csp_nonce }}">
+    function showModal(type) { document.getElementById(type + 'Modal').classList.add('show'); if (type === 'access') { var input = document.getElementById('accessCodeInput'); if (input) setTimeout(function () { input.focus(); }, 100); } }
+    function closeModal(type) { document.getElementById(type + 'Modal').classList.remove('show'); }
+    document.getElementById('accessModal').addEventListener('click', function (event) { if (event.target === this) closeModal('access'); });
+    function verifyAccess() { var code = document.getElementById('accessCodeInput').value.trim(); var error = document.getElementById('accessError'); if (!code) { error.textContent = 'Enter an access code to continue.'; return; } error.textContent = ''; fetch('/api/auth/verify', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({code:code}) }).then(function (response) { return response.json(); }).then(function (data) { if (data.success) window.location.href='/app'; else error.textContent=data.error || 'This access code is not valid.'; }).catch(function () { error.textContent='The verification service is unavailable. Please try again.'; }); }
+  </script>
 </body>
 </html>
