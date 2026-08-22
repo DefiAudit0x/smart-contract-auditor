@@ -250,7 +250,8 @@ function renderStreamingReport(text) {
 }
 
 function renderFinalReport(report) {
-  el.resultsBody.innerHTML = buildAccordion(report);
+  var reviewNotice = '<div class="review-notice"><i class="fas fa-triangle-exclamation"></i><div><strong>Review checkpoint</strong><span>Validate every result against source, deployment context, and independent testing before remediation or release.</span></div></div>';
+  el.resultsBody.innerHTML = reviewNotice + buildAccordion(report);
   el.resultsActions.style.display = 'flex';
   el.resultsTitle.textContent = 'Report - ' + countSeverities(report);
   saveToHistory(report);
@@ -323,7 +324,7 @@ function toggleFinding(header) {
 
 function finalizeAnalysis() {
   el.analyzeBtn.disabled = false;
-  el.analyzeBtn.innerHTML = '<i class="fas fa-play"></i> Analyze';
+  el.analyzeBtn.innerHTML = '<i class="fas fa-play"></i> Start review';
   el.stopBtn.style.display = 'none';
   abortController = null;
   if (typeof loadQuota === 'function') loadQuota();

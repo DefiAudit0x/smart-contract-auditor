@@ -47,7 +47,7 @@ GITHUB_TOKEN: str = os.getenv("GITHUB_TOKEN", "")
 _secret_key = os.getenv("SECRET_KEY")
 if not _secret_key:
     import secrets
-    if os.path.isdir("/data"):
+    if os.path.isdir("/data") or os.getenv("RENDER", "").strip():
         raise RuntimeError("SECRET_KEY must be set in production environment variables")
     _key_file = Path(__file__).parent / ".secret_key"
     if _key_file.exists():

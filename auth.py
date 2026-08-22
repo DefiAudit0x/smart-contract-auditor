@@ -10,6 +10,7 @@ import time
 from functools import wraps
 from flask import session, redirect, request, jsonify
 from flask_login import UserMixin
+from werkzeug.security import check_password_hash
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ AUTH_DB_PATH = os.environ.get("AUTH_DB_PATH", os.path.join(os.path.dirname(__fil
 os.makedirs(os.path.dirname(AUTH_DB_PATH), exist_ok=True)
 _local = threading.local()
 
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+ADMIN_PASSWORD_HASH = os.environ.get("ADMIN_PASSWORD_HASH", "")
 DEFAULT_QUOTA = int(os.environ.get("DEFAULT_QUOTA", "50"))
 
 MONTHLY_FREE_CREDITS = int(os.environ.get("MONTHLY_FREE_CREDITS", "5"))
@@ -151,6 +152,22 @@ def init_auth_db():
         success INTEGER,
         timestamp REAL DEFAULT (strftime('%s','now'))
     )""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS code_usage_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        code TEXT NOT NULL,
+        request_id TEXT NOT NULL,
+        status TEXT NOT NULL CHECK(status IN ('reserved', 'completed', 'released')),
+        created_at REAL DEFAULT (strftime('%s','now')),
+        completed_at REAL DEFAULT 0,
+        UNIQUE(code, request_id)
+    )""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS admin_audit_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        action TEXT NOT NULL,
+        success INTEGER NOT NULL,
+        ip TEXT DEFAULT '',
+        timestamp REAL DEFAULT (strftime('%s','now'))
+    )""")
     conn.execute("""CREATE TABLE IF NOT EXISTS audit_history (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         code TEXT DEFAULT '',
@@ -209,8 +226,6 @@ def verify_code(code):
     ).fetchone()
     if row is None:
         return False
-    if row["max_uses"] != -1 and row["used_count"] >= row["max_uses"]:
-        return False
     conn.execute("UPDATE access_codes SET used_count = used_count + 1 WHERE code = ?", (code.strip().upper(),))
     conn.execute(
         "INSERT INTO auth_log (code, ip, success) VALUES (?, ?, 1)",
@@ -228,9 +243,89 @@ def check_quota(code):
     if row is None:
         return {"allowed": 0, "remaining": 0, "total": 0}
     total = row["max_uses"] if row["max_uses"] != -1 else DEFAULT_QUOTA
-    used = row["used_count"]
-    remaining = max(0, total - used)
-    return {"allowed": total, "remaining": remaining, "used": used}
+    used = conn.execute(
+        "SELECT COUNT(*) AS count FROM code_usage_events WHERE code = ? AND status = 'completed'",
+        (code,)
+    ).fetchone()["count"]
+    reserved = conn.execute(
+        "SELECT COUNT(*) AS count FROM code_usage_events WHERE code = ? AND status = 'reserved'",
+        (code,)
+    ).fetchone()["count"]
+    remaining = max(0, total - used - reserved)
+    return {"allowed": total, "remaining": remaining, "used": used, "reserved": reserved}
+
+
+def reserve_code_usage(code, request_id):
+    """Reserve one audit unit for a code without charging duplicate requests twice."""
+    if not code or not request_id or len(request_id) > 128:
+        return {"allowed": False, "error": "A valid idempotency key is required"}
+
+    conn = _get_conn()
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        row = conn.execute(
+            "SELECT max_uses FROM access_codes WHERE code = ? AND is_active = 1",
+            (code,),
+        ).fetchone()
+        if row is None:
+            conn.rollback()
+            return {"allowed": False, "error": "Invalid or inactive access code"}
+
+        existing = conn.execute(
+            "SELECT id, status FROM code_usage_events WHERE code = ? AND request_id = ?",
+            (code, request_id),
+        ).fetchone()
+        if existing and existing["status"] in ("reserved", "completed"):
+            conn.commit()
+            return {"allowed": True, "event_id": existing["id"], "idempotent": True}
+
+        total = row["max_uses"] if row["max_uses"] != -1 else DEFAULT_QUOTA
+        active = conn.execute(
+            "SELECT COUNT(*) AS count FROM code_usage_events "
+            "WHERE code = ? AND status IN ('reserved', 'completed')",
+            (code,),
+        ).fetchone()["count"]
+        if active >= total:
+            conn.rollback()
+            return {"allowed": False, "error": "No audit quota remaining"}
+
+        if existing:
+            conn.execute(
+                "UPDATE code_usage_events SET status = 'reserved', created_at = strftime('%s','now'), completed_at = 0 "
+                "WHERE id = ?",
+                (existing["id"],),
+            )
+            event_id = existing["id"]
+        else:
+            cursor = conn.execute(
+                "INSERT INTO code_usage_events (code, request_id, status) VALUES (?, ?, 'reserved')",
+                (code, request_id),
+            )
+            event_id = cursor.lastrowid
+        conn.commit()
+        return {"allowed": True, "event_id": event_id, "idempotent": False}
+    except Exception:
+        conn.rollback()
+        raise
+
+
+def complete_code_usage(code, event_id):
+    conn = _get_conn()
+    conn.execute(
+        "UPDATE code_usage_events SET status = 'completed', completed_at = strftime('%s','now') "
+        "WHERE id = ? AND code = ? AND status = 'reserved'",
+        (event_id, code),
+    )
+    conn.commit()
+
+
+def release_code_usage(code, event_id):
+    conn = _get_conn()
+    conn.execute(
+        "UPDATE code_usage_events SET status = 'released' WHERE id = ? AND code = ? AND status = 'reserved'",
+        (event_id, code),
+    )
+    conn.commit()
 
 def list_codes():
     conn = _get_conn()
@@ -242,6 +337,19 @@ def list_codes():
 def deactivate_code(code):
     conn = _get_conn()
     conn.execute("UPDATE access_codes SET is_active = 0 WHERE code = ?", (code.strip().upper(),))
+    conn.commit()
+
+
+def verify_admin_password(password):
+    return bool(ADMIN_PASSWORD_HASH) and check_password_hash(ADMIN_PASSWORD_HASH, password or "")
+
+
+def log_admin_event(action, success):
+    conn = _get_conn()
+    conn.execute(
+        "INSERT INTO admin_audit_log (action, success, ip) VALUES (?, ?, ?)",
+        (action, int(bool(success)), request.remote_addr if request else ""),
+    )
     conn.commit()
 
 

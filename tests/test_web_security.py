@@ -3,10 +3,12 @@ import sys
 import os
 import json
 import tempfile
+import uuid
 from unittest.mock import patch
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 import pytest
+import auth
 
 os.environ["RATE_LIMIT_PER_MINUTE"] = "999"
 os.environ["AUDITOR_API_KEY"] = ""
@@ -28,9 +30,16 @@ def _no_rate_limit():
 @pytest.fixture
 def client():
     app.config['TESTING'] = True
+    conn = auth._get_conn()
+    conn.execute(
+        "INSERT OR IGNORE INTO access_codes (code, max_uses, is_active) VALUES (?, ?, 1)",
+        ("SCA-WEB-TEST", 50),
+    )
+    conn.commit()
     with app.test_client() as c:
         with c.session_transaction() as sess:
             sess['authenticated'] = True
+            sess['access_code'] = 'SCA-WEB-TEST'
         yield c
 
 def _make_file_request(client, filename, content="contract C {}", analysis_type="opcodes"):
@@ -42,7 +51,7 @@ def _make_file_request(client, filename, content="contract C {}", analysis_type=
         return client.post('/api/analyze', data={
             'file': (f, filename),
             'analysis_type': analysis_type
-        })
+        }, headers={'X-Idempotency-Key': 'upload-' + uuid.uuid4().hex})
 
 class TestFileUploadSecurity:
     def test_reject_py_file(self, client):
@@ -76,12 +85,12 @@ class TestFileUploadSecurity:
         fpath = os.path.join(tmpdir, "rate.sol")
         with open(fpath, "w", encoding="utf-8") as f:
             f.write("contract C {}")
-        for _ in range(5):
+        for attempt in range(5):
             with open(fpath, "rb") as f:
                 rv = client.post('/api/analyze', data={
                     'file': (f, 'rate.sol'),
                     'analysis_type': 'opcodes'
-                })
+                }, headers={'X-Idempotency-Key': 'rate-' + str(attempt)})
         os.environ["RATE_LIMIT_PER_MINUTE"] = "999"
         assert rv.status_code == 429
         data = json.loads(rv.data)

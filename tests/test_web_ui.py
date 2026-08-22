@@ -3,10 +3,12 @@ import sys
 import os
 import json
 import tempfile
+import uuid
 from unittest.mock import patch
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 import pytest
+import auth
 
 os.environ["RATE_LIMIT_PER_MINUTE"] = "999"
 os.environ["AUDITOR_API_KEY"] = ""
@@ -39,9 +41,18 @@ def _mock_llm():
 @pytest.fixture
 def client():
     app.config['TESTING'] = True
+    code = "SCA-WEB-" + uuid.uuid4().hex[:8].upper()
+    conn = auth._get_conn()
+    conn.execute(
+        "INSERT INTO access_codes (code, max_uses, is_active) VALUES (?, ?, 1)",
+        (code, 50),
+    )
+    conn.commit()
     with app.test_client() as c:
         with c.session_transaction() as sess:
             sess['authenticated'] = True
+            sess['access_code'] = code
+            sess['admin_authenticated'] = True
         yield c
 
 
@@ -76,7 +87,7 @@ class TestWebUI:
             rv = client.post('/api/analyze', data={
                 'file': (f, 'test.sol'),
                 'analysis_type': 'opcodes'
-            })
+            }, headers={'X-Idempotency-Key': str(uuid.uuid4())})
         assert rv.status_code == 200
         data = json.loads(rv.data)
         assert 'report' in data
@@ -109,7 +120,7 @@ class TestWebUI:
             rv = client.post('/api/analyze', data={
                 'file': (f, 'vuln.sol'),
                 'analysis_type': 'audit'
-            })
+            }, headers={'X-Idempotency-Key': str(uuid.uuid4())})
         assert rv.status_code == 200
         data = json.loads(rv.data)
         assert 'report' in data
@@ -163,7 +174,7 @@ class TestWebUI:
                 rv = client.post('/api/analyze', data={
                     'file': (f, f't_{atype}.sol'),
                     'analysis_type': atype
-                })
+                }, headers={'X-Idempotency-Key': str(uuid.uuid4())})
             assert rv.status_code == 200, f"Failed for type {atype}"
             data = json.loads(rv.data)
             assert 'report' in data

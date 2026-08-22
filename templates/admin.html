@@ -55,7 +55,7 @@ th { color: var(--text2); font-weight: 500; }
         <input type="text" id="createdBy" placeholder="Name or email">
       </div>
       <div class="form-group">
-        <label>Max Uses</label>
+        <label>Audit Limit</label>
         <input type="number" id="maxUses" value="-1" style="width:100px;">
       </div>
       <button class="btn btn-primary" id="generateCodeBtn"><i class="fas fa-plus"></i> Generate</button>
@@ -66,7 +66,7 @@ th { color: var(--text2); font-weight: 500; }
   <div class="card">
     <h2>Existing Codes</h2>
     <table>
-      <thead><tr><th>Code</th><th>Created For</th><th>Uses</th><th>Max</th><th>Status</th><th>Created</th><th>Action</th></tr></thead>
+      <thead><tr><th>Code</th><th>Created For</th><th>Logins</th><th>Audit Limit</th><th>Status</th><th>Created</th><th>Action</th></tr></thead>
       <tbody id="codesTable"></tbody>
     </table>
   </div>
@@ -131,7 +131,7 @@ function loadCodes() {
     tbody.innerHTML = (Array.isArray(data.codes) ? data.codes : []).map(function(c) {
       var status = c.is_active ? '<span class="active-badge">Active</span>' : '<span class="inactive-badge">Inactive</span>';
       var action = c.is_active ? '<button class="btn btn-danger deactivate-btn" data-code="' + esc(c.code) + '" style="padding:0.25rem 0.5rem;font-size:0.75rem;">Deactivate</button>' : '';
-      return '<tr><td><code>' + esc(c.code) + '</code></td><td>' + esc(c.created_by || '') + '</td><td>' + c.used_count + '</td><td>' + (c.max_uses === -1 ? 'Unlimited' : c.max_uses) + '</td><td>' + status + '</td><td>' + new Date(c.created_at * 1000).toLocaleDateString() + '</td><td>' + action + '</td></tr>';
+      return '<tr><td><code>' + esc(c.code) + '</code></td><td>' + esc(c.created_by || '') + '</td><td>' + c.used_count + '</td><td>' + (c.max_uses === -1 ? 'Default quota' : c.max_uses) + '</td><td>' + status + '</td><td>' + new Date(c.created_at * 1000).toLocaleDateString() + '</td><td>' + action + '</td></tr>';
     }).join('');
   });
 }
