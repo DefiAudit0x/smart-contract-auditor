@@ -5,6 +5,12 @@ function authHeaders(extra) {
   return h;
 }
 
+function analysisHeaders(extra) {
+  var h = authHeaders(extra);
+  h['X-Idempotency-Key'] = crypto.randomUUID();
+  return h;
+}
+
 function processStream(resp) {
   if (!resp.ok) {
     return resp.json().then(function (errData) {
@@ -165,14 +171,14 @@ function startAnalysis() {
   if (tab === 'diff') {
     fetch(endpoint, {
       method: 'POST',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      headers: analysisHeaders({ 'Content-Type': 'application/json' }),
       body: body,
       signal: abortController.signal
     }).then(handleJsonResponse).catch(handleFetchError);
   } else {
     fetch(endpoint, {
       method: 'POST',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      headers: analysisHeaders({ 'Content-Type': 'application/json' }),
       body: body,
       signal: abortController.signal
     }).then(processStream).catch(handleFetchError);
@@ -191,7 +197,7 @@ function doProjectAnalysis(endpoint, formData) {
   currentReportText = '';
   fetch(endpoint, {
     method: 'POST',
-    headers: authHeaders(),
+    headers: analysisHeaders(),
     body: formData,
     signal: abortController.signal
   }).then(processStream).catch(handleFetchError);

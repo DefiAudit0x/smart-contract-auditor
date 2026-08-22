@@ -3,11 +3,13 @@ import os
 import sys
 import json
 import io
+import uuid
 from unittest.mock import patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 import pytest
+import auth
 
 os.environ["RATE_LIMIT_PER_MINUTE"] = "999"
 os.environ["AUDITOR_API_KEY"] = ""
@@ -45,9 +47,17 @@ def _no_rate_limit():
 @pytest.fixture
 def client():
     app.config['TESTING'] = True
+    code = "SCA-UPLOAD-" + uuid.uuid4().hex[:8].upper()
+    conn = auth._get_conn()
+    conn.execute(
+        "INSERT INTO access_codes (code, max_uses, is_active) VALUES (?, ?, 1)",
+        (code, 50),
+    )
+    conn.commit()
     with app.test_client() as c:
         with c.session_transaction() as sess:
             sess['authenticated'] = True
+            sess['access_code'] = code
         yield c
 
 
@@ -57,7 +67,11 @@ class TestFileUpload:
             'file': (io.BytesIO(SAFE_CONTRACT.encode('utf-8')), 'SafeStorage.sol'),
             'analysis_type': 'audit'
         }
-        rv = client.post('/api/analyze', data=data, headers=AUTH_HEADER)
+        rv = client.post(
+            '/api/analyze',
+            data=data,
+            headers={**AUTH_HEADER, 'X-Idempotency-Key': str(uuid.uuid4())},
+        )
         assert rv.status_code == 200
         resp = json.loads(rv.data)
         assert "report" in resp

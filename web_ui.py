@@ -42,9 +42,10 @@ from security_utils import extract_zip_safely
 from _shared import compile_estimate_gas
 from auth import (
     verify_code, requires_auth, create_access_code, list_codes, deactivate_code,
-    ADMIN_PASSWORD, find_user_by_github_id, create_user, get_user_by_id,
+    ADMIN_PASSWORD_HASH, verify_admin_password, log_admin_event,
+    find_user_by_github_id, create_user, get_user_by_id,
     create_api_key, list_api_keys, revoke_api_key, deduct_credit, reset_credits_if_needed,
-    get_user_history_count, MONTHLY_FREE_CREDITS,
+    get_user_history_count, MONTHLY_FREE_CREDITS, requires_admin,
 )
 from flask_cors import CORS
 
@@ -288,6 +289,7 @@ def api_revoke_key(key_id):
 
 
 @app.route('/report/interactive/<filename>')
+@requires_admin
 def report_interactive(filename):
     fpath = _safe_report_path(filename)
     if not fpath:
@@ -338,11 +340,13 @@ def report_interactive(filename):
 
 
 @app.route('/download/<filename>')
+@requires_admin
 def download(filename):
     return send_from_directory(REPORT_DIR, filename, as_attachment=False)
 
 
 @app.route('/report/list')
+@requires_admin
 def report_list():
     ensure_report_dir()
     reports = []
@@ -357,6 +361,7 @@ def report_list():
 
 
 @app.route('/dashboard')
+@requires_admin
 def dashboard():
     ensure_report_dir()
     s = AuditService.kb_stats() if KB_ENABLED else {}
@@ -573,6 +578,7 @@ def rules_page():
 
 
 @app.route('/report/view/<filename>')
+@requires_admin
 def report_view(filename):
     fpath = _safe_report_path(filename)
     if not fpath:
@@ -585,6 +591,7 @@ def report_view(filename):
 
 
 @app.route('/report/hackerone/<filename>')
+@requires_admin
 def report_hackerone(filename):
     fpath = _safe_report_path(filename)
     if not fpath:
@@ -603,6 +610,7 @@ def report_hackerone(filename):
 
 
 @app.route('/download_pdf/<filename>')
+@requires_admin
 def download_pdf(filename):
     return send_from_directory(REPORT_DIR, filename, as_attachment=True)
 
@@ -776,16 +784,22 @@ def admin_login_page():
     return render_template('admin.html')
 
 
+@app.route('/admin')
+def admin_redirect():
+    return redirect('/admin/login')
+
+
 @app.route('/api/admin/login', methods=['POST'])
 @limiter.limit("5 per minute")
 def api_admin_login():
-    if not ADMIN_PASSWORD:
-        return jsonify({"success": False, "error": "Admin not configured"}), 403
     data = request.get_json()
-    if data and hmac.compare_digest(data.get('password', ''), ADMIN_PASSWORD):
+    if data and verify_admin_password(data.get('password', '')):
         session['admin_authenticated'] = True
+        session.modified = True
+        log_admin_event("login", True)
         return jsonify({"success": True})
-    return jsonify({"success": False, "error": "Wrong password"}), 403
+    log_admin_event("login", False)
+    return jsonify({"success": False, "error": "Invalid credentials"}), 403
 
 csrf.exempt(api_admin_login)
 
@@ -793,6 +807,8 @@ csrf.exempt(api_admin_login)
 @app.route('/api/admin/logout', methods=['POST'])
 def api_admin_logout():
     session.pop('admin_authenticated', None)
+    session.modified = True
+    log_admin_event("logout", True)
     return jsonify({"success": True})
 
 csrf.exempt(api_admin_logout)

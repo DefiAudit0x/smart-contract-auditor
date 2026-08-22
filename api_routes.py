@@ -26,7 +26,11 @@ from agents.pre_scan import run_pre_scan
 from werkzeug.utils import secure_filename
 from orchestrator import dispatch_analysis
 from security_utils import validate_zip_infos
-from auth import save_history, get_history, get_history_item, check_quota, requires_auth, deduct_credit, reset_credits_if_needed, MONTHLY_FREE_CREDITS
+from auth import (
+    save_history, get_history, get_history_item, check_quota, requires_auth,
+    reset_credits_if_needed, MONTHLY_FREE_CREDITS, reserve_code_usage,
+    complete_code_usage, release_code_usage,
+)
 from flask_login import current_user
 
 # Helper: choose the right streaming function based on config
@@ -40,6 +44,51 @@ def _stream_model(prompt, timeout=300):
 logger = logging.getLogger(__name__)
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
+
+
+def _reserve_code_audit_usage():
+    """Reserve quota only for access-code sessions after a request passed input validation."""
+    if current_user.is_authenticated or not session.get("authenticated"):
+        return None, None
+
+    code = session.get("access_code", "")
+    request_id = request.headers.get("X-Idempotency-Key", "").strip()
+    reservation = reserve_code_usage(code, request_id)
+    if not reservation["allowed"]:
+        status = 400 if "idempotency" in reservation["error"].lower() else 402
+        return None, (jsonify({"error": reservation["error"]}), status)
+    if reservation.get("idempotent"):
+        return None, (jsonify({"error": "This analysis request was already processed"}), 409)
+    return {"code": code, "event_id": reservation["event_id"]}, None
+
+
+def _complete_code_audit_usage(reservation):
+    if reservation:
+        complete_code_usage(reservation["code"], reservation["event_id"])
+
+
+def _release_code_audit_usage(reservation):
+    if reservation:
+        release_code_usage(reservation["code"], reservation["event_id"])
+
+
+def _track_code_audit_stream(events, reservation):
+    """Complete a code reservation only when an SSE stream emits a final report."""
+    completed = False
+    try:
+        for event in events:
+            if reservation and event.startswith("data: "):
+                try:
+                    payload = json.loads(event[6:].strip())
+                    if payload.get("type") == "final":
+                        _complete_code_audit_usage(reservation)
+                        completed = True
+                except (AttributeError, json.JSONDecodeError):
+                    pass
+            yield event
+    finally:
+        if not completed:
+            _release_code_audit_usage(reservation)
 
 @api_bp.route('/analyze', methods=['POST'])
 @rate_limit(5)
@@ -72,9 +121,13 @@ def api_analyze():
         return jsonify({"error": "No file was uploaded"}), 400
     if not code:
         return jsonify({"error": "Failed to read the file"}), 400
+    reservation, quota_error = _reserve_code_audit_usage()
+    if quota_error:
+        return quota_error
     try:
         report = _run_analysis(code, analysis_type)
     except Exception as e:
+        _release_code_audit_usage(reservation)
         logger.exception("Analysis failed")
         return jsonify({"error": "An internal error occurred during analysis. Please try again later."}), 500
     timestamp = int(time.time())
@@ -82,6 +135,7 @@ def api_analyze():
     filename_html = f"{analysis_type}_{label}_{timestamp}.html"
     txt_path = save_report_txt(filename_txt, report)
     html_path = _save_html_report(filename_html, report, label, analysis_type)
+    _complete_code_audit_usage(reservation)
     return jsonify({
         "report": report,
         "filename": filename_txt,
@@ -99,10 +153,15 @@ def api_analyze_json():
         return jsonify({"error": "Field 'code' is required"}), 400
     code = truncate_code(data['code'])
     analysis_type = data.get('type', 'audit')
+    reservation, quota_error = _reserve_code_audit_usage()
+    if quota_error:
+        return quota_error
     try:
         report = _run_analysis(code, analysis_type)
+        _complete_code_audit_usage(reservation)
         return jsonify({"report": report})
     except Exception as e:
+        _release_code_audit_usage(reservation)
         logger.exception("Analysis failed")
         return jsonify({"error": "An internal error occurred"}), 500
 
@@ -116,91 +175,97 @@ def api_analyze_stream():
         return jsonify({"error": "Field 'code' is required"}), 400
     code = data['code']
     code = truncate_code(code)
-    # Credit check — actual deduction happens in @require_api_key decorator
+    reservation, quota_error = _reserve_code_audit_usage()
+    if quota_error:
+        return quota_error
     import flask_login
     if flask_login.current_user.is_authenticated:
         reset_credits_if_needed(flask_login.current_user)
 
     def generate():
-        # Step 1: Pre-scan
-        yield f"data: {json.dumps({'type': 'meta', 'message': 'Running pre-scan...'})}\n\n"
-        yield f"data: {json.dumps({'type': 'step', 'step': 1, 'status': 'done'})}\n\n"
         try:
-            pre_scan = run_pre_scan(code)
-            if pre_scan:
-                yield f"data: {json.dumps({'type': 'pre_scan', 'text': pre_scan})}\n\n"
-        except Exception as e:
-            logger.debug(f"Pre-scan in stream skipped: {e}")
+            # Step 1: Pre-scan
+            yield f"data: {json.dumps({'type': 'meta', 'message': 'Running pre-scan...'})}\n\n"
+            yield f"data: {json.dumps({'type': 'step', 'step': 1, 'status': 'done'})}\n\n"
+            try:
+                pre_scan = run_pre_scan(code)
+                if pre_scan:
+                    yield f"data: {json.dumps({'type': 'pre_scan', 'text': pre_scan})}\n\n"
+            except Exception as e:
+                logger.debug(f"Pre-scan in stream skipped: {e}")
 
-        # Step 2: AI Analysis with SSE streaming
-        yield f"data: {json.dumps({'type': 'step', 'step': 2, 'status': 'active'})}\n\n"
-        yield f"data: {json.dumps({'type': 'meta', 'message': 'Analyzing with AI...'})}\n\n"
-        prompt = f"{SYSTEM_PROMPT}\n\nCode to analyze:\n```solidity\n{code}\n```\nLanguage: english"
-        full_report = ""
-        for event in _stream_model(prompt):
-            if event.startswith("data: "):
+            # Step 2: AI Analysis with SSE streaming
+            yield f"data: {json.dumps({'type': 'step', 'step': 2, 'status': 'active'})}\n\n"
+            yield f"data: {json.dumps({'type': 'meta', 'message': 'Analyzing with AI...'})}\n\n"
+            prompt = f"{SYSTEM_PROMPT}\n\nCode to analyze:\n```solidity\n{code}\n```\nLanguage: english"
+            full_report = ""
+            for event in _stream_model(prompt):
+                if event.startswith("data: "):
+                    try:
+                        edata = json.loads(event[6:])
+                        if 'token' in edata:
+                            full_report += edata['token']
+                            yield f"data: {json.dumps({'type': 'token', 'text': edata['token']})}\n\n"
+                            continue
+                        elif 'done' in edata:
+                            full_report = edata.get('full', full_report)
+                            yield f"data: {json.dumps({'type': 'step', 'step': 2, 'status': 'done'})}\n\n"
+                            continue
+                        elif 'error' in edata:
+                            yield f"data: {json.dumps({'type': 'error', 'message': edata['error']})}\n\n"
+                            return
+                    except json.JSONDecodeError:
+                        logger.warning(f"SSE stream: JSON decode error for event: {event[:200]}")
+                        continue
+                yield event
+
+            # Check if model returned an error instead of a report
+            if not full_report or len(full_report.strip()) < 20:
+                yield f"data: {json.dumps({'type': 'error', 'message': 'The AI model returned an empty response. Please try again.'})}\n\n"
+                return
+            if any(indicator in full_report.lower() for indicator in ["cannot read", "this model does not support", "image input", "i cannot", "i'm unable to", "not designed for"]):
+                yield f"data: {json.dumps({'type': 'error', 'message': 'The AI model returned an internal error. This is a temporary issue — please try again.'})}\n\n"
+                return
+
+            # Step 3: Validation pass
+            if full_report:
+                yield f"data: {json.dumps({'type': 'step', 'step': 3, 'status': 'active'})}\n\n"
+                yield f"data: {json.dumps({'type': 'meta', 'message': 'Running second-pass validation...'})}\n\n"
                 try:
-                    edata = json.loads(event[6:])
-                    if 'token' in edata:
-                        full_report += edata['token']
-                        yield f"data: {json.dumps({'type': 'token', 'text': edata['token']})}\n\n"
-                        continue
-                    elif 'done' in edata:
-                        full_report = edata.get('full', full_report)
-                        yield f"data: {json.dumps({'type': 'step', 'step': 2, 'status': 'done'})}\n\n"
-                        continue
-                    elif 'error' in edata:
-                        yield f"data: {json.dumps({'type': 'error', 'message': edata['error']})}\n\n"
-                        return
-                except json.JSONDecodeError:
-                    logger.warning(f"SSE stream: JSON decode error for event: {event[:200]}")
-                    continue
-            yield event
+                    from agents.validation import validate_report
+                    validated = validate_report(full_report, code, "english")
+                    if validated and len(validated) > 50:
+                        full_report = validated
+                except Exception as e:
+                    logger.debug(f"Validation in stream skipped: {e}")
+                yield f"data: {json.dumps({'type': 'step', 'step': 3, 'status': 'done'})}\n\n"
 
-        # Check if model returned an error instead of a report
-        if not full_report or len(full_report.strip()) < 20:
-            yield f"data: {json.dumps({'type': 'error', 'message': 'The AI model returned an empty response. Please try again.'})}\n\n"
-            return
-        if any(indicator in full_report.lower() for indicator in ["cannot read", "this model does not support", "image input", "i cannot", "i'm unable to", "not designed for"]):
-            yield f"data: {json.dumps({'type': 'error', 'message': 'The AI model returned an internal error. This is a temporary issue — please try again.'})}\n\n"
-            return
+            # Step 4: CVSS scoring
+            if full_report:
+                yield f"data: {json.dumps({'type': 'step', 'step': 4, 'status': 'active'})}\n\n"
+                yield f"data: {json.dumps({'type': 'meta', 'message': 'Computing CVSS scores...'})}\n\n"
+                try:
+                    from cvss_scorer import score_report as _score_cvss
+                    cvss_result = _score_cvss(full_report)
+                    if cvss_result:
+                        full_report += f"\n\n---\n## CVSS Score\n{cvss_result}\n"
+                except Exception as e:
+                    logger.debug(f"CVSS in stream skipped: {e}")
+                yield f"data: {json.dumps({'type': 'step', 'step': 4, 'status': 'done'})}\n\n"
 
-        # Step 3: Validation pass
-        if full_report:
-            yield f"data: {json.dumps({'type': 'step', 'step': 3, 'status': 'active'})}\n\n"
-            yield f"data: {json.dumps({'type': 'meta', 'message': 'Running second-pass validation...'})}\n\n"
+            # KB learning (silent, no step)
             try:
-                from agents.validation import validate_report
-                validated = validate_report(full_report, code, "english")
-                if validated and len(validated) > 50:
-                    full_report = validated
+                from agents.pipeline import learn_from_audit
+                learn_from_audit(code, full_report)
             except Exception as e:
-                logger.debug(f"Validation in stream skipped: {e}")
-            yield f"data: {json.dumps({'type': 'step', 'step': 3, 'status': 'done'})}\n\n"
+                logger.debug(f"KB learning skipped: {e}")
 
-        # Step 4: CVSS scoring
-        if full_report:
-            yield f"data: {json.dumps({'type': 'step', 'step': 4, 'status': 'active'})}\n\n"
-            yield f"data: {json.dumps({'type': 'meta', 'message': 'Computing CVSS scores...'})}\n\n"
-            try:
-                from cvss_scorer import score_report as _score_cvss
-                cvss_result = _score_cvss(full_report)
-                if cvss_result:
-                    full_report += f"\n\n---\n## CVSS Score\n{cvss_result}\n"
-            except Exception as e:
-                logger.debug(f"CVSS in stream skipped: {e}")
-            yield f"data: {json.dumps({'type': 'step', 'step': 4, 'status': 'done'})}\n\n"
-
-        # KB learning (silent, no step)
-        try:
-            from agents.pipeline import learn_from_audit
-            learn_from_audit(code, full_report)
-        except Exception as e:
-            logger.debug(f"KB learning skipped: {e}")
-
-        # Step 5: Done
-        yield f"data: {json.dumps({'type': 'step', 'step': 5, 'status': 'done'})}\n\n"
-        yield f"data: {json.dumps({'type': 'final', 'report': full_report})}\n\n"
+            _complete_code_audit_usage(reservation)
+            # Step 5: Done
+            yield f"data: {json.dumps({'type': 'step', 'step': 5, 'status': 'done'})}\n\n"
+            yield f"data: {json.dumps({'type': 'final', 'report': full_report})}\n\n"
+        finally:
+            _release_code_audit_usage(reservation)
 
     return Response(stream_with_context(generate()), mimetype='text/event-stream',
                     headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
@@ -213,6 +278,9 @@ def api_analyze_diff():
     data = request.get_json()
     if not data or 'old_code' not in data or 'new_code' not in data:
         return jsonify({"error": "Fields 'old_code' and 'new_code' are required"}), 400
+    reservation, quota_error = _reserve_code_audit_usage()
+    if quota_error:
+        return quota_error
     try:
         from diff_auditor import analyze_diff as _diff_analyze, summarize_diff, compute_diff
         old = truncate_code(data['old_code'])
@@ -220,10 +288,13 @@ def api_analyze_diff():
         diff = compute_diff(old, new)
         summary = summarize_diff(diff)
         result = _diff_analyze(old, new)
+        _complete_code_audit_usage(reservation)
         return jsonify({"summary": summary, "diff": diff, "analysis": result})
     except ImportError:
+        _release_code_audit_usage(reservation)
         return jsonify({"error": "Diff auditor not available"}), 500
     except Exception as e:
+        _release_code_audit_usage(reservation)
         logger.exception("Internal error")
         return jsonify({"error": "An internal error occurred"}), 500
 
@@ -241,10 +312,19 @@ def api_analyze_chain():
     if not chain_data:
         return jsonify({"error": "Failed to fetch contract"}), 400
     analysis_type = data.get('analysis_type', 'audit')
-    report = _run_analysis(chain_data['code'], analysis_type)
+    reservation, quota_error = _reserve_code_audit_usage()
+    if quota_error:
+        return quota_error
+    try:
+        report = _run_analysis(chain_data['code'], analysis_type)
+    except Exception:
+        _release_code_audit_usage(reservation)
+        logger.exception("Chain analysis failed")
+        return jsonify({"error": "An internal error occurred during analysis"}), 500
     ts = int(time.time())
     fn_txt = f"chain_{chain_data['name']}_{ts}.txt"
     save_report_txt(fn_txt, report)
+    _complete_code_audit_usage(reservation)
     return jsonify({"report": report, "filename": fn_txt,
                     "contract": chain_data['name']})
 
@@ -259,10 +339,14 @@ def api_analyze_github():
         return jsonify({"error": "GitHub URL is required"}), 400
     url = data['url'].strip()
     analysis_type = data.get('analysis_type', 'audit')
+    reservation = None
     try:
         contracts = download_contracts(url, GITHUB_TOKEN if GITHUB_TOKEN else None)
         if not contracts:
             return jsonify({"error": "No Solidity files found in the repository"}), 404
+        reservation, quota_error = _reserve_code_audit_usage()
+        if quota_error:
+            return quota_error
         combined_code = "\n\n// ====== " + "=" * 40 + "\n\n".join(
             f"// File: {c['name']}\n{c['code'][:2000]}" for c in contracts[:10]
         )[:5000]
@@ -273,10 +357,13 @@ def api_analyze_github():
         fn_html = f"github_{label}_{ts}.html"
         save_report_txt(fn_txt, report)
         _save_html_report(fn_html, report, label, analysis_type)
+        _complete_code_audit_usage(reservation)
         return jsonify({"report": report, "filename": fn_txt, "filename_html": fn_html})
     except ImportError:
+        _release_code_audit_usage(reservation)
         return jsonify({"error": "PyGithub not installed. Run: pip install PyGithub"}), 500
     except Exception as e:
+        _release_code_audit_usage(reservation)
         logger.exception("GitHub analysis failed")
         return jsonify({"error": "An internal error occurred"}), 500
 
@@ -290,6 +377,9 @@ def api_github_stream():
     if not data or 'url' not in data:
         return jsonify({"error": "GitHub URL is required"}), 400
     url = data['url'].strip()
+    reservation, quota_error = _reserve_code_audit_usage()
+    if quota_error:
+        return quota_error
 
     def gen():
         from github_loader import get_all_sol_files
@@ -342,7 +432,7 @@ def api_github_stream():
             return
         yield 'data: {}\n\n'.format(json.dumps({'type': 'final', 'report': full}))
 
-    return Response(stream_with_context(gen()), mimetype='text/event-stream', headers={
+    return Response(stream_with_context(_track_code_audit_stream(gen(), reservation)), mimetype='text/event-stream', headers={
         'X-Accel-Buffering': 'no', 'Cache-Control': 'no-cache',
     })
 
@@ -503,6 +593,9 @@ def api_analyze_project():
                 lib_code += "\n\n// File: {}\n{}".format(path, code[:1500])
         combined = entry_code + lib_code
         combined = combined[:8000]
+        reservation, quota_error = _reserve_code_audit_usage()
+        if quota_error:
+            return quota_error
 
         def generate():
             from agents.llm_client import _stream_ollama, _stream_openrouter
@@ -537,7 +630,7 @@ def api_analyze_project():
                 return
             yield 'data: {}\n\n'.format(json.dumps({'type': 'final', 'report': full}))
 
-        return Response(stream_with_context(generate()), mimetype='text/event-stream', headers={
+        return Response(stream_with_context(_track_code_audit_stream(generate(), reservation)), mimetype='text/event-stream', headers={
             'X-Accel-Buffering': 'no', 'Cache-Control': 'no-cache',
         })
     except zipfile.BadZipFile:
