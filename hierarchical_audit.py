@@ -12,7 +12,7 @@ from config import FREE_MODELS, REPORT_DIR, PROGRESS_FILE
 from agents import call_model_with_fallback, truncate_code
 from static_analysis import analyze_opcodes, analyze_storage_single, analyze_inheritance
 from hierarchical_base import HierarchicalAuditor
-from external_analyzers import run_external_analyzers, findings_to_text, TOOL_AVAILABLE
+from external_analyzers import run_external_analyzers, findings_to_text, tool_available
 
 logger = logging.getLogger(__name__)
 
@@ -180,8 +180,8 @@ def hierarchical_audit(code: str, protocol_name: str = "Protocol", repo_url: str
     if focus:
         code = _extract_contract(code, focus)
 
-    # Layer 0: External tools
-    available = [t for t, a in TOOL_AVAILABLE.items() if a]
+    # Layer 0: External tools — availability re-checked at call time (L-30)
+    available = [t for t in ("slither", "mythril") if tool_available(t)]
     if available:
         logger.info(f"Layer 0: running {', '.join(available)}...")
         ext_findings = run_external_analyzers(code)

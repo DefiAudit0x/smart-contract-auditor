@@ -36,7 +36,7 @@ from inheritance_graph import extract_inheritance, generate_html_graph
 from permission_analysis import analyze_permissions
 from custom_rules import get_rules_engine, CustomRule
 from chain_loader import load_from_explorer, list_supported_chains
-from external_analyzers import TOOL_AVAILABLE
+from external_analyzers import tool_available
 from _shared import _has_gas_profiler as _has_gas_profiler_local
 from security_utils import extract_zip_safely
 from _shared import compile_estimate_gas
@@ -438,8 +438,10 @@ def dashboard():
         "sessions": s.get("sessions", 0),
         "top_patterns": s.get("top_patterns", []),
         "rankings": s.get("rankings", []),
-        "slither": TOOL_AVAILABLE.get("slither", False),
-        "mythril": TOOL_AVAILABLE.get("mythril", False),
+        # L-30: lazy availability probe — tools installed after boot are
+        # detected too.
+        "slither": tool_available("slither"),
+        "mythril": tool_available("mythril"),
         "kb_enabled": KB_ENABLED,
         "cache_enabled": CACHE_ENABLED,
         "kb_dynamic": kb_dynamic,

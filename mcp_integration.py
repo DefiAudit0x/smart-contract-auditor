@@ -8,6 +8,7 @@ import logging
 import os
 import re
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -175,10 +176,20 @@ def analyze_contract(code: str, contract_path: str = "", analyzers: Optional[Lis
         all_findings.extend(scan_swc_patterns(code))
     if "defi" in analyzers:
         all_findings.extend(scan_defi_patterns(code))
-    if "slither" in analyzers and contract_path:
-        all_findings.extend(_run_slither(contract_path))
-    if "aderyn" in analyzers and contract_path:
-        all_findings.extend(_run_aderyn(contract_path))
+
+    # L-30: the external tool subprocesses are independent — run them in
+    # parallel (slither + aderyn used to run sequentially) and merge in a
+    # deterministic order.
+    ext_jobs = [t for t in ("slither", "aderyn") if t in analyzers and contract_path]
+    if ext_jobs:
+        futures = {
+            "slither": lambda: _run_slither(contract_path),
+            "aderyn": lambda: _run_aderyn(contract_path),
+        }
+        with ThreadPoolExecutor(max_workers=len(ext_jobs)) as pool:
+            submitted = {t: pool.submit(futures[t]) for t in ext_jobs}
+            for t in ext_jobs:
+                all_findings.extend(submitted[t].result())
 
     # Dedup by name
     seen = set()
