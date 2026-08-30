@@ -169,7 +169,6 @@ def _extract_contract(code: str, focus_name: str) -> str:
         i += 1
     for start, end, cname in contract_ranges:
         if cname and cname.lower() == name_lower:
-            header = [l for l in lines if any(l.strip().startswith(x) for x in ["pragma", "import", "//", "/*", "*"])]
             result = "\n".join(lines[start:end+1])
             return result
     logger.warning(f"Contract '{focus_name}' not found — using full code")

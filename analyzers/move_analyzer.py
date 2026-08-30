@@ -140,11 +140,10 @@ class MoveAnalyzer(LanguageAnalyzer):
         return findings
 
     def _check_phantom_object(self, fname, code):
-        for mod in self._move_ast:
-            for st in mod.structs:
-                if "phantom" in st.abilities and "drop" not in st.abilities:
-                    return [self._make(fname, code, "Coin Theft via Phantom Object", "Critical", "Access Control",
-                                       "Phantom type parameter without drop — may be locked", "", fix="Add has drop")]
+        # L-29: the AST branch below used to test `"phantom" in st.abilities`,
+        # but abilities only ever contain copy/drop/store/key (phantom is a
+        # type-parameter modifier, not an ability) — the branch could never
+        # fire. The regex fallback is the live detector.
         if has_pattern(code, r'phantom') and has_pattern(code, r'struct\s+\w+') and \
            not has_pattern(code, r'has\s+(\w+\s+)*drop'):
             return [self._make(fname, code, "Coin Theft via Phantom Object", "Critical", "Access Control",

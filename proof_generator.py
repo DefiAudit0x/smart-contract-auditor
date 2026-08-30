@@ -91,7 +91,8 @@ DANGEROUS_CHEATCODES = [
     r"vm\.keyExistsJson\s*\(",
     r"vm\.serializeJson\s*\(",
     r"vm\.parseJson\s*\(",
-    r"vm\.parseThomas\s*\(",
+    # L-29: 'parseThomas' was a typo — the real cheatcode is parseToml.
+    r"vm\.parseToml\s*\(",
     r"vm\.linkSymbol\s*\(",
 ]
 
