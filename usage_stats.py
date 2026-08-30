@@ -1,7 +1,12 @@
 import os
 import sqlite3
 import threading
+import time
 from datetime import datetime, timedelta
+
+
+# L-07: retention window for usage_events. 0 disables pruning.
+KEEP_DAYS = int(os.environ.get("USAGE_KEEP_DAYS", "90"))
 
 
 class UsageTracker:
@@ -12,6 +17,7 @@ class UsageTracker:
         self._db_path = db_path
         self._lock = threading.Lock()
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
+        self._last_prune = 0.0
         self._create_table()
 
     def _create_table(self):
@@ -27,10 +33,28 @@ class UsageTracker:
                 )
                 """
             )
+            # L-07: get_summary filters on timestamp — without this index the
+            # scans slow down as the table grows.
+            self._conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_usage_events_timestamp ON usage_events(timestamp)"
+            )
             self._conn.commit()
+
+    def _prune_old_events(self):
+        """L-07: lazily delete events older than the retention window, at
+        most once every 24h — the table used to grow forever."""
+        if KEEP_DAYS <= 0:
+            return
+        now = time.monotonic()
+        if now - self._last_prune < 86400:
+            return
+        self._last_prune = now
+        cutoff = (datetime.utcnow() - timedelta(days=KEEP_DAYS)).isoformat()
+        self._conn.execute("DELETE FROM usage_events WHERE timestamp < ?", (cutoff,))
 
     def log_event(self, event_type, event_value, duration_ms=0):
         with self._lock:
+            self._prune_old_events()
             self._conn.execute(
                 "INSERT INTO usage_events (timestamp, event_type, event_value, duration_ms) VALUES (?, ?, ?, ?)",
                 (datetime.utcnow().isoformat(), event_type, event_value, duration_ms),
