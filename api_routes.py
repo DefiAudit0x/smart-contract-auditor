@@ -174,6 +174,8 @@ def api_analyze_json():
     data = request.get_json()
     if not data or 'code' not in data:
         return jsonify({"error": "Field 'code' is required"}), 400
+    if not isinstance(data['code'], str):
+        return jsonify({"error": "Field 'code' must be a string"}), 400
     code = truncate_code(data['code'])
     analysis_type = data.get('type', 'audit')
     if not is_allowed_analysis_type(analysis_type):
@@ -198,6 +200,8 @@ def api_analyze_stream():
     data = request.get_json()
     if not data or 'code' not in data:
         return jsonify({"error": "Field 'code' is required"}), 400
+    if not isinstance(data['code'], str):
+        return jsonify({"error": "Field 'code' must be a string"}), 400
     code = data['code']
     code = truncate_code(code)
     reservation, quota_error = _reserve_code_audit_usage()
@@ -526,6 +530,8 @@ def api_gas():
     data = request.get_json()
     if not data or 'code' not in data:
         return jsonify({"error": "Field 'code' is required"}), 400
+    if not isinstance(data['code'], str):
+        return jsonify({"error": "Field 'code' must be a string"}), 400
     reservation, quota_error = _reserve_tool_usage()
     if quota_error:
         return quota_error
@@ -707,6 +713,8 @@ def api_fuzz():
     data = request.get_json()
     if not data or 'code' not in data:
         return jsonify({"error": "Field 'code' is required"}), 400
+    if not isinstance(data['code'], str):
+        return jsonify({"error": "Field 'code' must be a string"}), 400
     reservation, quota_error = _reserve_tool_usage()
     if quota_error:
         return quota_error
@@ -759,6 +767,8 @@ def api_fix():
     data = request.get_json()
     if not data or 'code' not in data:
         return jsonify({"error": "Field 'code' is required"}), 400
+    if not isinstance(data['code'], str):
+        return jsonify({"error": "Field 'code' must be a string"}), 400
     reservation, quota_error = _reserve_tool_usage()
     if quota_error:
         return quota_error
@@ -915,7 +925,10 @@ def api_generate_poc():
         return jsonify({"poc": poc, "filename": f"PoC_{target.get('name', 'vuln').replace(' ', '_')}.t.sol"})
 
     except ImportError as e:
-        return jsonify({"error": f"PoC generator not available: {e}"}), 500
+        # L-21: exception text can carry internal paths/module layout —
+        # log it server-side, return a generic message (matches THREAT_MODEL).
+        logger.warning("PoC generator import failed: %s", e)
+        return jsonify({"error": "PoC generator is not available on this deployment"}), 500
     except Exception:
         logger.exception("PoC generation failed")
         return jsonify({"error": "PoC generation failed"}), 500

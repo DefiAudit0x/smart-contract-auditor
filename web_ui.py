@@ -120,7 +120,11 @@ app.config['SESSION_COOKIE_SECURE'] = os.environ.get("RENDER", "").strip() != ""
 # the effective limits (M6 remediation).
 limiter = Limiter(get_remote_address, app=app,
                   storage_uri=os.environ.get("REDIS_URL", "memory://"),
-                  default_limits=["200 per day", "50 per hour"])
+                  default_limits=["200 per day", "50 per hour"],
+                  # L-20: health checks and static assets are infra traffic,
+                  # not API usage — counting them into the shared 200/day
+                  # bucket made Render's health probes trip 429s on /health.
+                  default_limits_exempt_when=lambda: request.endpoint in ("static", "health"))
 
 # CSP + security headers
 @app.before_request
@@ -355,7 +359,10 @@ def report_interactive(filename):
                 f'<div class="finding">'
                 f'<div class="finding-header" onclick="toggleFinding(this)">'
                 f'<span class="severity-badge {sev}">{sev}</span>'
-                f'<span class="title">{html.escape(title)}</span>'
+                # L-24: 'title' was carved out of content that is already
+                # html-escaped once (line ~336) — escaping it again turned
+                # &quot; into &amp;quot; in the report listing.
+                f'<span class="title">{title}</span>'
                 f'<span class="toggle">&rsaquo;</span></div>'
                 f'<div class="finding-body">'
             )
@@ -905,10 +912,20 @@ def api_admin_codes():
         return jsonify({"error": "Unauthorized"}), 401
     if request.method == 'POST':
         data = request.get_json() or {}
+        # L-23: a non-numeric max_uses used to raise ValueError and hit the
+        # admin with a raw 500 page — answer 400 with a field message.
+        try:
+            max_uses = int(data.get('max_uses', -1))
+        except (TypeError, ValueError):
+            return jsonify({"error": "Field 'max_uses' must be an integer"}), 400
         code = create_access_code(
             created_by=data.get('created_by', ''),
-            max_uses=int(data.get('max_uses', -1))
+            max_uses=max_uses,
         )
+        if code is None:
+            # L-03 follow-up: persistent primary-key collisions — the code
+            # was NOT created, never return success with an empty code.
+            return jsonify({"error": "Code generation failed — please retry"}), 500
         return jsonify({"code": code})
     return jsonify({"codes": list_codes()})
 
