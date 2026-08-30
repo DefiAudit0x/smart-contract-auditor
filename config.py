@@ -55,6 +55,12 @@ if not _secret_key:
     else:
         _secret_key = secrets.token_hex(32)
         _key_file.write_text(_secret_key)
+        # L-05: the auto-generated key gates authenticated/admin sessions —
+        # never leave it world-readable (0644 default).
+        os.chmod(_key_file, 0o600)
+        logging.getLogger(__name__).warning(
+            "SECRET_KEY auto-generated into %s (dev only — set SECRET_KEY in production)", _key_file
+        )
 SECRET_KEY: str = _secret_key
 
 CONFIG_FILE = Path(__file__).parent / 'config.json'
@@ -77,12 +83,48 @@ DEFAULT_CONFIG = {
     ],
 }
 
+def _type_ok(default, value) -> bool:
+    """L-08: validate a user-supplied config value against the type of the
+    default it overrides. bool is an int subclass, so it is handled first."""
+    if isinstance(default, bool):
+        return isinstance(value, bool)
+    if isinstance(default, int):
+        return isinstance(value, int) and not isinstance(value, bool)
+    if isinstance(default, float):
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    if isinstance(default, list):
+        return isinstance(value, list)
+    if isinstance(default, str):
+        return isinstance(value, str)
+    return True
+
+
 def load_config() -> Dict:
     cfg = dict(DEFAULT_CONFIG)
     if CONFIG_FILE.exists():
         try:
             with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
-                cfg.update(json.load(f))
+                user_cfg = json.load(f)
+            if not isinstance(user_cfg, dict):
+                logger.warning("config.json must contain an object — ignored")
+                user_cfg = {}
+            for key, value in user_cfg.items():
+                default = DEFAULT_CONFIG.get(key)
+                if default is not None and not _type_ok(default, value):
+                    # A wrong-typed manual value used to change behaviour
+                    # silently (e.g. a string timeout) — keep the default.
+                    logger.warning(
+                        "config.json: '%s' has wrong type %s — keeping default",
+                        key, type(value).__name__,
+                    )
+                    continue
+                # L-08: user chains EXTEND the default fallback chain instead
+                # of replacing it, so models like deepseek-r1 stay reachable.
+                if key == "model_fallback_chain" and isinstance(value, list):
+                    value = list(value) + [
+                        m for m in DEFAULT_CONFIG["model_fallback_chain"] if m not in value
+                    ]
+                cfg[key] = value
             logger.info(f"Loading config from {CONFIG_FILE}")
         except Exception as e:
             logger.warning(f"Failed to load {CONFIG_FILE}: {e}")
