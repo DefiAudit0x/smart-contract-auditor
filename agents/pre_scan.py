@@ -1,9 +1,16 @@
 import re
 
 import logging
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 logger = logging.getLogger(__name__)
+
+# Registration of LLM-mined patterns is guarded (M21 remediation): bounded
+# count, canary-checked complexity, and a lock closing the check-then-act
+# race between ThreadPoolExecutor workers.
+_learned_lock = threading.Lock()
+MAX_LEARNED_CLASSES = 100
 
 _has_detector = False
 _detector = None
@@ -70,7 +77,7 @@ except ImportError:
 _has_pattern_learner = False
 _learned_classes = None
 try:
-    from agents.pattern_learner import get_learned_bug_classes, patterns_text as _learned_text
+    from agents.pattern_learner import get_learned_bug_classes, _safe_search_with_timeout, patterns_text as _learned_text
     _has_pattern_learner = True
 except ImportError:
     pass
@@ -207,19 +214,39 @@ def _register_learned_classes():
     if not _has_detector or not _has_pattern_learner:
         return
     global _learned_classes
-    if _learned_classes is not None:
-        return  # already registered
-    _learned_classes = get_learned_bug_classes()
-    if not _learned_classes:
-        return
-    added = 0
-    for key, cls in _learned_classes.items():
-        if key not in _detector._BUG_CLASSES:
+    with _learned_lock:
+        if _learned_classes is not None:
+            return  # already registered (single check under the lock)
+        _learned_classes = get_learned_bug_classes()
+        if not _learned_classes:
+            return
+        canary = "solidity contract function pragma " * 50
+        added = 0
+        for key, cls in list(_learned_classes.items())[:MAX_LEARNED_CLASSES]:
+            if key in _detector._BUG_CLASSES:
+                continue
+            if len(_detector._BUG_CLASS_ORDER) > MAX_LEARNED_CLASSES + 16:
+                continue
+            # Complexity gate: compile and canary-check every LLM-authored
+            # pattern BEFORE it can scan any future audit (M21 remediation).
+            safe = True
+            for pat in cls.get("vulnerable_patterns", []):
+                try:
+                    rx = re.compile(pat, re.IGNORECASE)
+                except re.error:
+                    safe = False
+                    break
+                if not _safe_search_with_timeout(rx, canary, timeout=1.0):
+                    safe = False
+                    break
+            if not safe:
+                logger.warning("Learned class '%s' rejected by complexity gate", key)
+                continue
             _detector._BUG_CLASSES[key] = cls
             _detector._BUG_CLASS_ORDER.append(key)
             added += 1
-    if added:
-        logger.info(f"Registered {added} learned pattern(s) into bug_detector")
+        if added:
+            logger.info(f"Registered {added} learned pattern(s) into bug_detector")
 
 
 _SCAN_TASKS = [

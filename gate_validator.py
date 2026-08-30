@@ -74,12 +74,19 @@ def _extract_findings(report: str) -> List[Dict]:
 
 
 def _has_exploit_path(combined: str) -> bool:
-    """Check if the finding has a concrete step-by-step exploit path."""
-    return any(w in combined for w in [
-        "step", "transaction", "call", "attack", "exploit",
-        "1.", "2.", "3.", "first", "then", "sequence",
-        "flash", "repay", "borrow", "swap",
-    ])
+    """Concrete exploit path = ordered steps AND a concrete call reference
+    (M22 remediation): any single word like 'call' or a bare '1.' used to
+    satisfy the check, letting vague findings slip through the gate."""
+    has_steps = (
+        any(w in combined for w in ["step", "first", "then", "sequence", "attack", "exploit"])
+        or bool(re.search(r"\b[1-3]\.\s\S", combined))
+    )
+    has_call_ref = (
+        bool(re.search(r"\.(?:call|transfer|send|delegatecall|staticcall)\s*\(", combined))
+        or bool(re.search(r"\bfunction\s+\w+", combined))
+        or any(w in combined for w in ["transaction", "flash", "repay", "borrow", "swap"])
+    )
+    return has_steps and has_call_ref
 
 
 def _has_impact_words(combined: str, sev: str) -> bool:
@@ -136,8 +143,13 @@ def _gate_q1_exploit_path(finding: Dict, code: str) -> Tuple[bool, str]:
     desc = finding.get("description", "").lower()
     combined = name + " " + desc
 
+    # Safe-words gate applies to the finding NAME with word boundaries
+    # (M22 remediation): a substring hit in the description - e.g. the
+    # legitimate finding "Missing event emission on critical state change"
+    # containing the safe-word "missing event" - used to silently delete
+    # real results.
     for kw in _SAFE_NAME_KEYWORDS:
-        if kw in combined:
+        if re.search(r"\b" + re.escape(kw.lower()) + r"\b", name):
             return False, f"Known non-vulnerability pattern: '{kw}'"
 
     for fp in _FP_INDICATORS:
@@ -232,13 +244,21 @@ def _gate_q4_no_admin_abuse(finding: Dict, code: str) -> Tuple[bool, str]:
     return True, ""
 
 
+def _norm_tokens(s: str) -> set:
+    """Normalized token set of a pattern/finding name for dedup."""
+    return set(re.findall(r"[a-z0-9]+", (s or "").lower()))
+
+
 def _gate_q5_not_known_acknowledged(finding: Dict, kb_patterns: List[Dict]) -> Tuple[bool, str]:
     """Q5: Is this already known/acknowledged in prior audits or KB?"""
-    name = finding.get("name", "").lower()
+    name = finding.get("name", "")
+    # Dedup on canonical equality only (M22 remediation): prefix matching
+    # ('Reentrancy' vs 'Reentrancy in withdrawPath') silently deleted real
+    # findings that merely shared a leading word with a KB entry.
     for p in kb_patterns:
-        pname = p.get("name", "").lower()
-        if name == pname or name.startswith(pname) or pname.startswith(name):
-            return False, f"Duplicate of existing KB pattern: '{p.get('name')}'"
+        pname = p.get("name", "")
+        if name.lower() == pname.lower() or _norm_tokens(name) == _norm_tokens(pname):
+            return False, f"Duplicate of existing KB pattern: '{pname}'"
     return True, ""
 
 
@@ -346,27 +366,42 @@ def validate_report(report: str, code: str, kb_patterns: Optional[List[Dict]] = 
             kept.append(f)
 
     if not kept:
-        header = "### Overall Security Rating: A+\n\nNo vulnerabilities found after validation.\n"
-        gas = ""
-        gas_match = re.search(r"(### Gas Optimizations.*?)(?=###|$)", report, re.DOTALL)
-        if gas_match:
-            gas = "\n" + gas_match.group(1)
-        return header + gas
+        # The gate wiped every finding - do NOT fabricate a clean A+ report
+        # (M22 remediation): the original report is preserved with an
+        # explicit unverified banner so a broken run cannot masquerade as a
+        # clean audit.
+        banner = (
+            "### Validation Warning\n\n"
+            "The validation gate rejected every finding of this run. The "
+            "original report is preserved below UNCHANGED for human review - "
+            "treat this run as UNVERIFIED, not as a clean audit.\n\n"
+        )
+        return banner + report
 
     result_lines = []
     in_vuln_section = False
     in_gas_section = False
     kept_names = {f["name"] for f in kept}
+    severity_by_name = {f["name"]: f["severity"] for f in kept if f.get("name")}
+    current_name = None
 
     for line in report.split("\n"):
         s = line.strip()
         if s.startswith("- **Name**"):
             name = s.split(":", 1)[1].strip() if ":" in s else s.replace("**Name**", "").strip()
             in_vuln_section = name in kept_names
+            current_name = name if in_vuln_section else None
             in_gas_section = False
         elif s.startswith("### Gas Optimizations"):
             in_vuln_section = False
             in_gas_section = True
+
+        # Apply severity changes INLINE on the finding body (M22
+        # remediation): they used to live only in trailing notes while the
+        # report text kept showing the stale severity.
+        if (in_vuln_section and current_name in severity_by_name
+                and s.startswith("- **Severity**")):
+            line = f"- **Severity**: {severity_by_name[current_name]}"
 
         if in_vuln_section or in_gas_section or s.startswith("### Overall") or s.startswith("### Vulnerability") or s.startswith("### Gas"):
             result_lines.append(line)
