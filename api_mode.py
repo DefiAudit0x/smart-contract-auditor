@@ -1,6 +1,7 @@
 """API Mode - REST API for programmatic use."""
 import hmac
 import os
+import secrets
 import sys
 import tempfile
 import time
@@ -13,7 +14,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from agents import analyze_code, chunked_audit
 from main import load_local_contract
 from orchestrator import dispatch_analysis
-from chain_loader import load_from_explorer
+from chain_loader import load_from_explorer, CHAIN_CONFIG, list_supported_chains
 from batch_audit import batch_audit
 from diff_audit import compute_diff, run_diff_audit
 from external_analyzers import run_external_analyzers, findings_to_text
@@ -25,9 +26,18 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("api")
 
 app = Flask(__name__)
+# Bound request bodies: without this a single request can stream gigabytes
+# to disk (M3 remediation — matches the 5 MB limit of the main web app).
+app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
 API_KEY = os.environ.get("AUDITOR_API_KEY", "")
 UPLOAD_DIR = os.path.join(tempfile.gettempdir(), "smart_audit_uploads")
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+# 0o700 keeps the staging directory private to the service user so local
+# users cannot pre-create or read each other's uploads (M3 remediation).
+os.makedirs(UPLOAD_DIR, mode=0o700, exist_ok=True)
+try:
+    os.chmod(UPLOAD_DIR, 0o700)  # enforce even if the directory already existed
+except OSError:
+    pass
 
 def cleanup_old_uploads(max_age_hours: int = 24):
     """Delete uploaded files older than 24 hours."""
@@ -110,7 +120,12 @@ def api_file():
         return jsonify({"error": "No file uploaded"}), 400
     f = request.files["file"]
     safe = secure_filename(f.filename) or "upload.sol"
-    path = os.path.join(UPLOAD_DIR, safe)
+    # Unique storage name: two concurrent uploads of "Token.sol" must never
+    # race on the same path, and files are swept periodically so repeated
+    # uploads cannot exhaust the disk (M3 remediation).
+    cleanup_old_uploads()
+    stored = f"{secrets.token_hex(16)}_{safe}"
+    path = os.path.join(UPLOAD_DIR, stored)
     f.save(path)
     code = load_local_contract(path)
     if not code:
@@ -123,7 +138,14 @@ def api_file():
 @require_auth
 def api_contract(chain, address):
     """Fetch a contract from a chain and analyze it."""
-    api_key = request.args.get("api_key", "")
+    # Explorer API keys travel in a header, never the query string: URLs get
+    # logged by gunicorn access logs and reverse proxies (M4 remediation).
+    api_key = request.headers.get("X-Explorer-Key", "")
+    # Validate the chain before it reaches load_from_explorer so unsupported
+    # values are rejected at the boundary (M4 remediation).
+    if chain not in CHAIN_CONFIG:
+        return jsonify({"error": "Unsupported chain",
+                        "supported": list_supported_chains()}), 400
     data = load_from_explorer(address, chain, api_key)
     if not data:
         return jsonify({"error": "Contract not found"}), 404
