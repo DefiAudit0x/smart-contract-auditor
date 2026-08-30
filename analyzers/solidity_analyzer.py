@@ -3,7 +3,7 @@ Solidity Static Analyzer — Based on AST instead of Regex (solcast + solcx)
 """
 import re
 import logging
-from typing import List
+from typing import Dict, List
 from .base import LanguageAnalyzer, Agent, Finding, has_pattern
 from .solidity_ast import (
     compile_to_ast, analyze_contracts, _extract_function, _traverse, _get_node_type, _get_name, HAS_SOLCAST,
@@ -21,6 +21,10 @@ class SolidityAnalyzer(LanguageAnalyzer):
     def __init__(self):
         super().__init__()
         self._contracts: List[ASTContract] = []
+        # Contracts keyed by the file they were parsed from. AST checks must
+        # only report on contracts of the file being analyzed — attributing
+        # contract A's findings to file B misdirects the whole audit.
+        self._contracts_by_file: Dict[str, List[ASTContract]] = {}
         self._ast_ok = False
         self._register_agents()
 
@@ -68,12 +72,33 @@ class SolidityAnalyzer(LanguageAnalyzer):
         self._parse_single_file(filename, code)
         return super().analyze_file(filename, code)
 
+    def _store_contracts(self, fname: str, contracts: List[ASTContract]):
+        """Register parsed contracts for one file (replacing any previous
+        parse of the same file) and rebuild the flat lookup list."""
+        for c in contracts:
+            c.file = fname
+        self._contracts_by_file[fname] = contracts
+        self._rebuild_contracts()
+
+    def _rebuild_contracts(self):
+        self._contracts = [
+            c for contracts in self._contracts_by_file.values() for c in contracts
+        ]
+
+    def _contracts_for(self, fname: str) -> List[ASTContract]:
+        """Contracts parsed from exactly this file."""
+        return self._contracts_by_file.get(fname, [])
+
     def _parse_single_file(self, fname: str, code: str):
-        """Compile a single file to AST"""
+        """Compile a single file to AST (idempotent per file)"""
+        if fname in self._contracts_by_file:
+            # load_directory already parsed every file; parsing again here
+            # would double every finding.
+            return
         try:
             units = compile_to_ast(code)
             if units:
-                self._contracts.extend(analyze_contracts(units))
+                self._store_contracts(fname, analyze_contracts(units))
                 self._ast_ok = True
         except Exception as e:
             logger.debug(f"AST parse failed for {fname}: {e}")
@@ -84,14 +109,14 @@ class SolidityAnalyzer(LanguageAnalyzer):
             try:
                 units = compile_to_ast(code)
                 if units:
-                    self._contracts.extend(analyze_contracts(units))
+                    self._store_contracts(fname, analyze_contracts(units))
                     self._ast_ok = True
             except Exception as e:
                 logger.debug(f"AST parse failed for {fname}: {e}")
 
     def _get_fn(self, contract_name: str, fn_name: str) -> ASTFunction:
         """Look for a function in the analyzed contracts"""
-        for c in self._contracts:
+        for c in self._contracts_for(fname):
             if c.name == contract_name:
                 for fn in c.functions:
                     if fn.name == fn_name:
@@ -110,7 +135,7 @@ class SolidityAnalyzer(LanguageAnalyzer):
     def _check_reentrancy_ast(self, fname, code):
         """AST: detect reentrancy — external call without nonReentrant"""
         findings = []
-        for c in self._contracts:
+        for c in self._contracts_for(fname):
             for fn in c.functions:
                 if fn.external_calls and 'nonReentrant' not in fn.modifiers:
                     findings.append(Finding("Reentrancy (AST)", "Critical", "Reentrancy",
@@ -123,7 +148,7 @@ class SolidityAnalyzer(LanguageAnalyzer):
     def _check_delegatecall(self, fname, code):
         """AST: detect DELEGATECALL"""
         findings = []
-        for c in self._contracts:
+        for c in self._contracts_for(fname):
             for fn in c.functions:
                 if fn.uses_delegatecall:
                     findings.append(Finding("DELEGATECALL Usage (AST)", "High", "Access Control",
@@ -135,7 +160,7 @@ class SolidityAnalyzer(LanguageAnalyzer):
     def _check_delegatecall_mutable(self, fname, code):
         """AST: DELEGATECALL on a mutable address"""
         findings = []
-        for c in self._contracts:
+        for c in self._contracts_for(fname):
             for fn in c.functions:
                 if fn.uses_delegatecall and fn.parameters:
                     findings.append(Finding("Delegatecall to Mutable Address", "Critical", "Access Control",
@@ -148,7 +173,7 @@ class SolidityAnalyzer(LanguageAnalyzer):
     def _check_tx_origin(self, fname, code):
         """AST: detect tx.origin precisely"""
         findings = []
-        for c in self._contracts:
+        for c in self._contracts_for(fname):
             for fn in c.functions:
                 if fn.uses_tx_origin:
                     severity = "High" if fn.has_require else "Medium"
@@ -161,7 +186,7 @@ class SolidityAnalyzer(LanguageAnalyzer):
     def _check_block_timestamp(self, fname, code):
         """AST: detect block.timestamp"""
         findings = []
-        for c in self._contracts:
+        for c in self._contracts_for(fname):
             for fn in c.functions:
                 if fn.uses_block_timestamp:
                     findings.append(Finding("block.timestamp Usage (AST)", "Medium", "Timing",
@@ -173,7 +198,7 @@ class SolidityAnalyzer(LanguageAnalyzer):
 
     def _check_assembly(self, fname, code):
         findings = []
-        for c in self._contracts:
+        for c in self._contracts_for(fname):
             for fn in c.functions:
                 if fn.uses_assembly:
                     findings.append(Finding("Assembly Block (AST)", "Medium", "Security",
@@ -184,7 +209,7 @@ class SolidityAnalyzer(LanguageAnalyzer):
 
     def _check_unbounded_loop(self, fname, code):
         findings = []
-        for c in self._contracts:
+        for c in self._contracts_for(fname):
             for fn in c.functions:
                 if fn.has_loop:
                     findings.append(Finding("Unbounded Loop (AST)", "High", "DoS",
@@ -199,7 +224,7 @@ class SolidityAnalyzer(LanguageAnalyzer):
 
     def _check_selfdestruct(self, fname, code):
         findings = []
-        for c in self._contracts:
+        for c in self._contracts_for(fname):
             for fn in c.functions:
                 if fn.uses_selfdestruct:
                     findings.append(Finding("Selfdestruct", "Critical", "Access Control",
@@ -215,7 +240,7 @@ class SolidityAnalyzer(LanguageAnalyzer):
     def _check_uninitialized_proxy(self, fname, code):
         if "delegatecall" in code and "initialize" in code:
             has_init = False
-            for c in self._contracts:
+            for c in self._contracts_for(fname):
                 if c.has_initializer or c.has_initialized_var:
                     has_init = True
                     break

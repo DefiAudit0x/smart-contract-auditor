@@ -14,6 +14,13 @@ from config import OPENROUTER_API_KEY
 
 logger = logging.getLogger(__name__)
 
+# Above this size an LLM whole-file rewrite is unsound: the prompt would
+# have to truncate the original and the PR would corrupt the file.
+MAX_WHOLE_FILE_PROMPT_CHARS = 4000
+# A "fixed" file dramatically shorter than the original almost always means
+# the model dropped code; refuse to publish such output.
+MIN_OUTPUT_RATIO = 0.8
+
 
 def _extract_fixes(report: str) -> List[dict]:
     """Extract fix code from the audit report."""
@@ -43,11 +50,19 @@ def _extract_fixes(report: str) -> List[dict]:
 
 def _apply_fix_to_code(original: str, fix_code: str) -> str:
     """Apply fix code to original code via AI."""
+    if len(original) > MAX_WHOLE_FILE_PROMPT_CHARS:
+        # Whole-file rewrites are only sound when the model actually sees
+        # the whole file — pushing a truncated rewrite would destroy the
+        # tail of the user's contract in their repository.
+        raise ValueError(
+            f"File exceeds {MAX_WHOLE_FILE_PROMPT_CHARS} chars — "
+            "whole-file rewrite disabled to prevent silent truncation"
+        )
     prompt = f"""I have a smart contract and a fix report. Apply the following changes to the original code and output only the modified version.
 
 Original code:
 ```solidity
-{original[:4000]}
+{original}
 ```
 
 Fix to apply:
@@ -68,13 +83,21 @@ Output the entire code after applying the fix inside ```solidity."""
 
 
 def create_fix_pr(repo_url: str, code: str, report: str,
-                   github_token: str, branch_name: str = "auto-fix") -> str:
-    """Create Fork + apply fixes + PR to original repository."""
+                   github_token: str, branch_name: str = "auto-fix",
+                   target_path: str = "") -> str:
+    """Create Fork + apply fixes + PR to original repository.
+
+    `target_path` must name the repository file the audited `code` came
+    from. Without it the old flow overwrote the first .sol file it found
+    in the repo root — whatever file that happened to be.
+    """
     from github_loader import extract_repo_info
 
     username, repo_name = extract_repo_info(repo_url)
     if not username or not repo_name:
         return "❌ Invalid GitHub URL"
+    if not target_path:
+        return "❌ target_path is required: name the file the audited code came from"
 
     try:
         g = Github(github_token)
@@ -107,6 +130,12 @@ def create_fix_pr(repo_url: str, code: str, report: str,
         if modified_code == code:
             return "❌ Version unchanged — no fix was applied"
 
+        # Sanity gate: a rewritten file much shorter than the original
+        # means the model dropped code. Never push that to a user's repo.
+        if len(modified_code) < len(code) * MIN_OUTPUT_RATIO:
+            return ("❌ Generated fix suspiciously shorter than the original "
+                    f"({len(modified_code)} vs {len(code)} chars) — aborting to prevent code loss")
+
         # Push the new branch
         try:
             sb = fork.get_branch(original_repo.default_branch)
@@ -115,18 +144,20 @@ def create_fix_pr(repo_url: str, code: str, report: str,
                 sha=sb.commit.sha
             )
 
-            # Edit the file
-            contents = fork.get_contents("", ref=branch_name)
-            for content in contents:
-                if content.path.endswith(".sol"):
-                    fork.update_file(
-                        path=content.path,
-                        message=f"Auto-fix: {fixes[0]['title'][:50]}" if fixes else "Auto-fix by Smart Contract Auditor",
-                        content=modified_code,
-                        sha=content.sha,
-                        branch=branch_name,
-                    )
-                    break
+            # Update exactly the file the audited code came from.
+            try:
+                target = fork.get_contents(target_path, ref=branch_name)
+            except GithubException:
+                return f"❌ Target file '{target_path}' not found in repository root"
+            if not target.path.endswith(".sol"):
+                return f"❌ Target file '{target_path}' is not a Solidity file"
+            fork.update_file(
+                path=target.path,
+                message=f"Auto-fix: {fixes[0]['title'][:50]}" if fixes else "Auto-fix by Smart Contract Auditor",
+                content=modified_code,
+                sha=target.sha,
+                branch=branch_name,
+            )
 
         except GithubException as e:
             return f"❌ Failed to apply changes: {e}"

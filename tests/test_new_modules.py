@@ -371,3 +371,45 @@ class TestFindingToString:
         s = str(f)
         assert "Agent" in s
         assert "High" in s
+
+
+def test_cvss_high_vector_no_longer_contradicts_its_severity_band():
+    """Regression: the 'High' default vector previously scored 9.1 under the
+    internal estimate, which severity_from_score maps to Critical — the
+    module contradicted itself on its own default mappings. With the official
+    cvss library installed the score must fall in the High band."""
+    cvss_scorer = __import__('cvss_scorer')
+    vector = cvss_scorer.vector_from_severity("High")
+    metrics = cvss_scorer.parse_vector(vector)
+    if cvss_scorer.HAS_OFFICIAL_CVSS:
+        score = cvss_scorer._official_score(vector)
+        assert score is not None
+        assert cvss_scorer.severity_from_score(score) == "High", (vector, score)
+    else:
+        score = cvss_scorer.compute_base_score(metrics)
+    assert 0.0 <= score <= 10.0
+
+
+def test_score_report_labels_estimate_method_when_official_lib_missing():
+    cvss_scorer = __import__('cvss_scorer')
+    report = "- **Name**: Test\n- **Severity**: High\n- **Description**: reentrancy\n"
+    out = cvss_scorer.score_report(report)
+    entry = out["findings"][0]
+    if not cvss_scorer.HAS_OFFICIAL_CVSS:
+        assert entry["method"] == "internal_estimate"
+        assert "not an official" in entry["note"]
+    else:
+        assert entry["method"] == "official"
+
+
+def test_hierarchical_progress_key_binds_to_code_content():
+    """Regression: progress was keyed by protocol name only, so auditing
+    contract B replayed contract A's saved layer results."""
+    from hierarchical_base import HierarchicalAuditor
+
+    auditor = HierarchicalAuditor(layer1_agents=[], layer2_agents=[])
+    key_a = auditor._progress_key("layer1", "contract A code")
+    key_b = auditor._progress_key("layer1", "contract B code")
+    assert key_a != key_b
+    assert key_a == auditor._progress_key("layer1", "contract A code")
+    assert "layer1" in key_a

@@ -69,9 +69,17 @@ class VyperAnalyzer(LanguageAnalyzer):
 
     def _check_reentrancy(self, fname, code):
         findings = []
+        # Vyper external-call shapes:
+        #   raw_call(...), send(...), selfdestruct(...) — built-ins
+        #   contract.method(...) — external contract calls
+        # Excluded: self.method(...) (internal), log.Event(...) (events),
+        # msg.sender (attribute access only, never a call on its own).
+        external_call_re = re.compile(
+            r"\b(?:raw_call|send|selfdestruct)\s*\(|(?<!self\.)(?<!log\.)\b\w+\.\w+\s*\("
+        )
         for fn in self._vyper_funcs.values():
             has_nr = self._has_decorator(fn, "nonreentrant")
-            makes_call = fn.has_raw_call or fn.has_send or bool(re.search(r'\w+\.\w+\(', fn.body))
+            makes_call = fn.has_raw_call or fn.has_send or bool(external_call_re.search(fn.body))
             if makes_call and not has_nr:
                 findings.append(self._make(fname, code, "Reentrancy (Missing @nonreentrant)", "Critical",
                               "Reentrancy", f"'{fn.name}' calls externally without @nonreentrant",

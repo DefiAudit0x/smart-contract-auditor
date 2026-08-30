@@ -168,3 +168,55 @@ class TestASTAnalysis:
         }"""
         report = analyze_inheritance_with_ast(code)
         assert "DELEGATECALL" in report or "Delegatecall" in report or "delegatecall" in report
+
+
+def test_storage_layout_assigns_base_contract_vars_to_lower_slots():
+    """Solidity puts the most-base contract's state vars at slot 0.
+
+    Regression: the layout used to consume the postorder linearization
+    reversed, giving the DERIVED contract slot 0 (mirror of the compiler).
+    """
+    from static_analysis.storage_analyzer import _compute_storage_layout
+
+    contracts = {
+        "A": {"name": "A", "parents": [], "state_vars": [
+            {"name": "a", "type": "uint256", "size": 32}]},
+        "B": {"name": "B", "parents": ["A"], "state_vars": [
+            {"name": "b", "type": "uint256", "size": 32}]},
+    }
+    layout = _compute_storage_layout(contracts, "B")
+    by_name = {v["name"]: v["slot"] for v in layout}
+    assert by_name["a"] == 0, f"base var 'a' must live in slot 0, got {by_name}"
+    assert by_name["b"] == 1, f"derived var 'b' must live in slot 1, got {by_name}"
+
+
+def test_storage_layout_packing_and_dynamic_slots():
+    """Packing, full-slot advance and dynamic-slot placement match the
+    Solidity storage model (base-first layout fixed elsewhere)."""
+    from static_analysis.storage_analyzer import _compute_storage_layout
+
+    contracts = {
+        "C": {"name": "C", "parents": [], "state_vars": [
+            {"name": "x", "type": "uint128", "size": 16},
+            {"name": "y", "type": "address", "size": 20},
+            {"name": "z", "type": "uint256", "size": 32},
+            {"name": "m", "type": "mapping(address => uint256)", "size": 32},
+            {"name": "w", "type": "uint256", "size": 32},
+        ]},
+    }
+    by_name = {v["name"]: v["slot"] for v in _compute_storage_layout(contracts, "C")}
+    # x packs slot 0 alone (16+20 > 32); y slot 1; z slot 2 (fresh, full);
+    # mapping owns slot 3; w slot 4.
+    assert by_name == {"x": 0, "y": 1, "z": 2, "m": 3, "w": 4}, by_name
+
+
+def test_storage_layout_dynamic_var_can_start_at_slot_zero():
+    from static_analysis.storage_analyzer import _compute_storage_layout
+
+    contracts = {
+        "D": {"name": "D", "parents": [], "state_vars": [
+            {"name": "m", "type": "mapping(address => uint256)", "size": 32},
+        ]},
+    }
+    layout = _compute_storage_layout(contracts, "D")
+    assert layout[0]["slot"] == 0, layout

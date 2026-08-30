@@ -1,6 +1,6 @@
 """Plugin system — allows custom Python detectors to be loaded dynamically."""
 
-import importlib
+import importlib.util
 import inspect
 import logging
 import os
@@ -13,11 +13,6 @@ logger = logging.getLogger(__name__)
 ALLOW_DYNAMIC_PLUGINS = os.environ.get("ALLOW_DYNAMIC_PLUGINS", "false").lower() == "true"
 PLUGIN_DIR = os.environ.get("PLUGIN_DIR", os.path.join(os.path.dirname(__file__), "..", "plugins"))
 PLUGIN_ALLOWLIST = [".py"]
-
-if not os.path.isdir(PLUGIN_DIR):
-    os.makedirs(PLUGIN_DIR, exist_ok=True)
-if PLUGIN_DIR not in sys.path:
-    sys.path.insert(0, PLUGIN_DIR)
 
 
 @dataclass
@@ -66,7 +61,7 @@ class PluginManager:
                 continue
             mod_name = fname[:-3]
             try:
-                mod = importlib.import_module(mod_name)
+                mod = self._load_plugin_module(fpath, mod_name)
                 for name, obj in inspect.getmembers(mod, inspect.isclass):
                     if issubclass(obj, BaseDetector) and obj is not BaseDetector:
                         instance = obj()
@@ -74,6 +69,24 @@ class PluginManager:
                         logger.info(f"Loaded plugin detector: {instance.name} v{instance.version}")
             except Exception as e:
                 logger.warning(f"Failed to load plugin {mod_name}: {e}")
+
+    @staticmethod
+    def _load_plugin_module(fpath: str, mod_name: str):
+        """Load a plugin by explicit file path — never via sys.path.
+
+        Loading through an explicit module name (namespaced with an
+        `auditor_plugin_` prefix) prevents plugins from shadowing standard
+        library or application modules, and importing them does not poison
+        the global module search path.
+        """
+        if mod_name in getattr(sys, "stdlib_module_names", set()):
+            raise ValueError(f"plugin name shadows stdlib module: {mod_name}")
+        spec = importlib.util.spec_from_file_location(f"auditor_plugin_{mod_name}", fpath)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"cannot create import spec for {fpath}")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
 
     def get_detectors(self) -> Dict[str, BaseDetector]:
         self.load_plugins()

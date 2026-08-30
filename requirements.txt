@@ -10,6 +10,7 @@ rich>=13.0.0
 py-solc-ast>=1.2.10
 py-solc-x>=2.0.0
 pypdf>=4.0.0
+cvss>=3.0.0  # official FIRST CVSS 4.0 scoring
 redis>=5.0.0
 
 # RAG dependencies

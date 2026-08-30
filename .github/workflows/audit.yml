@@ -1,5 +1,9 @@
 name: Smart Contract Audit
 
+# Pull requests from forks run with a read-only token and no secrets;
+# the audited file list travels through an environment variable, never
+# through ${{ }} interpolation into the shell.
+
 on:
   pull_request:
     paths:
@@ -19,23 +23,40 @@ on:
         required: false
         default: ''
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # Full history so the base SHA always exists for PR diffs.
+          fetch-depth: 0
 
       - name: Find Solidity files
         id: find
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || 'HEAD~1' }}
         run: |
-          files=$(git diff --name-only ${{ github.event.pull_request.base.sha || 'HEAD~1' }} HEAD -- '*.sol' '*.vy' '*.move' 2>/dev/null || echo "")
+          # Adversarial PRs control file names: keep only safe characters so
+          # a name can never smuggle shell syntax or output markers.
+          files=$(git diff --name-only "$BASE_SHA" HEAD -- '*.sol' '*.vy' '*.move' 2>/dev/null \
+            | grep -E '^[A-Za-z0-9._/-]+$' || true)
           if [ -z "$files" ]; then
-            files=$(find . -name "*.sol" -o -name "*.vy" -o -name "*.move" | head -5)
+            files=$(find . -name "*.sol" -o -name "*.vy" -o -name "*.move" \
+              | grep -E '^[A-Za-z0-9._/-]+$' | head -5)
           fi
-          echo "files<<EOF" >> $GITHUB_OUTPUT
-          echo "$files" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          # Unique heredoc marker: attacker-chosen names like "EOF" cannot
+          # terminate the block early.
+          {
+            echo 'files<<AUDIT_FILES_9F2A'
+            echo "$files"
+            echo 'AUDIT_FILES_9F2A'
+          } >> "$GITHUB_OUTPUT"
 
       - name: Run Audit
         id: audit
@@ -43,20 +64,23 @@ jobs:
         env:
           AUDITOR_API_URL: ${{ secrets.AUDITOR_API_URL || 'https://auditor-bot.onrender.com' }}
           AUDITOR_API_KEY: ${{ secrets.AUDITOR_API_KEY }}
+          FILES: ${{ steps.find.outputs.files }}
         run: |
           echo "Auditing contracts..."
-          for file in ${{ steps.find.outputs.files }}; do
-            if [ -f "$file" ]; then
-              code=$(cat "$file")
-              result=$(curl -s -X POST "$AUDITOR_API_URL/api/analyze/json" \
-                -H "Content-Type: application/json" \
-                -H "Authorization: Bearer $AUDITOR_API_KEY" \
-                -d "{\"code\": $(echo "$code" | head -c 4000 | jq -Rs .), \"type\": \"audit\"}")
-              echo "## $file" >> audit-report.md
-              echo "$result" | jq -r '.report // .result // .error // "Unknown"' >> audit-report.md
-              echo "" >> audit-report.md
-            fi
-          done
+          # Iterate over the file list from an environment variable with
+          # quoted reads — ${{ }} never expands inside the shell script.
+          while IFS= read -r file; do
+            [ -n "$file" ] || continue
+            [ -f "$file" ] || continue
+            code=$(cat "$file")
+            result=$(curl -s -X POST "$AUDITOR_API_URL/api/analyze/json" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer $AUDITOR_API_KEY" \
+              -d "{\"code\": $(echo "$code" | head -c 4000 | jq -Rs .), \"type\": \"audit\"}")
+            echo "## $file" >> audit-report.md
+            echo "$result" | jq -r '.report // .result // .error // "Unknown"' >> audit-report.md
+            echo "" >> audit-report.md
+          done <<< "$FILES"
 
       - name: Post PR Comment
         if: github.event_name == 'pull_request' && steps.audit.outcome == 'success'

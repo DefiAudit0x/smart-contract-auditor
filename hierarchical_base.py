@@ -3,9 +3,11 @@ Shared base for hierarchical multi-agent analysis.
 Layer 1: N specialized agents (parallel, independent)
 Layer 2: The Crucible (investigator + skeptic + critic)
 """
+import hashlib
 import json
 import logging
 import os
+import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Optional, Tuple
@@ -60,7 +62,7 @@ class HierarchicalAuditor:
         self.default_model = default_model
         self.protocol_name = protocol_name
 
-    def _save_progress(self, stage: str, data: dict) -> None:
+    def _save_progress(self, stage_key: str, data: dict) -> None:
         os.makedirs(REPORT_DIR, exist_ok=True)
         existing = {}
         if os.path.exists(PROGRESS_FILE):
@@ -69,23 +71,40 @@ class HierarchicalAuditor:
                     existing = json.load(f)
             except (json.JSONDecodeError, IOError):
                 existing = {}
-        key = f"{self.protocol_name}_{stage}"
-        existing[key] = {
-            "timestamp": time.time(), "stage": stage,
-            "protocol": self.protocol_name, "data": data,
+        existing[stage_key] = {
+            "timestamp": time.time(), "stage": stage_key, "data": data,
         }
-        with open(PROGRESS_FILE, "w", encoding="utf-8") as f:
-            json.dump(existing, f, ensure_ascii=False, indent=2)
+        # Atomic replace: a concurrent reader can never see torn JSON.
+        fd, tmp_path = tempfile.mkstemp(dir=REPORT_DIR, suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(existing, f, ensure_ascii=False, indent=2)
+            os.replace(tmp_path, PROGRESS_FILE)
+        except OSError:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
 
-    def _load_progress(self, stage: str) -> Optional[dict]:
+    def _load_progress(self, stage_key: str) -> Optional[dict]:
         if not os.path.exists(PROGRESS_FILE):
             return None
         try:
             with open(PROGRESS_FILE, "r", encoding="utf-8") as f:
                 existing = json.load(f)
-            return existing.get(f"{self.protocol_name}_{stage}")
+            return existing.get(stage_key)
         except (json.JSONDecodeError, IOError):
             return None
+
+    def _progress_key(self, stage: str, code: str) -> str:
+        """Progress key bound to the audited input.
+
+        Keying only by protocol name let contract A's saved layers be
+        replayed as contract B's report; binding the SHA-256 of the audited
+        code makes stale/cross-contract entries unreachable.
+        """
+        digest = hashlib.sha256(code.encode("utf-8", errors="replace")).hexdigest()[:16]
+        return f"{self.protocol_name}_{stage}_{digest}"
 
     def _save_intermediate(self, stage: str, content: str) -> str:
         os.makedirs(REPORT_DIR, exist_ok=True)
@@ -148,8 +167,11 @@ class HierarchicalAuditor:
     def run_layer1(self, code: str) -> Dict[str, str]:
         """Run layer 1 agents in parallel (independent specialized views)."""
         console.rule("[bold cyan]Layer 1: Specialized analysis[/]")
-        saved = self._load_progress("layer1")
-        if saved:
+        key = self._progress_key("layer1", code)
+        saved = self._load_progress(key)
+        if saved and len(saved.get("data", {})) == len(self.layer1_agents):
+            # Resume only a complete layer: a partial save means agents
+            # died mid-run and their analyses are simply missing.
             logger.info("Resuming saved Layer 1 progress")
             return saved["data"]
 
@@ -172,7 +194,7 @@ class HierarchicalAuditor:
                 if result:
                     cumulative += f"\n\n### {agent['name']}\n{result[:3000]}\n"
                 self._save_intermediate(f"layer1_{agent['key']}", result or "(failed)")
-                self._save_progress("layer1", results)
+                self._save_progress(key, results)
 
         return results
 
@@ -180,8 +202,9 @@ class HierarchicalAuditor:
                    extra_context: str = "") -> Dict[str, str]:
         """Run Layer 2: The Crucible (investigator, skeptic, critic)."""
         console.rule("[bold magenta]Layer 2: The Crucible[/]")
-        saved = self._load_progress("layer2")
-        if saved:
+        key = self._progress_key("layer2", code)
+        saved = self._load_progress(key)
+        if saved and len(saved.get("data", {})) == len(self.layer2_agents):
             logger.info("Resuming saved Layer 2 progress")
             return saved["data"]
 
@@ -204,7 +227,7 @@ class HierarchicalAuditor:
             if result:
                 crucible += f"\n\n### {agent['name']}\n{result[:3000]}\n"
             self._save_intermediate(f"layer2_{agent['key']}", result or "(failed)")
-            self._save_progress("layer2", results)
+            self._save_progress(key, results)
 
         return results
 

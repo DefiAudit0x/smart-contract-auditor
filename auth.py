@@ -99,11 +99,19 @@ def deduct_credit(user):
     if user.plan == "pro":
         return True
     reset_credits_if_needed(user)
-    if user.credits <= 0:
-        return False
+    # Atomic check-and-decrement: the WHERE clause re-verifies the balance
+    # inside the UPDATE, so concurrent requests can never drive the credit
+    # balance below zero (TOCTOU race closed). rowcount tells whether the
+    # decrement actually happened.
     conn = _get_conn()
-    conn.execute("UPDATE users SET credits = credits - 1 WHERE id = ?", (user.id,))
+    cur = conn.execute(
+        "UPDATE users SET credits = credits - 1 WHERE id = ? AND credits > 0",
+        (user.id,),
+    )
     conn.commit()
+    if cur.rowcount == 0:
+        user.credits = 0
+        return False
     user.credits -= 1
     return True
 

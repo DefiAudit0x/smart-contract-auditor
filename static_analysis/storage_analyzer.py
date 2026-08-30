@@ -95,8 +95,15 @@ def _compute_storage_layout(contracts: Dict[str, Dict], root_name: str) -> List[
     dfs(root_name)
     slots = []
     current_slot = 0
+    # `offset` = bytes already consumed in current_slot (SLOT_SIZE means the
+    # slot is fully used). Solidity puts the most-base contract's variables
+    # in the lowest slots — the postorder DFS above already yields bases
+    # before derivatives, so consume it in natural order. The previous code
+    # consumed it reversed (giving the derived contract slot 0) and never
+    # advanced past a fully-used slot, so every full-slot variable shared
+    # slot 0 and the first dynamic variable skipped slot 0 entirely.
     offset = 0
-    for cname in reversed(linearized):
+    for cname in linearized:
         c = contracts.get(cname)
         if not c:
             continue
@@ -104,16 +111,18 @@ def _compute_storage_layout(contracts: Dict[str, Dict], root_name: str) -> List[
             sz = var["size"]
             is_dynamic = var["type"].startswith("mapping") or var["type"] in ("string", "bytes")
             if is_dynamic:
+                # Mappings/dynamic arrays/string/bytes start at a fresh slot
+                # and leave no room behind them.
                 if offset > 0:
                     current_slot += 1
-                    offset = 0
+                offset = SLOT_SIZE
+            elif offset + sz > SLOT_SIZE:
+                # Does not fit in what remains of this slot → next slot.
                 current_slot += 1
-                offset = 0
-            elif sz == 32 or offset + sz > SLOT_SIZE:
-                if offset > 0:
-                    current_slot += 1
-                offset = sz if sz < 32 else 0
+                offset = sz if sz < SLOT_SIZE else SLOT_SIZE
             else:
+                # Packs into the current slot (a 32-byte var at offset 0
+                # exactly fills it: offset becomes SLOT_SIZE).
                 offset += sz
             slots.append({
                 "contract": cname, "slot": current_slot,
@@ -174,6 +183,13 @@ def analyze_storage_single(code: str, contracts_data: Dict[str, Dict] = None) ->
             report += "  (No state variables)\n\n"
     cnames = list(all_layouts.keys())
     report += "### Storage Slot Collision Check\n\n"
+    # Scope note: unrelated-contract comparisons are the intended
+    # proxy/implementation collision heuristic (a proxy and its
+    # implementation are usually NOT in the same inheritance tree).
+    # With the corrected base-first layout, parent/child pairs no longer
+    # produce phantom collisions: the child layout already places inherited
+    # vars at their true slots, so only genuinely overlapping distinct
+    # variables are flagged.
     collisions_found = False
     for i in range(len(cnames)):
         for j in range(i + 1, len(cnames)):

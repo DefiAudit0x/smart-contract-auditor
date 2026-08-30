@@ -15,6 +15,38 @@ from security_utils import extract_zip_safely
 
 logger = logging.getLogger(__name__)
 
+# analysis_type values accepted by orchestrator.dispatch_analysis plus the
+# UI-level presets (full/quick/deep). Anything else is rejected at the
+# entry points so it can never reach report filenames or the dispatch layer.
+ALLOWED_ANALYSIS_TYPES = frozenset({
+    "audit", "full", "quick", "deep", "unified",
+    "opcodes", "storage", "inheritance", "combined", "gas",
+    "permissions", "chunked", "external", "autopoc", "multi",
+    "hierarchical",
+})
+
+
+def is_allowed_analysis_type(analysis_type) -> bool:
+    """True only when analysis_type is a known, safe identifier."""
+    return isinstance(analysis_type, str) and analysis_type in ALLOWED_ANALYSIS_TYPES
+
+
+def _safe_report_filename(filename: str) -> str:
+    """Collapse a report filename to a bare name inside REPORT_DIR.
+
+    Defense-in-depth sink hardening: strips any directory components and
+    verifies the resolved path stays inside REPORT_DIR. Raises ValueError
+    on absolute paths, traversal segments, or escaping symlinks.
+    """
+    safe = os.path.basename(str(filename))
+    if not safe or safe in (".", ".."):
+        raise ValueError("Invalid report filename")
+    base = os.path.realpath(REPORT_DIR)
+    full = os.path.realpath(os.path.join(base, safe))
+    if full != base and not full.startswith(base + os.sep):
+        raise ValueError("Report filename escapes REPORT_DIR")
+    return full
+
 _HAS_REDIS_RATE_LIMIT = False
 _REDIS_RATE_CLIENT = None
 try:
@@ -226,10 +258,14 @@ def _run_analysis(code: str, analysis_type: str) -> str:
 
 def _save_html_report(filename: str, report: str, label: str, analysis_type: str) -> str:
     safe_report = html.escape(report)
+    # label and analysis_type are user-controlled (upload name / form field);
+    # escape them everywhere they are rendered, not just the report body.
+    safe_label = html.escape(str(label))
+    safe_type = html.escape(str(analysis_type))
     page = f"""<!DOCTYPE html>
 <html lang="en" dir="ltr">
 <head><meta charset="UTF-8">
-<title>{label} - {analysis_type} Report</title>
+<title>{safe_label} - {safe_type} Report</title>
 <style>
 * {{ margin: 0; padding: 0; box-sizing: border-box; }}
 body {{ font-family: 'Segoe UI', system-ui, sans-serif; background: #0d1117; color: #c9d1d9; padding: 2rem; }}
@@ -246,14 +282,14 @@ hr {{ border: none; border-top: 1px solid #30363d; margin: 1rem 0; }}
 .info {{ border-right: 4px solid #238636; }}
 </style></head>
 <body>
-<h1>{label}</h1>
-<p class="meta"><strong>Analysis type:</strong> {analysis_type} | <strong>Date:</strong> {time.strftime('%Y-%m-%d %H:%M:%S')}</p>
+<h1>{safe_label}</h1>
+<p class="meta"><strong>Analysis type:</strong> {safe_type} | <strong>Date:</strong> {time.strftime('%Y-%m-%d %H:%M:%S')}</p>
 <hr>
 <pre>{safe_report}</pre>
 <hr>
 <p class="meta" style="margin-top: 2rem;">Smart Contract Auditor — Secure Analysis Engine</p>
 </body></html>"""
-    path = os.path.join(REPORT_DIR, filename)
+    path = _safe_report_filename(filename)
     with open(path, "w", encoding="utf-8") as f:
         f.write(page)
     logger.info(f"HTML report saved: {path}")

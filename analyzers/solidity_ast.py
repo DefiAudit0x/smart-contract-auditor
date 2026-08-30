@@ -34,6 +34,7 @@ class ASTContract:
     uses_selfdestruct: bool = False
     has_initializer: bool = False
     has_initialized_var: bool = False
+    file: str = ""  # source file this contract was parsed from
 
 
 @dataclass

@@ -119,7 +119,16 @@ def run_detector(
     source = detector_input.source_view.source_text
     source_id = detector_input.source_view.source_id
     analyzer = SolidityAnalyzer()
-    analyzer._contracts = _to_detector_contracts(detector_input.canonical_program, source_id)
+    # Register the canonical contracts through the analyzer's per-file
+    # registry so file-scoped AST checks can see them (assigning the flat
+    # list alone would leave _contracts_for() empty).
+    bridge_contracts = _to_detector_contracts(detector_input.canonical_program, source_id)
+    for contract in bridge_contracts:
+        contract.file = source_id
+    analyzer._contracts_by_file[source_id] = bridge_contracts
+    if filename and filename != source_id:
+        analyzer._contracts_by_file[filename] = bridge_contracts
+    analyzer._contracts = bridge_contracts
     check = getattr(analyzer, _DETECTOR_NAMES[family])
     detector_source = "" if family == "Selfdestruct" else source
     findings = check(filename or source_id, detector_source)

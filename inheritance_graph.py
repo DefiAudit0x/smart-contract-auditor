@@ -1,6 +1,16 @@
 """Inheritance Graph - inheritance diagram using Mermaid."""
+import html as _html
 import re
 from typing import List, Dict
+
+# Safe characters for contract names and parent identifiers. Anything else
+# (angle brackets, quotes, event handlers, newlines…) is stripped so the
+# values can never break out of the HTML/Mermaid contexts they end up in.
+_SAFE_IDENT_RE = re.compile(r"[^A-Za-z0-9_. ,]", re.DOTALL)
+
+
+def _sanitize_parents(parents: List[str]) -> List[str]:
+    return [_SAFE_IDENT_RE.sub("", p).strip() for p in parents]
 
 
 def extract_inheritance(code: str) -> List[Dict]:
@@ -15,6 +25,7 @@ def extract_inheritance(code: str) -> List[Dict]:
         kind = match.group(2)
         name = match.group(3)
         parents = [p.strip() for p in match.group(4).split(",") if p.strip()] if match.group(4) else []
+        parents = _sanitize_parents(parents)
         contracts.append({
             "name": name,
             "kind": kind,
@@ -78,8 +89,10 @@ td {{ text-align:right; }}
 <table><tr><th>Name</th><th>Type</th><th>Parents</th></tr>
 """
     for c in contracts:
-        parents = ", ".join(c["parents"]) if c["parents"] else "—"
+        parents = _html.escape(", ".join(c["parents"])) if c["parents"] else "—"
+        safe_name = _html.escape(str(c["name"]))
+        safe_kind = _html.escape(str(c["kind"]))
         icon = {"contract": "📄", "interface": "🔷", "library": "📚"}.get(c["kind"], "📄")
-        html += f"<tr><td>{icon} {c['name']}</td><td>{c['kind']}</td><td>{parents}</td></tr>\n"
+        html += f"<tr><td>{icon} {safe_name}</td><td>{safe_kind}</td><td>{parents}</td></tr>\n"
     html += "</table></body></html>"
     return html
