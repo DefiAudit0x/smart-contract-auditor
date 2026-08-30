@@ -1,9 +1,27 @@
 """
 CVSS 4.0 Scorer for smart contract vulnerabilities.
-Maps severity levels to CVSS 4.0 Base Scores and generates vector strings.
+
+Two scoring paths, clearly labelled:
+  1. OFFICIAL — when the `cvss` package (FIRST's reference implementation)
+     is installed, vectors are scored with the real CVSS 4.0 specification.
+  2. ESTIMATE — otherwise, an internal heuristic produces an approximation.
+     Such results are marked method="internal_estimate" and must never be
+     presented as official CVSS 4.0 publications.
 """
 import math
 from typing import Dict, Optional, Tuple
+
+try:  # Official FIRST implementation — https://pypi.org/project/cvss/
+    from cvss import CVSS4 as _OfficialCVSS4
+    HAS_OFFICIAL_CVSS = True
+except ImportError:
+    _OfficialCVSS4 = None
+    HAS_OFFICIAL_CVSS = False
+
+_ESTIMATE_NOTE = (
+    "Internal heuristic estimate — not an official FIRST CVSS 4.0 "
+    "publication. Install the 'cvss' package for official scoring."
+)
 
 # CVSS 4.0 severity bands
 SEVERITY_BANDS = {
@@ -78,8 +96,23 @@ def _sub_score(metrics: Dict[str, str], keys) -> float:
     return 1.0 - prod
 
 
+def _official_score(vector: str) -> Optional[float]:
+    """Score a vector with the official FIRST implementation, if available."""
+    if not HAS_OFFICIAL_CVSS:
+        return None
+    try:
+        return round(float(_OfficialCVSS4(vector).base_score), 1)
+    except Exception:
+        return None
+
+
 def compute_base_score(metrics: Dict[str, str]) -> float:
-    """Compute CVSS 4.0 base score using the standard formula."""
+    """Internal heuristic estimate (NOT the official CVSS 4.0 formula).
+
+    CVSS 4.0 defines no multiplicative equation; this approximation exists
+    only as a fallback when the official 'cvss' package is unavailable and
+    its results are always labelled as estimates.
+    """
     eq1 = _sub_score(metrics, ["AV", "AC", "AT", "PR", "UI"])
     eq2 = _sub_score(metrics, ["VC", "VI", "VA"])
     eq3 = _sub_score(metrics, ["SC", "SI", "SA"])
@@ -142,7 +175,15 @@ def score_report(report: str) -> Dict:
         desc = f.get("description", "")
         vector = vector_from_severity(sev, desc)
         metrics = parse_vector(vector)
-        score = compute_base_score(metrics)
+        official = _official_score(vector)
+        if official is not None:
+            score = official
+            method = "official"
+            note = ""
+        else:
+            score = compute_base_score(metrics)
+            method = "internal_estimate"
+            note = _ESTIMATE_NOTE
         severity_band = severity_from_score(score)
         scored.append({
             "name": name,
@@ -150,6 +191,9 @@ def score_report(report: str) -> Dict:
             "cvss_vector": vector,
             "cvss_score": score,
             "cvss_severity": severity_band,
+            "requested_severity": sev,
+            "method": method,
+            "note": note,
         })
 
     overall_score = 0.0
@@ -183,9 +227,11 @@ def compute_cvss(attack_vector: str = "N", complexity: str = "L",
         "SI": "N",
         "SA": "N",
     }
-    score = compute_base_score(metrics)
-    sev = severity_from_score(score)
     vector = f"CVSS:4.0/AV:{metrics['AV']}/AC:{metrics['AC']}/AT:N/PR:{metrics['PR']}/UI:{metrics['UI']}/VC:{metrics['VC']}/VI:{metrics['VI']}/VA:{metrics['VA']}/SC:N/SI:N/SA:N"
+    score = _official_score(vector)
+    if score is None:
+        score = compute_base_score(metrics)
+    sev = severity_from_score(score)
     return score, sev, vector
 
 

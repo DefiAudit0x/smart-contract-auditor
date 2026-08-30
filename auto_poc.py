@@ -1,7 +1,8 @@
 import logging
 import re
 import os
-from typing import List, Optional
+from collections import Counter
+from typing import Dict, List, Optional
 from dataclasses import dataclass
 
 from analyzers.base import Finding
@@ -9,10 +10,15 @@ from proof_generator import generate_poc, run_foundry_test, PROOFS_DIR
 
 logger = logging.getLogger(__name__)
 
+_CRITICAL_HEADER_RE = re.compile(r"^\[Critical[^\]]*\]", re.IGNORECASE)
+_NEXT_SEV_RE = re.compile(r"^\s*\[?(High|Medium|Low|Info)\b", re.IGNORECASE)
+
+
 @dataclass
 class ParsedCritical:
     agent_name: str
     description: str
+    header_line: str = ""  # exact first line — the per-finding identity
 
 
 def _parse_critical_findings(report: str) -> List[ParsedCritical]:
@@ -28,10 +34,14 @@ def _parse_critical_findings(report: str) -> List[ParsedCritical]:
             label = stripped.split("]")[0].lstrip("[").strip()
             desc_start = stripped.find("]")
             desc = stripped[desc_start + 1:].strip() if desc_start != -1 else ""
-            current = ParsedCritical(agent_name=label, description=desc)
+            # Keep the exact header line: verdicts are applied per finding
+            # by matching this line, so one PoC result can never flip the
+            # verdict of every other Critical finding.
+            current = ParsedCritical(agent_name=label, description=desc,
+                                     header_line=stripped)
             capturing = True
         elif capturing and current:
-            if re.match(r"^\s*\[?(High|Medium|Low|Info)\b", stripped):
+            if _NEXT_SEV_RE.match(stripped):
                 findings.append(current)
                 current = None
                 capturing = False
@@ -56,25 +66,37 @@ def _create_finding_from_parsed(p: ParsedCritical, code: str) -> Optional[Findin
     )
 
 
+def _rewrite_header(line: str, verdict: str) -> str:
+    """Replace the whole [Critical…] severity token on one finding line."""
+    if verdict == "proved":
+        return _CRITICAL_HEADER_RE.sub("[Critical ✅ PROVED by PoC]", line, count=1)
+    return _CRITICAL_HEADER_RE.sub(
+        "[Info ❌ FALSE POSITIVE (PoC disproved — downgraded)]", line, count=1)
+
+
 def _adjust_report(report: str, proved: List[str], disproved: List[str]) -> str:
-    lines = report.split("\n")
+    """Apply per-finding verdicts.
+
+    `proved`/`disproved` hold the exact original header lines of the
+    findings each verdict belongs to. Counts are consumed on first match,
+    so duplicated header lines are handled and unrelated findings are
+    never touched.
+    """
+    proved_pending = Counter(proved)
+    disproved_pending = Counter(disproved)
     adjusted = []
-    for line in lines:
+    for line in report.split("\n"):
         stripped = line.strip()
-        modified = False
-        for name in proved:
-            if name in stripped and stripped.startswith("[Critical"):
-                adjusted.append(line.replace("[Critical", "[Critical ✅ Proved"))
-                modified = True
-                break
-        if not modified:
-            for name in disproved:
-                if name in stripped and stripped.startswith("[Critical"):
-                    adjusted.append(line.replace("[Critical", "[Info] ❌ False Positive"))
-                    modified = True
-                    break
-        if not modified:
-            adjusted.append(line)
+        if (_CRITICAL_HEADER_RE.match(stripped) or stripped.upper().startswith("[CRITICAL")):
+            if disproved_pending.get(stripped, 0) > 0:
+                disproved_pending[stripped] -= 1
+                adjusted.append(_rewrite_header(line, "disproved"))
+                continue
+            if proved_pending.get(stripped, 0) > 0:
+                proved_pending[stripped] -= 1
+                adjusted.append(_rewrite_header(line, "proved"))
+                continue
+        adjusted.append(line)
     return "\n".join(adjusted)
 
 
@@ -86,8 +108,9 @@ def validate_with_poc(report: str, code: str) -> str:
 
     logger.info(f"auto_poc: validating {len(parsed)} Critical finding(s) with PoC")
 
-    proved = []
-    disproved = []
+    proved: List[str] = []
+    disproved: List[str] = []
+    inconclusive = 0
 
     for p in parsed:
         finding = _create_finding_from_parsed(p, code)
@@ -101,28 +124,35 @@ def validate_with_poc(report: str, code: str) -> str:
             continue
 
         try:
-            result = run_foundry_test(poc_path, use_docker=True)
-            if result["passed"]:
+            result = run_foundry_test(poc_path, use_docker=True, victim_code=code)
+            status = result.get("status", "INCONCLUSIVE")
+            if status == "PROVED":
                 logger.info(f"auto_poc: ✅ PoC PASSED for '{p.agent_name}' — vulnerability confirmed")
-                proved.append(p.agent_name)
+                proved.append(p.header_line)
+            elif status == "DISPROVED":
+                logger.info(f"auto_poc: ❌ PoC FAILED for '{p.agent_name}' — clean disproof, downgrading to Info")
+                disproved.append(p.header_line)
             else:
-                logger.info(f"auto_poc: ❌ PoC FAILED for '{p.agent_name}' — likely false positive, downgrading to Info")
-                disproved.append(p.agent_name)
+                # Compile failure / missing toolchain / zero tests — the PoC
+                # carries no evidence either way, so the finding stands.
+                inconclusive += 1
+                logger.info(
+                    f"auto_poc: ⚠️ PoC inconclusive for '{p.agent_name}' "
+                    f"({result.get('error', 'unknown reason')}) — keeping as Critical"
+                )
         finally:
             if os.path.exists(poc_path):
                 os.unlink(poc_path)
 
-    if disproved or proved:
+    if proved or disproved:
         report = _adjust_report(report, proved, disproved)
 
-    critical_count = len(parsed)
-    proved_count = len(proved)
-    disproved_count = len(disproved)
     summary = (
         f"\n\n---\n### Auto-PoC Validation\n"
-        f"- Critical findings validated: {critical_count}\n"
-        f"- ✅ Proved (confirmed): {proved_count}\n"
-        f"- ❌ False positives (downgraded to Info): {disproved_count}\n"
+        f"- Critical findings validated: {len(parsed)}\n"
+        f"- ✅ Proved (confirmed): {len(proved)}\n"
+        f"- ❌ False positives (downgraded to Info): {len(disproved)}\n"
+        f"- ⚠️ Inconclusive (kept as Critical): {inconclusive}\n"
     )
     report += summary
     return report
