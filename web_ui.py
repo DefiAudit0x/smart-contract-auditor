@@ -45,7 +45,7 @@ from auth import (
     ADMIN_PASSWORD_HASH, verify_admin_password, log_admin_event,
     find_user_by_github_id, create_user, get_user_by_id,
     create_api_key, list_api_keys, revoke_api_key, deduct_credit, reset_credits_if_needed,
-    get_user_history_count, MONTHLY_FREE_CREDITS, requires_admin,
+    get_user_history_count, MONTHLY_FREE_CREDITS, requires_admin, init_auth_teardown,
 )
 from flask_cors import CORS
 
@@ -76,6 +76,9 @@ def _safe_report_path(filename):
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
+# Close the per-request auth SQLite connection when the request context ends
+# (L-04 remediation — connections now live on flask.g, not thread-locals).
+init_auth_teardown(app)
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024
 app.config['WTF_CSRF_TIME_LIMIT'] = 3600
 app.static_folder = 'static'
