@@ -42,6 +42,7 @@ a:hover { text-decoration: underline; }
 <div class="card">
 <h2>Add New Rule</h2>
 <form method="POST">
+<input type="hidden" name="action" value="add">
 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <input type="text" name="name" placeholder="Rule name" required>
 <input type="text" name="pattern" placeholder="Pattern (Regex)" required>
@@ -73,7 +74,9 @@ a:hover { text-decoration: underline; }
 <tr>
 <td>{{ r.name }}</td><td>{{ r.severity }}</td><td>{{ r.lang }}</td><td>{{ r.description }}</td>
 <td>
-<form method="POST" action="/rules/delete/{{ r.id }}" style="display:inline;">
+<form method="POST" action="/rules" style="display:inline;">
+<input type="hidden" name="action" value="remove">
+<input type="hidden" name="name" value="{{ r.name }}">
 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <button type="submit" class="btn btn-red">Delete</button>
 </form>
@@ -89,7 +92,9 @@ a:hover { text-decoration: underline; }
 
 <div class="card">
 <h2>Test Rules Against Code</h2>
-<form method="POST" action="/rules/test">
+<form method="POST" action="/rules">
+<input type="hidden" name="action" value="scan">
+<input type="hidden" name="lang" value="solidity">
 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <textarea name="code" placeholder="Paste code to test rules against..." style="min-height:150px;"></textarea>
 <button type="submit" class="btn btn-gray">Scan</button>

@@ -43,11 +43,11 @@ a { color: #58a6ff; text-decoration: none; }
 </form>
 </div>
 
-{% if test_code %}
+{% if tests %}
 <div class="card">
 <h2>Generated Tests</h2>
 <div class="flex"><button class="btn btn-secondary copy-btn" onclick="navigator.clipboard.writeText(document.getElementById('testCode').textContent).catch(function(){alert('Failed to copy')})">Copy</button></div>
-<pre id="testCode">{{ test_code }}</pre>
+<pre id="testCode">{{ tests }}</pre>
 </div>
 {% endif %}
 </div>
