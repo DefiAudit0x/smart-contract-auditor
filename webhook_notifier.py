@@ -1,9 +1,20 @@
 import os, json, logging, html
+import ipaddress
+import socket
 from typing import Dict, List, Optional
+from urllib.parse import urlsplit
 from datetime import datetime, timezone
 from analyzers.base import Finding
 
 logger = logging.getLogger(__name__)
+
+# Optional egress allowlist: set WEBHOOK_ALLOWED_HOSTS="discord.com,hooks.slack.com"
+# to hard-restrict outbound webhooks; when unset any public HTTPS host is allowed.
+WEBHOOK_ALLOWED_HOSTS = {
+    h.strip().lower()
+    for h in os.environ.get("WEBHOOK_ALLOWED_HOSTS", "").split(",")
+    if h.strip()
+}
 
 DISCORD_COLORS = {
     "Critical": 15158332,
@@ -70,7 +81,9 @@ def _build_discord_payload(
     embed = {
         "title": f"Smart Contract Audit Report{' - ' + project if project else ''}",
         "color": color,
-        "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+        # Discord rejects '+00:00Z'; the ISO-8601 'Z' suffix is the valid form
+        # (M14 remediation).
+        "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }
 
     if summary:
@@ -93,9 +106,39 @@ def _build_discord_payload(
     if len(findings) > 10:
         details.append(f"\n... and {len(findings) - 10} more findings")
 
-    embed["fields"] = [
-        {"name": "Findings", "value": "\n\n".join(details), "inline": False}
-    ]
+    # Field value limit is 1024 chars (embed total 6000): chunk details into
+    # ≤1000-char fields, keep at most 5 fields per embed, and note overflow
+    # instead of silently dropping the whole notification with HTTP 400
+    # (M14 remediation).
+    fields = []
+    current = []
+    current_len = 0
+    for d in details:
+        d = d[:1000]
+        if current and current_len + len(d) > 1000:
+            fields.append(current)
+            current = []
+            current_len = 0
+        current.append(d)
+        current_len += len(d)
+    if current:
+        fields.append(current)
+
+    max_fields = 5
+    embed_fields = []
+    for i, chunk in enumerate(fields[:max_fields]):
+        embed_fields.append({
+            "name": f"Findings ({i + 1})",
+            "value": "\n\n".join(chunk)[:1000],
+            "inline": False,
+        })
+    if len(fields) > max_fields:
+        embed_fields.append({
+            "name": "Findings (truncated)",
+            "value": f"Report too large for Discord embeds — {len(findings)} findings total; see the full report.",
+            "inline": False,
+        })
+    embed["fields"] = embed_fields
     embed["footer"] = {"text": "Smart Contract Auditor"}
 
     embeds.append(embed)
@@ -170,10 +213,34 @@ def _build_slack_payload(
 # Common
 # ──────────────────────────────────────────
 
+def _assert_webhook_url(url: str):
+    """Outbound-webhook guard (M13 remediation): https only, optionally
+    allow-listed via WEBHOOK_ALLOWED_HOSTS, and never resolving to
+    private/link-local space — the first web-facing caller of this module
+    must not become an SSRF primitive against 169.254.169.254 or internal
+    admin panels."""
+    parts = urlsplit(url or "")
+    if parts.scheme != "https" or not parts.hostname:
+        raise ValueError("Webhook URL must be https with a hostname")
+    if WEBHOOK_ALLOWED_HOSTS and parts.hostname.lower() not in WEBHOOK_ALLOWED_HOSTS:
+        raise ValueError("Webhook host is not in WEBHOOK_ALLOWED_HOSTS")
+    try:
+        addr_infos = socket.getaddrinfo(parts.hostname, 443)
+    except socket.gaierror as e:
+        raise ValueError(f"Webhook host does not resolve: {e}")
+    for _fam, _type, _proto, _canonname, sa in addr_infos:
+        ip = ipaddress.ip_address(sa[0])
+        if ip.is_private or ip.is_link_local or ip.is_loopback:
+            raise ValueError("Webhook host resolves to a private/link-local address")
+
+
 def _post_webhook(url: str, payload: Dict):
     try:
+        _assert_webhook_url(url)
         import requests
-        resp = requests.post(url, json=payload, timeout=15)
+        # No redirect follow-through: a 3xx must not turn an allowed host
+        # into a smuggled internal target.
+        resp = requests.post(url, json=payload, timeout=15, allow_redirects=False)
         if resp.status_code not in (200, 204):
             logger.warning(f"Webhook returned {resp.status_code}: {resp.text[:200]}")
     except Exception as e:

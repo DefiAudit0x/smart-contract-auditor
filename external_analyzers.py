@@ -54,16 +54,25 @@ def _run_slither_on_code(code: str, tmp_dir: str) -> List[ExternalFinding]:
             for detector in data.get("results", {}).get("detectors", []):
                 sev_map = {"high": "Critical", "medium": "High", "low": "Medium", "informational": "Info"}
                 for ele in detector.get("elements", []):
-                    findings.append(ExternalFinding(
-                        tool="slither",
-                        check=detector.get("check", "unknown"),
-                        severity=sev_map.get(detector.get("impact", "").lower(), "Medium"),
-                        description=detector.get("description", ""),
-                        file=ele.get("source_mapping", {}).get("filename_relative", ""),
-                        line=ele.get("source_mapping", {}).get("lines", [0])[0],
-                        code_snippet=str(ele.get("source_mapping", {}).get("content", ""))[:300],
-                        extra={"id": detector.get("id", "")},
-                    ))
+                    # Per-element isolation (M15 remediation): one malformed
+                    # element must not discard every finding of the run.
+                    # `lines or [0]` also handles "lines": [] which the old
+                    # .get("lines", [0]) default did not.
+                    try:
+                        lines = ele.get("source_mapping", {}).get("lines") or [0]
+                        findings.append(ExternalFinding(
+                            tool="slither",
+                            check=detector.get("check", "unknown"),
+                            severity=sev_map.get(detector.get("impact", "").lower(), "Medium"),
+                            description=detector.get("description", ""),
+                            file=ele.get("source_mapping", {}).get("filename_relative", ""),
+                            line=lines[0],
+                            code_snippet=str(ele.get("source_mapping", {}).get("content", ""))[:300],
+                            extra={"id": detector.get("id", "")},
+                        ))
+                    except Exception:
+                        logger.warning("Slither: skipped malformed element", exc_info=True)
+                        continue
     except FileNotFoundError:
         logger.info("Slither not installed — skipping detectors")
     except json.JSONDecodeError:
@@ -137,17 +146,23 @@ def _run_mythril_on_code(code: str, tmp_dir: str) -> List[ExternalFinding]:
                     except json.JSONDecodeError:
                         pass
         for issue in items:
-            sev_map = {0: "Info", 1: "Low", 2: "Medium", 3: "High", 4: "Critical"}
-            findings.append(ExternalFinding(
-                tool="mythril",
-                check=issue.get("title", issue.get("swc-id", "unknown")),
-                severity=sev_map.get(issue.get("severity", 1), "Medium"),
-                description=issue.get("description", issue.get("title", "")),
-                file=issue.get("filename", ""),
-                line=issue.get("lineno", 0),
-                code_snippet=issue.get("code", "")[:300],
-                extra={"swc_id": issue.get("swc-id", "")},
-            ))
+            # Per-issue isolation (M15 remediation): a malformed Mythril
+            # issue is skipped, the rest of the run survives.
+            try:
+                sev_map = {0: "Info", 1: "Low", 2: "Medium", 3: "High", 4: "Critical"}
+                findings.append(ExternalFinding(
+                    tool="mythril",
+                    check=issue.get("title", issue.get("swc-id", "unknown")),
+                    severity=sev_map.get(issue.get("severity", 1), "Medium"),
+                    description=issue.get("description", issue.get("title", "")),
+                    file=issue.get("filename", ""),
+                    line=issue.get("lineno", 0) or 0,
+                    code_snippet=issue.get("code", "")[:300],
+                    extra={"swc_id": issue.get("swc-id", "")},
+                ))
+            except Exception:
+                logger.warning("Mythril: skipped malformed issue", exc_info=True)
+                continue
     except FileNotFoundError:
         logger.info("Mythril not installed — skipping")
     except subprocess.TimeoutExpired:
