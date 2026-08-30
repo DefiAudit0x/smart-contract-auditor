@@ -62,6 +62,27 @@ def _reserve_code_audit_usage():
     return {"code": code, "event_id": reservation["event_id"]}, None
 
 
+def _reserve_tool_usage():
+    """Meter one unit of a synchronous tool endpoint for access-code sessions.
+
+    LLM/stative tool endpoints (gas, fuzz, fix, malware, plugins) were
+    reachable by any access-code session without consuming quota — a free
+    cost channel (M8 remediation). The reservation uses a server-generated
+    idempotency id because these quick synchronous calls never carry a
+    client key; the UI contract is unchanged.
+    """
+    if current_user.is_authenticated or not session.get("authenticated"):
+        return None, None
+    code = session.get("access_code", "")
+    if not code:
+        return None, None
+    request_id = f"tool-{secrets.token_hex(12)}"
+    reservation = reserve_code_usage(code, request_id)
+    if not reservation["allowed"]:
+        return None, (jsonify({"error": reservation["error"]}), 402)
+    return {"code": code, "event_id": reservation["event_id"]}, None
+
+
 def _complete_code_audit_usage(reservation):
     if reservation:
         complete_code_usage(reservation["code"], reservation["event_id"])
@@ -505,17 +526,25 @@ def api_gas():
     data = request.get_json()
     if not data or 'code' not in data:
         return jsonify({"error": "Field 'code' is required"}), 400
-    from gas_profiler import estimate_gas
-    from gas_analysis import analyze_gas, estimate_gas_savings
-    code = truncate_code(data['code'])
-    gas_report = estimate_gas(code)
-    static_analysis = analyze_gas(code)
-    savings = estimate_gas_savings(static_analysis)
-    return jsonify({
-        "gas_report": gas_report,
-        "static_analysis": static_analysis,
-        "savings_usd": savings,
-    })
+    reservation, quota_error = _reserve_tool_usage()
+    if quota_error:
+        return quota_error
+    try:
+        from gas_profiler import estimate_gas
+        from gas_analysis import analyze_gas, estimate_gas_savings
+        code = truncate_code(data['code'])
+        gas_report = estimate_gas(code)
+        static_analysis = analyze_gas(code)
+        savings = estimate_gas_savings(static_analysis)
+        _complete_code_audit_usage(reservation)
+        return jsonify({
+            "gas_report": gas_report,
+            "static_analysis": static_analysis,
+            "savings_usd": savings,
+        })
+    except Exception:
+        _release_code_audit_usage(reservation)
+        raise
 
 
 @api_bp.route('/knowledge/ingest', methods=['POST'])
@@ -658,9 +687,17 @@ def api_malware_scan():
     data = request.get_json()
     if not data or 'code' not in data:
         return jsonify({"error": "Field 'code' is required"}), 400
-    from analyzers.malware_scanner import scan
-    result = scan(data['code'], data.get('bytecode', ''))
-    return jsonify(result)
+    reservation, quota_error = _reserve_tool_usage()
+    if quota_error:
+        return quota_error
+    try:
+        from analyzers.malware_scanner import scan
+        result = scan(data['code'], data.get('bytecode', ''))
+        _complete_code_audit_usage(reservation)
+        return jsonify(result)
+    except Exception:
+        _release_code_audit_usage(reservation)
+        raise
 
 
 @api_bp.route('/analyze/fuzz', methods=['POST'])
@@ -670,14 +707,19 @@ def api_fuzz():
     data = request.get_json()
     if not data or 'code' not in data:
         return jsonify({"error": "Field 'code' is required"}), 400
+    reservation, quota_error = _reserve_tool_usage()
+    if quota_error:
+        return quota_error
     code = data['code'][:4000]
     try:
         from agents.llm_client import call_model
         from config import OLLAMA_MODEL
         prompt = "Generate a Foundry fuzz test for this Solidity contract. Include invariant tests and edge cases. Return ONLY the Solidity code in a code block.\n\n```solidity\n{}\n```".format(code)
         fuzz = call_model(OLLAMA_MODEL, prompt)
+        _complete_code_audit_usage(reservation)
         return jsonify({"fuzz_test": fuzz})
-    except Exception as e:
+    except Exception:
+        _release_code_audit_usage(reservation)
         logger.exception("Internal error")
         return jsonify({"error": "An internal error occurred"}), 500
 
@@ -696,10 +738,18 @@ def api_plugins_run():
     data = request.get_json()
     if not data or 'code' not in data:
         return jsonify({"error": "Field 'code' is required"}), 400
-    from analyzers.plugin_system import run_plugins
-    from dataclasses import asdict
-    results = run_plugins(data['code'])
-    return jsonify({"results": [asdict(r) for r in results]})
+    reservation, quota_error = _reserve_tool_usage()
+    if quota_error:
+        return quota_error
+    try:
+        from analyzers.plugin_system import run_plugins
+        from dataclasses import asdict
+        results = run_plugins(data['code'])
+        _complete_code_audit_usage(reservation)
+        return jsonify({"results": [asdict(r) for r in results]})
+    except Exception:
+        _release_code_audit_usage(reservation)
+        raise
 
 
 @api_bp.route('/analyze/fix', methods=['POST'])
@@ -709,6 +759,9 @@ def api_fix():
     data = request.get_json()
     if not data or 'code' not in data:
         return jsonify({"error": "Field 'code' is required"}), 400
+    reservation, quota_error = _reserve_tool_usage()
+    if quota_error:
+        return quota_error
     code = data['code'][:4000]
     report = (data.get('report') or '')[:2000]
     try:
@@ -716,8 +769,10 @@ def api_fix():
         from config import OLLAMA_MODEL
         prompt = "You are a Solidity security fixer. Given the vulnerable code and audit findings, provide the FIXED version of the code.\n\nVulnerable code:\n```solidity\n{}\n```\n\nAudit findings:\n{}\n\nReturn ONLY the fixed Solidity code in a code block.".format(code, report)
         fix = call_model(OLLAMA_MODEL, prompt)
+        _complete_code_audit_usage(reservation)
         return jsonify({"fix": fix})
-    except Exception as e:
+    except Exception:
+        _release_code_audit_usage(reservation)
         logger.exception("Internal error")
         return jsonify({"error": "An internal error occurred"}), 500
 

@@ -101,15 +101,23 @@ csrf = CSRFProtect(app)
 csrf.exempt(api_bp)
 
 from werkzeug.middleware.proxy_fix import ProxyFix
-app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
+# Honor X-Forwarded-* only when explicitly deployed behind a trusted proxy
+# (M6 remediation): unconditional ProxyFix lets an attacker rotate spoofed
+# X-Forwarded-For values to mint a fresh rate-limit bucket per request.
+if os.environ.get("TRUST_PROXY", "").strip() == "1":
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
 
 # Cookie security
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE'] = os.environ.get("RENDER", "").strip() != ""
 
-# Rate limiter
-limiter = Limiter(get_remote_address, app=app, default_limits=["200 per day", "50 per hour"])
+# Rate limiter. Storage defaults to per-process memory; set REDIS_URL to
+# share buckets across gunicorn workers so WEB_CONCURRENCY cannot multiply
+# the effective limits (M6 remediation).
+limiter = Limiter(get_remote_address, app=app,
+                  storage_uri=os.environ.get("REDIS_URL", "memory://"),
+                  default_limits=["200 per day", "50 per hour"])
 
 # CSP + security headers
 @app.before_request
@@ -182,16 +190,24 @@ csrf.exempt(api_auth_verify)
 def login_github():
     if not GITHUB_CLIENT_ID or not GITHUB_CLIENT_SECRET:
         return jsonify({"error": "GitHub OAuth not configured"}), 503
+    # Per-request state token: the callback only completes flows we started,
+    # blocking login CSRF (M5 remediation).
+    state = secrets.token_urlsafe(16)
+    session['oauth_state'] = state
     params = urlencode({
         'client_id': GITHUB_CLIENT_ID,
         'redirect_uri': url_for('github_callback', _external=True),
         'scope': 'user:email',
+        'state': state,
     })
     return redirect(f"https://github.com/login/oauth/authorize?{params}")
 
 @app.route('/login/github/callback')
 def github_callback():
     import requests as http_requests
+    # Login CSRF defense: state must match the one issued at /login/github
+    if request.args.get('state') != session.pop('oauth_state', None):
+        return redirect('/?error=bad_state')
     code = request.args.get('code')
     if not code:
         return redirect('/?error=no_code')
@@ -242,7 +258,12 @@ def github_callback():
     if not user:
         return redirect('/?error=user_creation_failed')
     login_user(user, remember=True)
+    # Open-redirect defense: only same-site relative paths are honored
+    # (M5 remediation). '//host' and '/\\host' browser tricks are rejected.
     next_page = request.args.get('next') or '/app'
+    if not (next_page.startswith('/') and not next_page.startswith('//')
+            and not next_page.startswith('/\\')):
+        next_page = '/app'
     return redirect(next_page)
 
 @app.route('/logout')
@@ -417,6 +438,7 @@ def dashboard():
 
 
 @app.route('/explorer', methods=['GET', 'POST'])
+@requires_auth
 def explorer():
     result = None
     if request.method == 'POST':
@@ -434,6 +456,7 @@ def explorer():
 
 
 @app.route('/batch', methods=['GET', 'POST'])
+@requires_auth
 def batch_page():
     result = None
     if request.method == 'POST':
@@ -483,6 +506,7 @@ def batch_page():
 
 
 @app.route('/gas', methods=['GET', 'POST'])
+@requires_auth
 def gas_page():
     result = None
     if request.method == 'POST':
@@ -499,6 +523,7 @@ def gas_page():
 
 
 @app.route('/testgen', methods=['GET', 'POST'])
+@requires_auth
 def testgen_page():
     tests = None
     if request.method == 'POST':
@@ -515,6 +540,7 @@ def testgen_page():
 
 
 @app.route('/inhgraph', methods=['GET', 'POST'])
+@requires_auth
 def inhgraph_page():
     html_graph = None
     if request.method == 'POST':
@@ -530,19 +556,33 @@ def inhgraph_page():
 
 
 @app.route('/project', methods=['GET', 'POST'])
+@requires_auth
 def project_page():
     from _shared import _handle_zip_upload
     result = None
     if request.method == 'POST':
         path = request.form.get('path', '').strip()
         if path:
-            result = analyze_project(path, "english")
+            # Same root confinement as /batch (M10 remediation): an
+            # authenticated user cannot point the analyzer at arbitrary
+            # server directories.
+            allowed_root = os.environ.get("BATCH_INPUT_ROOT", "").strip()
+            if not allowed_root:
+                result = {"error": "Local project paths are disabled; upload a ZIP archive instead"}
+            else:
+                requested = os.path.realpath(path)
+                root_path = os.path.realpath(allowed_root)
+                if os.path.isdir(requested) and os.path.commonpath((root_path, requested)) == root_path:
+                    result = analyze_project(requested, "english")
+                else:
+                    result = {"error": "Project path is outside the configured input root"}
         if 'zipfile' in request.files and request.files['zipfile'].filename:
             result = _handle_zip_upload(request.files['zipfile'])
     return render_template('project.html', result=result)
 
 
 @app.route('/permissions', methods=['GET', 'POST'])
+@requires_auth
 def permissions_page():
     result = None
     if request.method == 'POST':
@@ -553,6 +593,7 @@ def permissions_page():
 
 
 @app.route('/cvss', methods=['GET', 'POST'])
+@requires_auth
 def cvss_page():
     result = None
     if request.method == 'POST':
@@ -576,11 +617,17 @@ def cvss_page():
 
 
 @app.route('/rules', methods=['GET', 'POST'])
+@requires_auth
 def rules_page():
     engine = get_rules_engine()
     scan_result = None
     if request.method == 'POST':
         action = request.form.get('action', '')
+        if action in ('add', 'remove') and 'admin_authenticated' not in session:
+            # Rule add/remove mutates the GLOBAL scan engine for every
+            # subsequent audit — admin-only (M7 remediation). The scan
+            # action stays available to authenticated sessions.
+            return redirect('/admin/login')
         if action == 'add':
             rule = CustomRule(
                 request.form['name'], request.form['pattern'],
@@ -588,7 +635,13 @@ def rules_page():
                 request.form.get('description', ''),
                 request.form.get('lang', 'solidity'),
             )
-            engine.add_rule(rule)
+            try:
+                engine.add_rule(rule)
+            except ValueError as e:
+                # Surface the validation reason inline (rule limits, bad
+                # regex, backtracking risk) instead of a 500 error page.
+                scan_result = f"## Rule rejected\n\n{e}"
+                return render_template('rules.html', rules=engine.list_rules(), scan=scan_result)
         elif action == 'remove':
             engine.remove_rule(request.form['name'])
         elif action == 'scan':

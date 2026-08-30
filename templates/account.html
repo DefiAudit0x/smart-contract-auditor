@@ -94,10 +94,7 @@
         <div>
           <div style="font-weight:500;">{{ k.name }}</div>
           <div class="key-value" style="display:flex;align-items:center;gap:6px;">
-            <code style="font-size:0.75rem;background:var(--bg-inset);padding:1px 4px;border-radius:3px;">{{ k.key[:16] }}...{{ k.key[-8:] }}</code>
-            {% if k.is_active %}
-            <button class="btn-sm" style="padding:1px 6px;font-size:0.7rem;cursor:pointer;background:none;border:1px solid var(--border);border-radius:3px;color:var(--text-muted);" data-copy-key="{{ k.key }}" title="Copy full key"><i class="fas fa-copy"></i></button>
-            {% endif %}
+            <code style="font-size:0.75rem;background:var(--bg-inset);padding:1px 4px;border-radius:3px;">sca_…{{ k.last4 }}</code>
             {% if not k.is_active %}<span style="color:var(--red);margin-left:0.5rem;font-size:0.75rem;">(revoked)</span>{% endif %}
           </div>
         </div>
@@ -120,6 +117,18 @@
   </div>
 </div>
 
+<div id="newKeyModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;align-items:center;justify-content:center;">
+  <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius,8px);padding:1.5rem;max-width:440px;width:90%;">
+    <h3 style="margin:0 0 .5rem 0;"><i class="fas fa-key"></i> Your new API key</h3>
+    <p style="font-size:.8rem;color:var(--text-muted);margin:0 0 .75rem 0;">Copy it now &mdash; for security it is stored hashed and will not be shown again.</p>
+    <code id="newKeyValue" style="display:block;word-break:break-all;background:var(--bg-inset);padding:.5rem;border-radius:4px;font-size:.75rem;"></code>
+    <div style="display:flex;gap:.5rem;margin-top:1rem;justify-content:flex-end;">
+      <button class="btn btn-sm" id="copyNewKey" type="button">Copy</button>
+      <button class="btn btn-primary btn-sm" id="closeNewKey" type="button">I saved it</button>
+    </div>
+  </div>
+</div>
+
 <script nonce="{{ csp_nonce }}">
 function copyKey(key, btn) {
   navigator.clipboard.writeText(key).then(function () {
@@ -137,13 +146,24 @@ function createKey() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name: name })
   }).then(function(r) { return r.json(); }).then(function(data) {
-    if (data.key) {
-      location.reload();
+    if (data.key && data.key.key) {
+      // Show-once pattern: the raw key is displayed exactly here and never
+      // stored in readable form server-side (M11 remediation).
+      document.getElementById('newKeyValue').textContent = data.key.key;
+      document.getElementById('newKeyModal').style.display = 'flex';
     } else {
       alert('Failed to create key');
     }
   }).catch(function() { alert('Network error'); });
 }
+
+document.getElementById('copyNewKey').addEventListener('click', function () {
+  copyKey(document.getElementById('newKeyValue').textContent, this);
+});
+document.getElementById('closeNewKey').addEventListener('click', function () {
+  document.getElementById('newKeyModal').style.display = 'none';
+  location.reload();
+});
 
 function revokeKey(id) {
   if (!confirm('Revoke this API key?')) return;

@@ -1,4 +1,5 @@
 import html
+import hashlib
 import os
 import sys
 import time
@@ -115,19 +116,35 @@ def _check_user_api_key(provided_key):
         from auth import find_user_by_api_key
         user = find_user_by_api_key(provided_key)
         if user:
-            # Update last_used_at
+            # Update last_used_at (key is stored hashed since M11 remediation)
             import sqlite3
             db_path = os.environ.get("AUTH_DB_PATH",
                 os.path.join(os.path.dirname(__file__), "instance", "auth.db"))
             conn = sqlite3.connect(db_path)
-            conn.execute("UPDATE api_keys SET last_used_at = (strftime('%s','now')) WHERE key = ?",
-                        (provided_key,))
+            conn.execute("UPDATE api_keys SET last_used_at = (strftime('%s','now')) WHERE key_hash = ?",
+                        (hashlib.sha256(provided_key.encode()).hexdigest(),))
             conn.commit()
             conn.close()
             return user
     except Exception:
         pass
     return None
+
+def _metered_status_ok(response):
+    """True when a wrapped endpoint's outcome should consume a credit.
+
+    Validation failures (4xx) and internal errors (5xx) must never burn a
+    victim's balance: deduction happens only after the endpoint proved it
+    produced a result (M9 remediation — replaces charge-before-validate).
+    """
+    if isinstance(response, tuple):
+        status = response[1]
+    else:
+        status = getattr(response, "status_code", 200)
+    try:
+        return int(status) < 400
+    except (TypeError, ValueError):
+        return True
 
 def require_api_key(f):
     @wraps(f)
@@ -138,8 +155,10 @@ def require_api_key(f):
             reset_credits_if_needed(current_user)
             if not current_user.is_pro() and current_user.credits <= 0:
                 return jsonify({"error": "No credits remaining. Upgrade your plan or wait for monthly reset."}), 402
-            deduct_credit(current_user)
-            return f(*args, **kwargs)
+            response = f(*args, **kwargs)
+            if _metered_status_ok(response):
+                deduct_credit(current_user)
+            return response
         if session.get('authenticated'):
             return f(*args, **kwargs)
         if _EXPECTED_API_KEY:
@@ -157,14 +176,23 @@ def require_api_key(f):
         if provided:
             user = _check_user_api_key(provided)
             if user:
-                # Deduct credit for API usage
+                # Balance check before running, deduction only on success
+                # (M9 remediation — same reserve/complete/release fairness
+                # the access-code path follows).
                 try:
-                    from auth import deduct_credit
-                    if not deduct_credit(user):
+                    from auth import deduct_credit, reset_credits_if_needed
+                    reset_credits_if_needed(user)
+                    if not user.is_pro() and user.credits <= 0:
                         return jsonify({"error": "No credits remaining. Upgrade your plan or wait for monthly reset."}), 402
                 except Exception:
                     pass
-                return f(*args, **kwargs)
+                response = f(*args, **kwargs)
+                if _metered_status_ok(response):
+                    try:
+                        deduct_credit(user)
+                    except Exception:
+                        pass
+                return response
         if not _EXPECTED_API_KEY:
             return jsonify({"error": "Server misconfigured: AUDITOR_API_KEY not set"}), 503
         return jsonify({"error": "Missing or invalid API key. Pass Authorization: Bearer <key>"}), 401

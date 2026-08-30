@@ -82,6 +82,9 @@ CREATE INDEX IF NOT EXISTS idx_patterns_type ON vulnerability_patterns(pattern_t
 CREATE INDEX IF NOT EXISTS idx_patterns_contract ON vulnerability_patterns(contract_type);
 CREATE INDEX IF NOT EXISTS idx_fp_type ON false_positives(pattern_type);
 CREATE INDEX IF NOT EXISTS idx_model_perf ON model_performance(model_name, vulnerability_type);
+CREATE INDEX IF NOT EXISTS idx_sessions_created ON audit_sessions(created_at);
+CREATE INDEX IF NOT EXISTS idx_sessions_hash ON audit_sessions(code_hash);
+CREATE INDEX IF NOT EXISTS idx_feedback_session ON feedback(session_id);
 """
 
 
@@ -105,7 +108,34 @@ class KnowledgeBase:
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path, timeout=30)
         conn.execute("PRAGMA journal_mode=WAL")
+        # Enforce the feedback -> audit_sessions foreign key (M30
+        # remediation): it was declared but never checked, so orphaned
+        # feedback rows accumulated forever.
+        conn.execute("PRAGMA foreign_keys = ON")
         return conn
+
+    def prune_sessions(self, keep_days: int = 90) -> int:
+        """Delete audit sessions older than keep_days (M30 remediation).
+
+        Every audit inserted a session row and feedback references it; on
+        a persistent disk the tables grew forever and slowed every
+        query. Aggregate pattern knowledge is retained - only per-run
+        session/feedback history is aged out.
+        """
+        try:
+            with _lock:
+                conn = self._connect()
+                c = conn.execute(
+                    "DELETE FROM audit_sessions WHERE created_at < strftime('%s','now') - ?",
+                    (keep_days * 86400,),
+                )
+                conn.commit()
+                deleted = c.rowcount
+                conn.close()
+                return deleted
+        except Exception as e:
+            logger.debug(f"KB prune_sessions error: {e}")
+            return 0
 
     # ─── Vulnerability Patterns ───
 
