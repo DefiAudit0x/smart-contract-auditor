@@ -20,14 +20,6 @@ try:
 except ImportError:
     pass
 
-_has_grep = False
-_grep = None
-try:
-    import grep_arsenal as _grep
-    _has_grep = True
-except ImportError:
-    pass
-
 _has_mcp = False
 _mcp = None
 try:
@@ -103,22 +95,6 @@ def _run_detector(code: str) -> str:
         count = d.get("match_count", 0)
         parts.append(f"- [{sev}] {cls_name}: {count} pattern(s)")
     logger.info(f"Pre-scan bug detector: {len(detections)} classes")
-    return "\n".join(parts)
-
-
-def _run_grep(code: str) -> str:
-    if not _has_grep:
-        return ""
-    grep_summary = _grep.get_summary(code)
-    if not grep_summary:
-        return ""
-    parts = ["### Pre-Scan: Grep Arsenal"]
-    for s in grep_summary:
-        tier = s["tier"]
-        parts.append(f"- [{tier}] {s['name']}: {s['match_count']} match(es)")
-        for rf in s["red_flags"][:2]:
-            parts.append(f"  ! {rf}")
-    logger.info(f"Pre-scan grep arsenal: {len(grep_summary)} blocks")
     return "\n".join(parts)
 
 
@@ -251,7 +227,8 @@ def _register_learned_classes():
 
 _SCAN_TASKS = [
     ("bug_detector", lambda c: _run_detector(c)),
-    ("grep_arsenal", lambda c: _run_grep(c)),
+    # L-27: the dead grep_arsenal stage (module never existed) silently
+    # swallowed one of the seven advertised pre-scan phases — removed.
     ("mcp", lambda c: _run_mcp(c)),
     ("ai_tools", lambda c: _run_ai_tools(c)),
     ("zksync", lambda c: _run_zksync(c)),
