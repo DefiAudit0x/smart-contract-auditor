@@ -125,10 +125,65 @@ def identify_package(path: str) -> str:
     return ""
 
 
-def check_version_cves(pragma: str) -> List[str]:
+def check_version_cves(pragma_range: str, resolved: str = "") -> List[str]:
+    """CVEs affecting a Solidity compiler version (M27 remediation).
+
+    The old substring match on the pragma text flagged `^0.8.0` (a RANGE
+    whose floor is 0.8.0) with every 0.8.0 CVE even though the range also
+    admits the patched 0.8.19+. Version evaluation now uses real range
+    semantics: a range without a resolved compiler version produces NO
+    assertion; a resolved version is checked with packaging specifiers.
+    """
+    if not pragma_range:
+        return []
+    pinned = pragma_range.strip()
+    has_range_ops = bool(re.search(r"[\^~>=<\*]", pinned))
+    try:
+        from packaging.specifiers import SpecifierSet
+        from packaging.version import Version, InvalidVersion
+    except ImportError:
+        SpecifierSet = None
+
+    def _floor_to_semver(v: str) -> str:
+        m = re.search(r"(\d+\.\d+(?:\.\d+)?)", v)
+        if not m:
+            return ""
+        parts = m.group(1).split(".")
+        while len(parts) < 3:
+            parts.append("0")
+        return ".".join(parts)
+
+    if resolved:
+        # Resolve against the declared range when possible.
+        if SpecifierSet is not None and has_range_ops:
+            floor = _floor_to_semver(pinned)
+            minor = re.search(r"(\d+)\.(\d+)\.\d+", floor)
+            spec = None
+            if pinned.startswith("^") and minor:
+                spec = f">={floor},<{int(minor.group(1))}.{int(minor.group(2)) + 1}.0"
+            elif pinned.startswith("~") and minor:
+                spec = f">={floor},<{minor.group(1)}.{minor.group(2)}.255"
+            else:
+                spec = pinned.replace(" ", "")
+            try:
+                in_range = Version(resolved) in SpecifierSet(spec)
+            except InvalidVersion:
+                in_range = False
+        else:
+            in_range = _floor_to_semver(pinned) == _floor_to_semver(resolved) or pinned == resolved
+    elif has_range_ops:
+        # A range alone cannot pin the actual compiler - no CVE assertion
+        return []
+    else:
+        in_range = True  # pinned, exact pragma - substring is exact here
+
+    if not in_range:
+        return []
+
+    version_key = resolved if resolved else _floor_to_semver(pinned)
     cves = []
     for ver, vulns in _KNOWN_VULNERABLE.items():
-        if re.search(r'(?<!\d)' + re.escape(ver) + r'(?!\d)', pragma):
+        if re.search(r'(?<!\d)' + re.escape(ver) + r'(?!\d)', version_key):
             cves.extend(vulns)
     return cves
 
@@ -166,15 +221,22 @@ def analyze_sbom(code: str) -> SBOMResult:
     major = re.search(r'(\d+\.\d+\.\d+)', result.pragma)
     result.compiler_version = major.group(1) if major else result.pragma
 
-    result.compiler_cves = check_version_cves(result.compiler_version)
+    # NOTE: compiler_version here is the pragma FLOOR (e.g. 0.8.0 for
+    # ^0.8.0), not the compiler actually used - it is NOT passed as
+    # 'resolved' so an ambiguous range makes no CVE assertion (M27).
+    result.compiler_cves = check_version_cves(result.pragma)
 
     seen = set()
     imports = [imp for imp in parse_imports(code) if not (imp in seen or seen.add(imp))]
 
     from concurrent.futures import ThreadPoolExecutor, as_completed
     dep_map = {}
+    # Only query OSV for RECOGNIZED packages (M27 remediation): querying
+    # the npm ecosystem with arbitrary Solidity import paths matched
+    # unrelated npm CVEs purely by name.
+    queryable = [imp for imp in imports if identify_package(imp)]
     with ThreadPoolExecutor(max_workers=5) as pool:
-        fut_map = {pool.submit(query_osv, imp): imp for imp in imports}
+        fut_map = {pool.submit(query_osv, imp): imp for imp in queryable}
         for fut in as_completed(fut_map):
             imp = fut_map[fut]
             dep = Dependency(name=imp)
@@ -227,34 +289,36 @@ def format_sbom_text(result: SBOMResult) -> str:
 
 
 def generate_sbom_json(result: SBOMResult) -> str:
+    # CycloneDX conformance (M27 remediation): specVersion 1.5 (evidence is
+    # a 1.5 field), no fabricated MIT licenses, no 'compiler' component
+    # type (not in the enum) - compiler data moves to document properties,
+    # and the invalid pkg:npm purl for Solidity paths is dropped.
+    components = []
+    for d in result.dependencies:
+        components.append({
+            "type": "library",
+            "name": d.known_package or d.name,
+            "version": "",
+            "evidence": {"identity": [{"field": "name", "confidence": 0.5}]},
+        })
+    properties = [
+        {"name": "solidity.pragma", "value": result.pragma or ""},
+        {"name": "solidity.compiler.version", "value": result.compiler_version or ""},
+    ]
+    if result.compiler_cves:
+        properties.append({"name": "solidity.compiler.cves", "value": ",".join(result.compiler_cves)})
     return json.dumps({
         "bomFormat": "CycloneDX",
-        "specVersion": "1.4",
+        "specVersion": "1.5",
         "metadata": {
             "component": {
                 "type": "application",
                 "name": "Smart Contract Audit Target",
                 "version": "1.0.0",
-            }
+            },
+            "properties": properties,
         },
-        "components": [
-            {
-                "type": "library",
-                "name": d.known_package or d.name,
-                "version": "",
-                "purl": f"pkg:npm/{d.name.replace('@', '').replace('/', '%2F')}",
-                "licenses": [{"license": {"id": "MIT"}}] if d.known_package else [],
-                "evidence": {"identity": [{"field": "purl", "confidence": 0.5}]},
-            }
-            for d in result.dependencies
-        ] + ([
-            {
-                "type": "compiler",
-                "name": "Solidity",
-                "version": result.compiler_version,
-                "cves": result.compiler_cves,
-            }
-        ] if result.compiler_cves else []),
+        "components": components,
         "dependencies": [
             {"ref": d.known_package or d.name, "dependsOn": []}
             for d in result.dependencies

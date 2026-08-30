@@ -4,16 +4,6 @@ from analyzers.base import Finding
 
 logger = logging.getLogger(__name__)
 
-BYTECODE_PATTERNS = {
-    "selfdestruct": re.compile(r"selfdestruct|suicide", re.I),
-    "delegatecall": re.compile(r"delegatecall|delegate_call", re.I),
-    "call_value": re.compile(r"call\.value|callvalue", re.I),
-    "timestamp": re.compile(r"timestamp|TIMESTAMP", re.I),
-    "tx_origin": re.compile(r"tx\.origin|txorigin|ORIGIN", re.I),
-    "assembly": re.compile(r"assembly\s*\{", re.I),
-    "unchecked_send": re.compile(r"call\.send|\.send\(", re.I),
-}
-
 Opcodes = {
     "SELFDESTRUCT": "0xFF",
     "DELEGATECALL": "0xF4",
@@ -42,67 +32,75 @@ def _parse_hex(bytecode: str) -> bytes:
 
 
 def _analyze_opcodes(raw: bytes) -> List[Dict]:
-    findings = []
-    for name, op in Opcodes.items():
-        code = bytes.fromhex(op[2:]) if op.startswith("0x") else op.encode()
-        if code in raw:
-            findings.append({"opcode": name, "code": op})
-    return findings
+    """Linear disassembly with PUSH-operand awareness (M28 remediation).
 
-
-def _regex_scan(text: str) -> List[Dict]:
-    findings = []
-    for name, pattern in BYTECODE_PATTERNS.items():
-        if pattern.search(text):
-            findings.append({"pattern": name, "match": pattern.search(text).group()})
-    return findings
+    The previous per-byte substring search matched opcode bytes inside PUSH
+    operands, constants and ABI data - flagging nearly every real contract
+    with Critical/High findings. Opcodes are now identified only at
+    execution boundaries via the existing linear disassembler.
+    """
+    if not raw:
+        return []
+    from gas_profiler import _disassemble
+    try:
+        ops = _disassemble(raw.hex())
+    except Exception as e:
+        logger.debug("Disassembly failed: %s", e)
+        return []
+    seen = {o["op"] for o in ops if not o["op"].startswith("UNKNOWN_")}
+    return [
+        {"opcode": name, "code": Opcodes[name]}
+        for name in Opcodes
+        if name in seen
+    ]
 
 
 def decompile_bytecode(bytecode: str) -> Optional[str]:
+    tmp_name = None
     try:
         import subprocess
         with tempfile.NamedTemporaryFile(suffix=".hex", delete=False, mode="w") as f:
             f.write(bytecode)
             f.flush()
-            proc = subprocess.run(["panoramix", f.name], capture_output=True, text=True, timeout=30)
-            os.unlink(f.name)
+            tmp_name = f.name
+            proc = subprocess.run(["panoramix", tmp_name], capture_output=True, text=True, timeout=30)
             if proc.returncode == 0:
                 return proc.stdout[:3000]
     except FileNotFoundError:
         pass
     except Exception as e:
         logger.debug(f"Decompiler error: {e}")
+    finally:
+        # Temp file is removed on success AND failure (M28 remediation).
+        if tmp_name:
+            try:
+                os.unlink(tmp_name)
+            except OSError:
+                pass
     return None
 
 
 def analyze_bytecode(bytecode: str, address: str = "") -> List[Finding]:
+    """Report opcode presence as informational context (M28 remediation).
+
+    A single opcode's presence in deployed bytecode is not by itself a
+    vulnerability: SELFDESTRUCT in an owned emergency-exit path, or a
+    DELEGATECALL into a known-safe implementation, are legitimate designs.
+    Contextual severity is the audit's job, not the opcode scanner's.
+    """
     findings = []
     raw = _parse_hex(bytecode)
     op_findings = _analyze_opcodes(raw) if raw else []
-    text_findings = _regex_scan(bytecode)
 
     for op in op_findings:
-        sev = "Critical" if op["opcode"] in ("SELFDESTRUCT", "DELEGATECALL") else "High"
         findings.append(Finding(
             agent_name=f"Opcode: {op['opcode']}",
-            severity=sev,
+            severity="Info",
             category="Bytecode Analysis",
             file=address or "unknown",
             function_name="",
-            description=f"Bytecode contains {op['opcode']} ({op['code']})",
-            fix=f"Remove {op['opcode']} from bytecode if not needed",
-        ))
-
-    for tf in text_findings:
-        sev = "Critical" if tf["pattern"] in ("selfdestruct",) else "High"
-        findings.append(Finding(
-            agent_name=f"Pattern: {tf['pattern']}",
-            severity=sev,
-            category="Bytecode Pattern",
-            file=address or "unknown",
-            function_name="",
-            description=f"Bytecode matches {tf['pattern']}: {tf['match']}",
-            fix=f"Avoid {tf['pattern']} pattern",
+            description=f"Bytecode contains {op['opcode']} ({op['code']}) - presence is informational; assess exploitation context manually",
+            fix="Verify this opcode is expected in the contract design and properly guarded",
         ))
 
     if not findings:
@@ -112,7 +110,7 @@ def analyze_bytecode(bytecode: str, address: str = "") -> List[Finding]:
             category="Bytecode Analysis",
             file=address or "unknown",
             function_name="",
-            description="No dangerous opcodes detected in bytecode",
+            description="No notable opcodes detected in bytecode",
             fix="",
         ))
 

@@ -3,7 +3,7 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 import pytest
-from bytecode_analyzer import analyze_bytecode, analyze_contract_from_explorer, _parse_hex, _analyze_opcodes, _regex_scan
+from bytecode_analyzer import analyze_bytecode, analyze_contract_from_explorer, _parse_hex, _analyze_opcodes
 from agentic_auditor import AgenticAuditor, analyze_project_agentic
 from webhook_notifier import (
     send_discord_webhook, send_slack_webhook,
@@ -66,39 +66,20 @@ class TestAnalyzeOpcodes:
         assert "TIMESTAMP" in names
 
 
-class TestRegexScan:
-    def test_selfdestruct_pattern(self):
-        findings = _regex_scan("selfdestruct(address)")
-        assert len(findings) > 0
-        assert findings[0]["pattern"] == "selfdestruct"
-
-    def test_delegatecall_pattern(self):
-        findings = _regex_scan("delegatecall(addr, data)")
-        assert len(findings) > 0
-        assert findings[0]["pattern"] == "delegatecall"
-
-    def test_tx_origin_pattern(self):
-        findings = _regex_scan("require(tx.origin == owner)")
-        assert len(findings) > 0
-        assert findings[0]["pattern"] == "tx_origin"
-
-    def test_clean_code(self):
-        findings = _regex_scan("pragma solidity ^0.8.0; contract A {}")
-        assert findings == []
-
-
 class TestAnalyzeBytecode:
-    def test_selfdestruct_finding_critical(self):
+    def test_selfdestruct_presence_reported(self):
+        # M28 remediation: opcode PRESENCE is informational context, not a
+        # Critical finding by itself.
         findings = analyze_bytecode("0xff", "test")
-        severities = [f.severity for f in findings]
-        assert "Critical" in severities
         agents = [f.agent_name for f in findings]
         assert any("SELFDESTRUCT" in a for a in agents)
+        assert all(f.severity == "Info" for f in findings)
 
-    def test_delegatecall_finding_high(self):
+    def test_delegatecall_presence_reported(self):
         findings = analyze_bytecode("0xf4", "test")
-        severities = [f.severity for f in findings]
-        assert "Critical" in severities
+        agents = [f.agent_name for f in findings]
+        assert any("DELEGATECALL" in a for a in agents)
+        assert all(f.severity == "Info" for f in findings)
 
     def test_no_dangerous_opcodes(self):
         findings = analyze_bytecode("0x60006000", "safe")

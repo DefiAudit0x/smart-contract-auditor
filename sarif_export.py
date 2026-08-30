@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import urllib.parse
 from datetime import datetime, timezone
 from typing import List, Dict, Optional
 
@@ -64,6 +65,14 @@ def _rule_id(idx: int, finding: Dict) -> str:
 def _strip_markdown(text: str) -> str:
     return text.replace("**", "").replace("*", "").replace("`", "")
 
+def _artifact_uri(label: str) -> str:
+    """Percent-encoded relative URI registered against SRCROOT (M26
+    remediation): labels derived from user input previously produced
+    invalid URIs (spaces, '#', non-ASCII) and unregistered uriBaseIds,
+    both of which break GitHub Security Tab ingestion."""
+    safe = urllib.parse.quote(str(label or "contract"), safe="-_./")
+    return f"{safe}.sol"
+
 def report_to_sarif(report: str, code: str = "", label: str = "Smart Contract") -> str:
     findings = _parse_findings(_strip_markdown(report))
     sarif = {
@@ -81,12 +90,13 @@ def report_to_sarif(report: str, code: str = "", label: str = "Smart Contract") 
                 },
                 "artifacts": [
                     {
-                        "location": {"uri": f"file:///{label}.sol"},
+                        "location": {"uri": _artifact_uri(label), "uriBaseId": "SRCROOT"},
                         "contents": {"text": code or "// source not provided"},
                     }
                 ],
                 "results": [],
-                "columnKind": "unicodeCodePoints",
+                "originalUriBaseIds": {"SRCROOT": {"uri": "file:///"}},
+                "columnKind": "utf16CodeUnits",
             }
         ],
     }
@@ -109,22 +119,26 @@ def report_to_sarif(report: str, code: str = "", label: str = "Smart Contract") 
         })
 
         locations = []
-        lines = f.get("lines", [])
+        lines_arr = code.split("\n") if code else []
         if lines:
             for ln in lines:
+                # Bound-check the line number (M26 remediation): it comes
+                # from an LLM report or attacker text and may exceed the
+                # file - an IndexError here crashed the whole SARIF path.
+                snippet = lines_arr[ln - 1][:120] if 0 < ln <= len(lines_arr) else ""
                 locations.append({
                     "physicalLocation": {
-                        "artifactLocation": {"uri": f"file:///{label}.sol"},
+                        "artifactLocation": {"uri": _artifact_uri(label), "uriBaseId": "SRCROOT"},
                         "region": {
                             "startLine": ln,
-                            "snippet": {"text": code.split("\n")[ln - 1][:120] if code else ""},
+                            "snippet": {"text": snippet},
                         },
                     }
                 })
         else:
             locations.append({
                 "physicalLocation": {
-                    "artifactLocation": {"uri": f"file:///{label}.sol"},
+                    "artifactLocation": {"uri": _artifact_uri(label), "uriBaseId": "SRCROOT"},
                     "region": {"startLine": 1},
                 }
             })
@@ -164,9 +178,11 @@ def generate_sarif(findings: list, output_path: str = "") -> str:
     def _make_result(finding, rule_index: int) -> dict:
         location = {}
         if finding.file:
-            loc = {"uri": finding.file}
-            if os.path.exists(finding.file):
-                loc["uriBaseId"] = os.path.dirname(os.path.abspath(finding.file))
+            # Percent-encoded relative URI (M26 remediation): a raw local
+            # directory as uriBaseId was never registered in
+            # originalUriBaseIds - a SARIF schema violation that breaks
+            # GitHub Security Tab ingestion.
+            loc = {"uri": urllib.parse.quote(str(finding.file).replace(os.sep, "/"), safe="-_./")}
             location["physicalLocation"] = {"artifactLocation": loc}
             if finding.line:
                 location["physicalLocation"]["region"] = {
