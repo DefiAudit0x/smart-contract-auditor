@@ -86,26 +86,47 @@ def _mask_non_code(source: str) -> str:
 
 def _function_span(source: str, function_name: str) -> tuple[str, int, int] | None:
     """Return a masked function signature/body span and its original offsets."""
+    spans = _function_spans(source, function_name)
+    return spans[0] if spans else None
+
+
+def _function_spans(source: str, function_name: str) -> list[tuple[str, int, int]]:
+    """Masked spans of EVERY function with this name (M24 remediation):
+    the previous first-match-only search gathered the second withdraw()'s
+    evidence from the first occurrence."""
     code = _mask_non_code(source)
     if not function_name:
-        return code, 0, len(code)
+        return [(code, 0, len(code))]
     pattern = re.compile(
         rf"function\s+{re.escape(function_name)}\s*\([^)]*\)[^{{;]*\{{",
         re.IGNORECASE | re.DOTALL,
     )
-    match = pattern.search(code)
-    if not match:
-        return None
-    opening = code.find("{", match.start(), match.end())
-    depth = 0
-    for index in range(opening, len(code)):
-        if code[index] == "{":
-            depth += 1
-        elif code[index] == "}":
-            depth -= 1
-            if depth == 0:
-                return code[match.start() : index + 1], match.start(), index + 1
-    return None
+    spans = []
+    for match in pattern.finditer(code):
+        opening = code.find("{", match.start(), match.end())
+        if opening < 0:
+            continue
+        depth = 0
+        for index in range(opening, len(code)):
+            if code[index] == "{":
+                depth += 1
+            elif code[index] == "}":
+                depth -= 1
+                if depth == 0:
+                    spans.append((code[match.start() : index + 1], match.start(), index + 1))
+                    break
+    return spans
+
+
+def _iter_spans(source: str, function_name: str) -> list[tuple[str, int, int]]:
+    """Candidate scopes for a matcher. A named function that cannot be
+    located yields NO scope at all (M24 remediation): silently falling back
+    to the whole file made a delegatecall in an unrelated contract of the
+    same file 'confirm' a finding about a function that does not exist."""
+    if function_name:
+        return _function_spans(source, function_name)
+    code = _mask_non_code(source)
+    return [(code, 0, len(code))]
 
 
 def _line_number(source: str, offset: int) -> int:
@@ -118,75 +139,73 @@ def _evidence(kind: str, source: str, offset: int, excerpt: str) -> list[Evidenc
 
 
 def _match_reentrancy(source: str, function_name: str) -> list[Evidence]:
-    span = _function_span(source, function_name)
-    if not span:
-        return []
-    text, start, _ = span
-    if "nonReentrant" in text:
-        return []
-    match = re.search(r"\.call\s*\{[^}]*\}\s*\(", text, re.IGNORECASE)
-    if not match:
-        return []
-    return _evidence("external_call_without_nonReentrant", source, start + match.start(), match.group())
+    evidence = []
+    for text, start, _ in _iter_spans(source, function_name):
+        if "nonReentrant" in text:
+            continue
+        # All external-value-call forms count as reentrancy surface (M24
+        # remediation): transfer/send-based findings used to be rejected
+        # for lack of deterministic evidence.
+        for match in re.finditer(
+            r"\.(?:call\s*\{[^}]*\}\s*\(|call\s*\(|transfer\s*\(|send\s*\()",
+            text,
+            re.IGNORECASE,
+        ):
+            evidence.extend(_evidence(
+                "external_call_without_nonReentrant", source, start + match.start(), match.group()
+            ))
+    return evidence
 
 
 def _match_delegatecall(source: str, function_name: str) -> list[Evidence]:
-    span = _function_span(source, function_name)
-    text, start, _ = span or (source, 0, len(source))
-    match = re.search(r"\bdelegatecall\s*\(", text, re.IGNORECASE)
-    if not match:
-        return []
-    return _evidence("delegatecall", source, start + match.start(), match.group())
+    evidence = []
+    for text, start, _ in _iter_spans(source, function_name):
+        for match in re.finditer(r"\bdelegatecall\s*\(", text, re.IGNORECASE):
+            evidence.extend(_evidence("delegatecall", source, start + match.start(), match.group()))
+    return evidence
 
 
 def _match_selfdestruct(source: str, function_name: str) -> list[Evidence]:
-    span = _function_span(source, function_name)
-    text, start, _ = span or (source, 0, len(source))
-    match = re.search(r"\bselfdestruct\s*\(", text, re.IGNORECASE)
-    if not match:
-        return []
-    return _evidence("selfdestruct", source, start + match.start(), match.group())
+    evidence = []
+    for text, start, _ in _iter_spans(source, function_name):
+        for match in re.finditer(r"\bselfdestruct\s*\(", text, re.IGNORECASE):
+            evidence.extend(_evidence("selfdestruct", source, start + match.start(), match.group()))
+    return evidence
 
 
 def _match_public_mint(source: str, function_name: str) -> list[Evidence]:
-    span = _function_span(source, "mint")
-    if not span:
-        return []
-    text, start, _ = span
-    signature = text.split("{", 1)[0]
-    if not re.search(r"\b(public|external)\b", signature, re.IGNORECASE):
-        return []
-    if re.search(
-        r"\bonlyOwner\b|msg\.sender\s*==\s*owner|owner\s*==\s*msg\.sender",
-        text,
-        re.IGNORECASE,
-    ):
-        return []
-    return _evidence("unrestricted_mint_function", source, start, signature)
+    evidence = []
+    for text, start, _ in _iter_spans(source, "mint"):
+        signature = text.split("{", 1)[0]
+        if not re.search(r"\b(public|external)\b", signature, re.IGNORECASE):
+            continue
+        if re.search(
+            r"\bonlyOwner\b|msg\.sender\s*==\s*owner|owner\s*==\s*msg\.sender",
+            text,
+            re.IGNORECASE,
+        ):
+            continue
+        evidence.extend(_evidence("unrestricted_mint_function", source, start, signature))
+    return evidence
 
 
 def _match_tx_origin(source: str, function_name: str) -> list[Evidence]:
-    span = _function_span(source, function_name)
-    text, start, _ = span or (source, 0, len(source))
-    match = re.search(r"\btx\.origin\b", text, re.IGNORECASE)
-    if not match:
-        return []
-    return _evidence("tx_origin", source, start + match.start(), match.group())
+    evidence = []
+    for text, start, _ in _iter_spans(source, function_name):
+        for match in re.finditer(r"\btx\.origin\b", text, re.IGNORECASE):
+            evidence.extend(_evidence("tx_origin", source, start + match.start(), match.group()))
+    return evidence
 
 
 def _match_flash_loan(source: str, function_name: str) -> list[Evidence]:
-    span = _function_span(source, "flashLoan")
-    if not span:
-        span = _function_span(source, "flash_loan")
-    if not span:
-        return []
-    text, start, _ = span
-    if "nonReentrant" in text:
-        return []
-    match = re.search(r"function\s+flash[_]?Loan\b", text, re.IGNORECASE)
-    if not match:
-        return []
-    return _evidence("unguarded_flash_loan", source, start + match.start(), match.group())
+    evidence = []
+    for name in ("flashLoan", "flash_loan"):
+        for text, start, _ in _iter_spans(source, name):
+            if "nonReentrant" in text:
+                continue
+            for match in re.finditer(r"function\s+flash[_]?Loan\b", text, re.IGNORECASE):
+                evidence.extend(_evidence("unguarded_flash_loan", source, start + match.start(), match.group()))
+    return evidence
 
 
 def _match_storage_collision(source: str, function_name: str) -> list[Evidence]:
@@ -199,30 +218,27 @@ def _match_storage_collision(source: str, function_name: str) -> list[Evidence]:
 
 
 def _match_unchecked_transfer(source: str, function_name: str) -> list[Evidence]:
-    span = _function_span(source, function_name)
-    text, start, _ = span or (source, 0, len(source))
-    match = re.search(r"\.(?:send|transfer)\s*\(", text, re.IGNORECASE)
-    if not match:
-        return []
-    return _evidence("unchecked_transfer", source, start + match.start(), match.group())
+    evidence = []
+    for text, start, _ in _iter_spans(source, function_name):
+        for match in re.finditer(r"\.(?:send|transfer)\s*\(", text, re.IGNORECASE):
+            evidence.extend(_evidence("unchecked_transfer", source, start + match.start(), match.group()))
+    return evidence
 
 
 def _match_unbounded_loop(source: str, function_name: str) -> list[Evidence]:
-    span = _function_span(source, function_name)
-    text, start, _ = span or (source, 0, len(source))
-    match = re.search(r"\bfor\s*\(", text, re.IGNORECASE)
-    if not match:
-        return []
-    return _evidence("unbounded_loop", source, start + match.start(), match.group())
+    evidence = []
+    for text, start, _ in _iter_spans(source, function_name):
+        for match in re.finditer(r"\bfor\s*\(", text, re.IGNORECASE):
+            evidence.extend(_evidence("unbounded_loop", source, start + match.start(), match.group()))
+    return evidence
 
 
 def _match_block_timestamp(source: str, function_name: str) -> list[Evidence]:
-    span = _function_span(source, function_name)
-    text, start, _ = span or (source, 0, len(source))
-    match = re.search(r"\bblock\.timestamp\b", text, re.IGNORECASE)
-    if not match:
-        return []
-    return _evidence("block_timestamp", source, start + match.start(), match.group())
+    evidence = []
+    for text, start, _ in _iter_spans(source, function_name):
+        for match in re.finditer(r"\bblock\.timestamp\b", text, re.IGNORECASE):
+            evidence.extend(_evidence("block_timestamp", source, start + match.start(), match.group()))
+    return evidence
 
 
 _MATCHERS: dict[str, EvidenceMatcher] = {
@@ -248,13 +264,24 @@ def collect_evidence(hypothesis: Hypothesis, source: str) -> list[Evidence]:
 
 
 def verify_hypothesis(hypothesis: Hypothesis, source: str) -> Verification:
-    """Verify whether the detector's primary source pattern is present."""
+    """Verify whether the detector's primary source pattern is present.
+
+    supported honestly reflects the evidence (M24 remediation): it used to
+    be True both with and without evidence, making the field meaningless
+    to every consumer. A named function that cannot be located is reported
+    as inconclusive instead of silently scanning the whole file.
+    """
     if hypothesis.detector not in _MATCHERS:
         return Verification(False, "No deterministic evidence rule is registered for this detector")
+    if hypothesis.function and not _function_spans(source, hypothesis.function):
+        return Verification(
+            False,
+            "Function scope could not be located - verification is inconclusive (no whole-file fallback)",
+        )
     evidence = collect_evidence(hypothesis, source)
     if evidence:
         return Verification(True, "Registered source pattern is present")
-    return Verification(True, "Registered source pattern is absent")
+    return Verification(False, "Registered source pattern is absent")
 
 
 def compare_finding(finding: Any, source: str) -> ComparisonResult:
@@ -264,6 +291,11 @@ def compare_finding(finding: Any, source: str) -> ComparisonResult:
     evidence = collect_evidence(hypothesis, source)
 
     if hypothesis.detector not in _MATCHERS:
+        status = ComparisonStatus.INCONCLUSIVE
+        reason = verification.reason
+    elif hypothesis.function and not _function_spans(source, hypothesis.function):
+        # Scope failure is NOT a rejection: the function may live in
+        # another file or the name may be malformed (M24 remediation).
         status = ComparisonStatus.INCONCLUSIVE
         reason = verification.reason
     elif evidence:

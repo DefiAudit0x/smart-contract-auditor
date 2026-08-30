@@ -57,15 +57,16 @@ class AgenticAuditor:
             if resolved:
                 self.graph[path].append(resolved)
 
-        contract_match = CONTRACT_RE.search(content)
-        if contract_match:
-            name = contract_match.group(2)
-            self.contracts[name] = path
+        # Index EVERY contract declaration, not just the first (M23
+        # remediation): multi-contract files lost inheritance edges and
+        # INHERITANCE_RE could bind to a contract that was never indexed.
+        for m in CONTRACT_RE.finditer(content):
+            self.contracts[m.group(2)] = path
 
-        inh = INHERITANCE_RE.search(content)
-        if inh:
+        for inh in INHERITANCE_RE.finditer(content):
             bases = [b.strip() for b in inh.group(1).split(",")]
             for base in bases:
+                base = base.split("(")[0].strip()  # strip constructor args
                 if base in self.contracts:
                     base_path = self.contracts[base]
                     if base_path != path:
@@ -95,29 +96,44 @@ class AgenticAuditor:
 
         logger.info("Loaded %d remappings", len(self.remappings))
 
+    def _norm(self, p: str) -> str:
+        """Normalize any path (relative or absolute) against the project
+        root (M23 remediation): load_directory keys files by relpath while
+        import resolution used absolute paths, so remapped imports never
+        matched and their graph edges silently vanished."""
+        if not p:
+            return ""
+        if not os.path.isabs(p):
+            p = os.path.join(self.root or ".", p)
+        return os.path.normpath(p)
+
     def _resolve_import(self, current: str, imp_path: str) -> Optional[str]:
         for prefix, local_path in self.remappings.items():
             if imp_path.startswith(prefix):
                 relocated = os.path.normpath(os.path.join(local_path, imp_path[len(prefix):]))
-                abs_check = os.path.normpath(os.path.join(self.root, relocated))
-                if abs_check in self.files:
-                    return abs_check
+                abs_check = self._norm(relocated)
+                for key in self.files:
+                    if self._norm(key) == abs_check:
+                        return key
                 for ext in (".sol", ".vy", ".move"):
                     with_ext = abs_check + ext if not abs_check.endswith(ext) else abs_check
-                    if with_ext in self.files:
-                        return with_ext
+                    for key in self.files:
+                        if self._norm(key) == with_ext:
+                            return key
                 break
         candidates = [
             os.path.normpath(os.path.join(os.path.dirname(current), imp_path)),
             os.path.normpath(imp_path),
         ]
         for c in candidates:
-            if c in self.files:
-                return c
+            for key in self.files:
+                if self._norm(key) == self._norm(c):
+                    return key
             for ext in (".sol", ".vy", ".move"):
                 with_ext = c + ext if not c.endswith(ext) else c
-                if with_ext in self.files:
-                    return with_ext
+                for key in self.files:
+                    if self._norm(key) == self._norm(with_ext):
+                        return key
         return None
 
     def build_context(self, target_file: str, depth: int = 2) -> str:

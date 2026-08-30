@@ -58,7 +58,9 @@ def test_known_pattern_without_evidence_is_rejected():
     }
     result = compare_finding(finding, "contract C { function check() external view { return; } }")
     assert result.status is ComparisonStatus.REJECTED
-    assert result.verification.supported is True
+    # M24 remediation: 'supported' now honestly reflects the evidence.
+    # It used to be True in both branches, which made the field useless.
+    assert result.verification.supported is False
     assert result.evidence == ()
 
 

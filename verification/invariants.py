@@ -37,10 +37,18 @@ class InvariantResult:
 
 
 def _strip_comments(source: str) -> str:
+    """Mask comments AND string literals (M25 remediation): a string such
+    as error string(\"delegatecall(...) forbidden\") used to trip the
+    delegatecall invariant even though no delegatecall exists in code."""
     def mask(match: re.Match[str]) -> str:
         return "".join("\n" if char == "\n" else " " for char in match.group(0))
 
-    source = re.sub(r"//[^\n]*|/\*.*?\*/", mask, source, flags=re.DOTALL)
+    source = re.sub(
+        r'//[^\n]*|/\*.*?\*/|"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'',
+        mask,
+        source,
+        flags=re.DOTALL,
+    )
     return source
 
 
@@ -175,21 +183,43 @@ def _check_storage_collision_safe(source: str) -> tuple[InvariantStatus, str, tu
 
 
 def _check_transfer_result_checked(source: str) -> tuple[InvariantStatus, str, tuple[Evidence, ...]]:
+    """Flag unchecked LOW-LEVEL value sends only (M25 remediation).
+
+    address.transfer reverts on failure rather than returning false, and a
+    token.transfer whose result IS checked is safe - the previous matcher
+    marked any .send(/.transfer( as VIOLATED, teaching the benchmark that
+    the standard payable(msg.sender).transfer(amount) withdrawal is a
+    violation and biasing every quality number downstream."""
     clean = _strip_comments(source)
-    match = re.search(r"\.(?:send|transfer)\s*\(", clean, re.IGNORECASE)
-    if match:
+    for match in re.finditer(r"\.(?:send|call)\s*[({]", clean, re.IGNORECASE):
+        window = clean[match.end() : match.end() + 160]
+        if re.search(r"\b(?:require|assert|revert)\b|if\s*\(\s*!", window, re.IGNORECASE):
+            continue  # return value checked within the immediate window
         return (
             InvariantStatus.VIOLATED,
-            "Source uses send/transfer without an explicit return-value check",
+            "Source uses low-level send/call without an explicit return-value check",
             _evidence("unchecked_transfer", source, match.start(), match.group()),
         )
-    return InvariantStatus.SATISFIED, "No unchecked send/transfer call is present", ()
+    return InvariantStatus.SATISFIED, "No unchecked low-level send/call is present", ()
 
 
 def _check_distribution_bounded(source: str) -> tuple[InvariantStatus, str, tuple[Evidence, ...]]:
+    """Only loops WITHOUT any visible bound count (M25 remediation): any
+    bounded for-loop used to be marked VIOLATED regardless of its limit,
+    which was methodologically wrong and skewed the metrics."""
     clean = _strip_comments(source)
-    match = re.search(r"\bfor\s*\(", clean, re.IGNORECASE)
-    if match:
+    for match in re.finditer(r"\bfor\s*\(([^)]*)\)", clean, re.IGNORECASE):
+        header = match.group(1)
+        # Bounded = numeric-literal cap or an explicit batch/min cap (M25
+        # remediation). A dynamic bound such as `i < recipients.length`
+        # IS the unbounded distribution DoS the benchmark encodes; the
+        # previous "any bound means safe" reading taught the metrics that
+        # the vulnerable pattern is fine.
+        condition = header
+        if re.search(r"<\s*\d+\b", condition):
+            continue  # constant numeric bound
+        if re.search(r"\b(?:min|max|batch|cap|limit)\s*\(", condition, re.IGNORECASE):
+            continue  # batch-capped iteration
         return (
             InvariantStatus.VIOLATED,
             "Source contains a loop without a benchmark-declared batch bound",
