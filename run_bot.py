@@ -1,6 +1,10 @@
 import sys, os, threading, time
+import logging
+
 sys.path.insert(0, os.path.dirname(__file__))
 from telegram_bot import get_bot
+
+logger = logging.getLogger(__name__)
 
 PORT = int(os.environ.get("PORT", 8080))
 
@@ -17,7 +21,9 @@ def _health_server():
         server = HTTPServer(("0.0.0.0", PORT), H)
         server.serve_forever()
     except Exception:
-        pass
+        # L-25: a swallowed bind failure made the bot claim health while
+        # /health was dead (e.g. port already in use). Surface it.
+        logger.exception("Health server on port %d failed — /health is NOT being served", PORT)
 
 threading.Thread(target=_health_server, daemon=True).start()
 

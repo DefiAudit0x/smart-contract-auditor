@@ -65,7 +65,13 @@ def require_auth(f):
             # Fail-closed: never serve unauthenticated audits when the
             # deployment is missing AUDITOR_API_KEY.
             return jsonify({"error": "Server misconfigured: AUDITOR_API_KEY is not set"}), 503
-        key = request.headers.get("X-API-Key", "")
+        # L-09: accept the documented Authorization header as well as
+        # X-API-Key — .env.example used to promise Authorization while the
+        # server only read X-API-Key, so clients following the example
+        # got 401s.
+        key = request.headers.get("X-API-Key") or request.headers.get("Authorization", "")
+        if key.startswith("Bearer "):
+            key = key[len("Bearer "):].strip()
         if not hmac.compare_digest(key, API_KEY):
             return jsonify({"error": "Unauthorized"}), 401
         return f(*args, **kwargs)
