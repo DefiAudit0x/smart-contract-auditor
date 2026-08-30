@@ -120,10 +120,23 @@ def generate_csp_nonce():
 def inject_csp_nonce():
     return dict(csp_nonce=getattr(g, 'csp_nonce', ''))
 
+# Legacy inline event handlers in templates are allow-listed via CSP3
+# 'unsafe-hashes' (see security_headers.py) so script-src can drop
+# 'unsafe-inline' entirely.
+from security_headers import _inline_handler_hashes
+
 @app.after_request
 def add_security_headers(resp):
     nonce = getattr(g, 'csp_nonce', '')
-    resp.headers['Content-Security-Policy'] = f"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'nonce-{nonce}'; style-src-attr 'unsafe-inline'; font-src 'self' data:; img-src 'self' data:; connect-src 'self'"
+    resp.headers['Content-Security-Policy'] = (
+        f"default-src 'self'; "
+        f"script-src 'self' 'nonce-{nonce}'; "
+        f"script-src-attr 'unsafe-hashes' {_inline_handler_hashes()}; "
+        f"style-src 'self' 'nonce-{nonce}'; "
+        f"style-src-attr 'unsafe-inline'; "
+        f"font-src 'self' data:; img-src 'self' data:; connect-src 'self'; "
+        f"object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+    )
     resp.headers['X-Content-Type-Options'] = 'nosniff'
     resp.headers['X-Frame-Options'] = 'DENY'
     resp.headers['X-XSS-Protection'] = '1; mode=block'
@@ -342,7 +355,16 @@ def report_interactive(filename):
 @app.route('/download/<filename>')
 @requires_admin
 def download(filename):
-    return send_from_directory(REPORT_DIR, filename, as_attachment=False)
+    resp = send_from_directory(REPORT_DIR, filename, as_attachment=False)
+    # Reports embed user-controlled text. Serving generated HTML inline in
+    # the admin origin is dangerous, so sandbox every HTML response: the
+    # browser renders it in a unique origin where scripts (inline or not)
+    # and forms never run. TXT/JSON responses are unaffected.
+    if filename.lower().endswith(('.html', '.htm')):
+        resp.headers['Content-Security-Policy'] = 'sandbox'
+        resp.headers['Content-Disposition'] = 'inline; filename="{}"'.format(filename.replace('"', ''))
+    resp.headers['X-Content-Type-Options'] = 'nosniff'
+    return resp
 
 
 @app.route('/report/list')

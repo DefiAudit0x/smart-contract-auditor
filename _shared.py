@@ -258,10 +258,14 @@ def _run_analysis(code: str, analysis_type: str) -> str:
 
 def _save_html_report(filename: str, report: str, label: str, analysis_type: str) -> str:
     safe_report = html.escape(report)
+    # label and analysis_type are user-controlled (upload name / form field);
+    # escape them everywhere they are rendered, not just the report body.
+    safe_label = html.escape(str(label))
+    safe_type = html.escape(str(analysis_type))
     page = f"""<!DOCTYPE html>
 <html lang="en" dir="ltr">
 <head><meta charset="UTF-8">
-<title>{label} - {analysis_type} Report</title>
+<title>{safe_label} - {safe_type} Report</title>
 <style>
 * {{ margin: 0; padding: 0; box-sizing: border-box; }}
 body {{ font-family: 'Segoe UI', system-ui, sans-serif; background: #0d1117; color: #c9d1d9; padding: 2rem; }}
@@ -278,8 +282,8 @@ hr {{ border: none; border-top: 1px solid #30363d; margin: 1rem 0; }}
 .info {{ border-right: 4px solid #238636; }}
 </style></head>
 <body>
-<h1>{label}</h1>
-<p class="meta"><strong>Analysis type:</strong> {analysis_type} | <strong>Date:</strong> {time.strftime('%Y-%m-%d %H:%M:%S')}</p>
+<h1>{safe_label}</h1>
+<p class="meta"><strong>Analysis type:</strong> {safe_type} | <strong>Date:</strong> {time.strftime('%Y-%m-%d %H:%M:%S')}</p>
 <hr>
 <pre>{safe_report}</pre>
 <hr>
