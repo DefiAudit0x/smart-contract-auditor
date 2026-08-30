@@ -99,14 +99,6 @@ def _has_impact_words(combined: str, sev: str) -> bool:
     return True
 
 
-def _has_roi_assessment(combined: str) -> bool:
-    """Check if the finding includes profit vs cost analysis."""
-    return any(w in combined for w in [
-        "profit", "cost", "gas", "capital", "spend", "gain",
-        "roi", "returns", "economics",
-    ])
-
-
 def _is_centralization_risk(finding: Dict) -> bool:
     """Check if the finding is just 'admin can drain' which is usually OOS."""
     name = finding.get("name", "").lower()
@@ -260,24 +252,6 @@ def _gate_q5_not_known_acknowledged(finding: Dict, kb_patterns: List[Dict]) -> T
         if name.lower() == pname.lower() or _norm_tokens(name) == _norm_tokens(pname):
             return False, f"Duplicate of existing KB pattern: '{pname}'"
     return True, ""
-
-
-def _gate_q6_economic_viable(finding: Dict, code: str) -> Tuple[bool, str]:
-    """Q6: Is the economic attack viable? Profit > cost?
-    For Critical/High findings, must show ROI analysis."""
-    sev = finding.get("severity", "Medium")
-    name = finding.get("name", "").lower()
-    desc = finding.get("description", "").lower()
-    combined = name + " " + desc
-
-    if sev in ("Critical", "High"):
-        if not _has_roi_assessment(combined):
-            downgraded = _SEVERITY_DOWNGRADE.get(sev)
-            if downgraded:
-                return True, downgraded, f"Downgraded from {sev} to {downgraded}: no economic viability assessment"
-            return False, None, "No economic viability assessment for {sev} finding"
-
-    return True, None, ""
 
 
 def _gate_q7_not_public(finding: Dict) -> Tuple[bool, str]:

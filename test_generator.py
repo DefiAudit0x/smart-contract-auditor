@@ -8,21 +8,29 @@ VULN_TEMPLATES = {
         "name": "Reentrancy",
         "check": "assertEq(counter, expected, 'Reentrancy guard failed');",
         "setup": "vm.expectRevert();",
+        "needs_api": True,
+        "reason": "the reentrancy guard state (counter) is target-specific",
     },
     "access_control": {
         "name": "Access Control",
         "check": "vm.expectRevert(bytes('Ownable: caller is not the owner'));",
         "setup": "",
+        "needs_api": True,
+        "reason": "expectRevert must target a specific access-controlled function",
     },
     "unchecked": {
         "name": "Unchecked Return",
         "check": "assertTrue(success, 'call should not revert');",
         "setup": "",
+        "needs_api": True,
+        "reason": "the probe must call the specific function with the unchecked return value",
     },
     "overflow": {
         "name": "Overflow",
         "check": "assertEq(counter, type(uint256).max, 'Overflow check');",
         "setup": "vm.assume(counter < type(uint256).max);",
+        "needs_api": True,
+        "reason": "the arithmetic entry point (counter) is target-specific",
     },
     "txorigin": {
         "name": "TxOrigin",
@@ -31,18 +39,24 @@ VULN_TEMPLATES = {
     },
     "selfdestruct": {
         "name": "Selfdestruct",
-        "check": "assertEq(address(contract).code.length, 0, 'contract should be destroyed');",
+        # L-14: 'contract' is a reserved word — the old check could not
+        # compile; reference the deployed target instead.
+        "check": "assertEq(address(target).code.length, 0, 'contract should be destroyed');",
         "setup": "",
     },
     "delegatecall": {
         "name": "DelegateCall",
-        "check": "assertEq(storageVar, expected, 'storage collision check');",
+        # L-14: storageVar/expected never existed in the generated harness —
+        # assert on something the harness actually has instead.
+        "check": "assertGt(address(target).balance, 0, 'target must retain balance after delegatecall');",
         "setup": "",
     },
     "flashloan": {
         "name": "Flash Loan",
         "check": "assertGe(token.balanceOf(address(this)), fee, 'flash loan fee');",
         "setup": "",
+        "needs_api": True,
+        "reason": "the token/fee pair is target-specific",
     },
 }
 
@@ -96,12 +110,29 @@ def generate_foundry_test(contract_name: str, report: str, sol_code: str) -> str
         template = VULN_TEMPLATES.get(vuln)
         if not template:
             continue
+        if template.get("needs_api"):
+            # L-14: these checks referenced harness-undefined identifiers
+            # (counter, token, success) and could never compile. The generic
+            # harness cannot know the target's API — emit an explicit skip
+            # with the reason instead of fake-compiling or fake-passing code.
+            lines.append(f"    function test{vuln.title()}() public {{")
+            lines.append(f"        // {template['reason']} — extend this test manually.")
+            lines.append(f"        vm.skip(true);")
+            lines.append(f"    }}")
+            lines.append(f"")
+            continue
         lines.append(f"    function test{vuln.title()}() public {{")
         lines.append(f'        vm.label(attacker, "Attacker");')
         if template["setup"]:
             lines.append(f"        {template['setup']}")
-        # Get function names from code that might be vulnerable
-        funcs = re.findall(rf"function\s+(\w+)\s*\(", sol_code)
+        # L-14: only call functions that take NO parameters — the old
+        # regex emitted target.foo() for every declared function, producing
+        # tests that do not compile whenever a picked function had args.
+        funcs = [
+            m.group(1)
+            for m in re.finditer(r"function\s+(\w+)\s*\(([^)]*)\)\s*[^{;]*", sol_code)
+            if not m.group(2).strip()
+        ]
         for func in funcs[:2]:
             lines.append(f"        // Test {func} for {template['name']}")
             lines.append(f"        target.{func}();")
@@ -110,8 +141,9 @@ def generate_foundry_test(contract_name: str, report: str, sol_code: str) -> str
         lines.append(f"")
 
     lines.append(f"    function testInvariant() public {{")
-    lines.append(f'        // Invariant: contract balance should never decrease')
-    lines.append(f'        assertGe(address(target).balance, 0);')
+    lines.append(f'        // Invariant: the target must retain deployable bytecode —')
+    lines.append(f'        // assertGe(balance, 0) is trivially true for uint and proves nothing.')
+    lines.append(f'        assertGt(address(target).code.length, 0, "target must retain code");')
     lines.append(f"    }}")
     lines.append(f"}}")
     lines.append(f"")

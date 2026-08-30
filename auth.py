@@ -9,7 +9,7 @@ import string
 import threading
 import time
 from functools import wraps
-from flask import session, redirect, request, jsonify
+from flask import session, redirect, request, jsonify, g, has_app_context
 from flask_login import UserMixin
 from werkzeug.security import check_password_hash
 
@@ -67,13 +67,14 @@ def find_user_by_api_key(api_key):
 def create_user(github_id, github_username, email, avatar_url):
     conn = _get_conn()
     now = int(time.time())
-    # Reset credits on the 1st of next month
-    import calendar
-    from datetime import datetime
-    now_dt = datetime.utcnow()
+    # Reset credits on the 1st of next month (L-01: pick the boundary in
+    # UTC too — a naive datetime here was interpreted in the server's local
+    # timezone, shifting the reset by the machine's UTC offset).
+    from datetime import datetime, timezone
+    now_dt = datetime.now(timezone.utc)
     next_month = now_dt.month % 12 + 1
     next_year = now_dt.year + (1 if next_month == 1 else 0)
-    reset_at = int(datetime(next_year, next_month, 1, 0, 0, 0).timestamp())
+    reset_at = int(datetime(next_year, next_month, 1, 0, 0, 0, tzinfo=timezone.utc).timestamp())
     conn.execute("""INSERT OR IGNORE INTO users
         (github_id, github_username, email, avatar_url, plan, credits, credit_reset_at, created_at)
         VALUES (?, ?, ?, ?, 'free', ?, ?, ?)""",
@@ -88,12 +89,11 @@ def reset_credits_if_needed(user):
         return
     now = int(time.time())
     if now >= user.credit_reset_at:
-        import calendar
-        from datetime import datetime
-        now_dt = datetime.utcnow()
+        from datetime import datetime, timezone
+        now_dt = datetime.now(timezone.utc)
         next_month = now_dt.month % 12 + 1
         next_year = now_dt.year + (1 if next_month == 1 else 0)
-        reset_at = int(datetime(next_year, next_month, 1, 0, 0, 0).timestamp())
+        reset_at = int(datetime(next_year, next_month, 1, 0, 0, 0, tzinfo=timezone.utc).timestamp())
         conn = _get_conn()
         conn.execute("UPDATE users SET credits = ?, credit_reset_at = ? WHERE id = ?",
                      (MONTHLY_FREE_CREDITS, reset_at, user.id))
@@ -146,12 +146,40 @@ def revoke_api_key(key_id, user_id):
                  (key_id, user_id))
     conn.commit()
 
+def _new_conn():
+    conn = sqlite3.connect(AUTH_DB_PATH, timeout=10)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    return conn
+
+
 def _get_conn():
+    # L-04: inside a Flask request, serve ONE connection per request via
+    # flask.g. The old thread-local storage breaks under gevent workers —
+    # each greenlet looks like a separate "thread", so every request
+    # churned a fresh connection and re-ran the PRAGMA.
+    if has_app_context():
+        conn = g.get("_auth_conn")
+        if conn is None:
+            conn = g._auth_conn = _new_conn()
+        return conn
+    # Non-HTTP callers (CLI tools, the Telegram bot) keep a per-thread
+    # connection.
     if not hasattr(_local, 'conn') or _local.conn is None:
-        _local.conn = sqlite3.connect(AUTH_DB_PATH, timeout=10)
-        _local.conn.row_factory = sqlite3.Row
-        _local.conn.execute("PRAGMA journal_mode=WAL")
+        _local.conn = _new_conn()
     return _local.conn
+
+
+def init_auth_teardown(app):
+    """Register cleanup that closes the per-request auth connection."""
+    @app.teardown_appcontext
+    def _close_auth_conn(exc):
+        conn = g.pop("_auth_conn", None)
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 def _migrate_api_keys_schema(conn):
     """Rebuild the legacy api_keys table (plaintext `key` column) into hashed
@@ -263,14 +291,22 @@ def generate_code(prefix="SCA"):
     return f"{prefix}-{part1}-{part2}"
 
 def create_access_code(created_by="", max_uses=-1):
-    code = generate_code()
+    # L-03: INSERT OR IGNORE silently swallows a primary-key collision and
+    # then handed the admin a code that was never inserted. Retry on
+    # collision and only return codes that actually exist in the table.
     conn = _get_conn()
-    conn.execute(
-        "INSERT OR IGNORE INTO access_codes (code, created_by, max_uses) VALUES (?, ?, ?)",
-        (code, created_by, max_uses)
-    )
-    conn.commit()
-    return code
+    for _attempt in range(5):
+        code = generate_code()
+        cur = conn.execute(
+            "INSERT OR IGNORE INTO access_codes (code, created_by, max_uses) VALUES (?, ?, ?)",
+            (code, created_by, max_uses)
+        )
+        conn.commit()
+        if cur.rowcount > 0:
+            return code
+        logger.warning("create_access_code: collision on %s — retrying", code)
+    logger.error("create_access_code: %d collisions in a row — giving up", 5)
+    return None
 
 def verify_code(code):
     conn = _get_conn()
@@ -280,6 +316,13 @@ def verify_code(code):
         (normalized,)
     ).fetchone()
     if row is None:
+        # L-02: log failed attempts for unknown/inactive codes too — without
+        # this row there is no way to investigate code-guessing campaigns.
+        conn.execute(
+            "INSERT INTO auth_log (code, ip, success) VALUES (?, ?, 0)",
+            (normalized, request.remote_addr if request else "")
+        )
+        conn.commit()
         return False
     # Enforce max_uses at login time as well (M2 remediation): a code whose
     # quota is exhausted must not mint new authenticated sessions.

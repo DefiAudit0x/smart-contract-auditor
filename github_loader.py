@@ -1,4 +1,5 @@
 import logging
+import os
 import re
 import requests
 from typing import List, Dict, Optional, Tuple
@@ -19,6 +20,10 @@ def extract_repo_info(repo_url: str) -> Tuple[Optional[str], Optional[str]]:
 
 SUPPORTED_EXTS: tuple = (".sol", ".vy", ".move", ".clsp", ".clib", ".rs", ".py")
 MAX_FILES_LIMIT = 20
+# L-28: cap per-file downloads so a huge blob cannot exhaust memory, and
+# authenticate raw-file requests when a token is available so private
+# repositories do not silently fail after a successful listing.
+MAX_DOWNLOAD_BYTES = 2 * 1024 * 1024
 
 
 def get_all_sol_files(username: str, repo_name: str, github_token: Optional[str] = None) -> List[Dict[str, str]]:
@@ -47,15 +52,25 @@ def get_all_sol_files(username: str, repo_name: str, github_token: Optional[str]
         sol_paths = sol_paths[:MAX_FILES_LIMIT]
 
         contracts = []
+        # L-28: prefer the caller-supplied token, fall back to the env —
+        # raw.githubusercontent requests for private repos 404 without it.
+        gh_token = (github_token or "").strip() or os.getenv("GITHUB_TOKEN", "").strip()
+        dl_headers = {"Authorization": f"Bearer {gh_token}"} if gh_token else {}
         for path in sol_paths:
             raw_url = f"https://raw.githubusercontent.com/{username}/{repo_name}/{default_branch}/{path}"
             try:
-                r = requests.get(raw_url, timeout=15)
-                if r.status_code == 200:
-                    contracts.append({"name": path, "code": r.text})
+                with requests.get(raw_url, timeout=15, headers=dl_headers, stream=True) as r:
+                    if r.status_code != 200:
+                        logger.warning(f"⚠️ Failed to download {path}: HTTP {r.status_code}")
+                        continue
+                    chunks, total = [], 0
+                    for chunk in r.iter_content(chunk_size=65536):
+                        total += len(chunk)
+                        if total > MAX_DOWNLOAD_BYTES:
+                            raise ValueError(f"{path} exceeds {MAX_DOWNLOAD_BYTES} byte download cap")
+                        chunks.append(chunk)
+                    contracts.append({"name": path, "code": b"".join(chunks).decode("utf-8", errors="replace")})
                     logger.info(f"✅ Found: {path}")
-                else:
-                    logger.warning(f"⚠️ Failed to download {path}: HTTP {r.status_code}")
             except Exception as e:
                 logger.warning(f"⚠️ Error downloading {path}: {e}")
 

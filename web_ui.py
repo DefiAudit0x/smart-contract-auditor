@@ -36,7 +36,7 @@ from inheritance_graph import extract_inheritance, generate_html_graph
 from permission_analysis import analyze_permissions
 from custom_rules import get_rules_engine, CustomRule
 from chain_loader import load_from_explorer, list_supported_chains
-from external_analyzers import TOOL_AVAILABLE
+from external_analyzers import tool_available
 from _shared import _has_gas_profiler as _has_gas_profiler_local
 from security_utils import extract_zip_safely
 from _shared import compile_estimate_gas
@@ -45,7 +45,7 @@ from auth import (
     ADMIN_PASSWORD_HASH, verify_admin_password, log_admin_event,
     find_user_by_github_id, create_user, get_user_by_id,
     create_api_key, list_api_keys, revoke_api_key, deduct_credit, reset_credits_if_needed,
-    get_user_history_count, MONTHLY_FREE_CREDITS, requires_admin,
+    get_user_history_count, MONTHLY_FREE_CREDITS, requires_admin, init_auth_teardown,
 )
 from flask_cors import CORS
 
@@ -76,6 +76,9 @@ def _safe_report_path(filename):
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
+# Close the per-request auth SQLite connection when the request context ends
+# (L-04 remediation — connections now live on flask.g, not thread-locals).
+init_auth_teardown(app)
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024
 app.config['WTF_CSRF_TIME_LIMIT'] = 3600
 app.static_folder = 'static'
@@ -117,7 +120,11 @@ app.config['SESSION_COOKIE_SECURE'] = os.environ.get("RENDER", "").strip() != ""
 # the effective limits (M6 remediation).
 limiter = Limiter(get_remote_address, app=app,
                   storage_uri=os.environ.get("REDIS_URL", "memory://"),
-                  default_limits=["200 per day", "50 per hour"])
+                  default_limits=["200 per day", "50 per hour"],
+                  # L-20: health checks and static assets are infra traffic,
+                  # not API usage — counting them into the shared 200/day
+                  # bucket made Render's health probes trip 429s on /health.
+                  default_limits_exempt_when=lambda: request.endpoint in ("static", "health"))
 
 # CSP + security headers
 @app.before_request
@@ -352,7 +359,10 @@ def report_interactive(filename):
                 f'<div class="finding">'
                 f'<div class="finding-header" onclick="toggleFinding(this)">'
                 f'<span class="severity-badge {sev}">{sev}</span>'
-                f'<span class="title">{html.escape(title)}</span>'
+                # L-24: 'title' was carved out of content that is already
+                # html-escaped once (line ~336) — escaping it again turned
+                # &quot; into &amp;quot; in the report listing.
+                f'<span class="title">{title}</span>'
                 f'<span class="toggle">&rsaquo;</span></div>'
                 f'<div class="finding-body">'
             )
@@ -428,8 +438,10 @@ def dashboard():
         "sessions": s.get("sessions", 0),
         "top_patterns": s.get("top_patterns", []),
         "rankings": s.get("rankings", []),
-        "slither": TOOL_AVAILABLE.get("slither", False),
-        "mythril": TOOL_AVAILABLE.get("mythril", False),
+        # L-30: lazy availability probe — tools installed after boot are
+        # detected too.
+        "slither": tool_available("slither"),
+        "mythril": tool_available("mythril"),
         "kb_enabled": KB_ENABLED,
         "cache_enabled": CACHE_ENABLED,
         "kb_dynamic": kb_dynamic,
@@ -902,10 +914,20 @@ def api_admin_codes():
         return jsonify({"error": "Unauthorized"}), 401
     if request.method == 'POST':
         data = request.get_json() or {}
+        # L-23: a non-numeric max_uses used to raise ValueError and hit the
+        # admin with a raw 500 page — answer 400 with a field message.
+        try:
+            max_uses = int(data.get('max_uses', -1))
+        except (TypeError, ValueError):
+            return jsonify({"error": "Field 'max_uses' must be an integer"}), 400
         code = create_access_code(
             created_by=data.get('created_by', ''),
-            max_uses=int(data.get('max_uses', -1))
+            max_uses=max_uses,
         )
+        if code is None:
+            # L-03 follow-up: persistent primary-key collisions — the code
+            # was NOT created, never return success with an empty code.
+            return jsonify({"error": "Code generation failed — please retry"}), 500
         return jsonify({"code": code})
     return jsonify({"codes": list_codes()})
 

@@ -104,7 +104,9 @@ def run_foundry_poc(
                 check=False,
             )
         except subprocess.TimeoutExpired:
-            return PocResult(str(safe_poc), PocStatus.FAILED, "PoC timed out")
+            # L-13: a timeout is an environment limitation, not proof that
+            # the exploit fails — count it as INCONCLUSIVE, not FAILED.
+            return PocResult(str(safe_poc), PocStatus.INCONCLUSIVE, "PoC timed out")
         except OSError as exc:
             return PocResult(str(safe_poc), PocStatus.INCONCLUSIVE, str(exc))
 

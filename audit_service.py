@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import sys
+import hashlib
 from typing import Dict, List, Optional, Tuple
 
 from agents import audit, self_critique, cache_stats, run_parallel
@@ -130,7 +131,11 @@ Language: English"""
         try:
             kb = KnowledgeBase(KB_DB_PATH)
             sid = kb.start_session(label, code, "auto")
-            kb.update_session(sid, report_hash=str(hash(report))[:16])
+            # L-16: str(hash(report)) is unstable across processes
+            # (PYTHONHASHSEED randomizes str hashing), so the same report
+            # got different session hashes and KB dedup quietly converged
+            # apart. Use a stable digest.
+            kb.update_session(sid, report_hash=hashlib.sha256(report.encode()).hexdigest()[:16])
             kb.close()
             return (sid, label)
         except Exception as e:

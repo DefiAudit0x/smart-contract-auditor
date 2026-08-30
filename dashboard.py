@@ -4,6 +4,9 @@ import requests
 
 sys.path.insert(0, os.path.dirname(__file__))
 API_BASE = os.environ.get("AUDITOR_API", "https://auditor-bot.onrender.com")
+# L-11: the composite API requires a key — send AUDITOR_API_KEY as X-API-Key.
+API_KEY = os.environ.get("AUDITOR_API_KEY", "")
+_HEADERS = {"X-API-Key": API_KEY} if API_KEY else {}
 
 st.set_page_config(page_title="Smart Contract Auditor", layout="wide")
 st.title("Smart Contract Auditor Dashboard")
@@ -16,7 +19,7 @@ with tab1:
     if st.button("Run Audit") and code:
         with st.spinner("Auditing..."):
             try:
-                r = requests.post(f"{API_BASE}/analyze", json={"code": code[:4000], "type": "audit", "lang": "english"}, timeout=120)
+                r = requests.post(f"{API_BASE}/api/analyze/json", json={"code": code[:4000], "type": "audit", "lang": "english"}, headers=_HEADERS, timeout=120)
                 st.markdown(r.json().get("report", r.text))
             except Exception as e:
                 st.error(f"Failed: {e}")
@@ -42,7 +45,7 @@ with tab3:
     if st.button("Run Auto-PoC") and poc_code:
         with st.spinner("Analyzing + generating PoC..."):
             try:
-                r = requests.post(f"{API_BASE}/analyze", json={"code": poc_code[:4000], "type": "autopoc", "lang": "english"}, timeout=180)
+                r = requests.post(f"{API_BASE}/api/analyze/json", json={"code": poc_code[:4000], "type": "autopoc", "lang": "english"}, headers=_HEADERS, timeout=180)
                 st.markdown(r.json().get("report", r.text))
             except Exception as e:
                 st.error(f"Failed: {e}")

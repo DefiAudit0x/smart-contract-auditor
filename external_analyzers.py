@@ -8,6 +8,9 @@ import os
 import re
 import subprocess
 import tempfile
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import List, Optional
 
@@ -32,6 +35,27 @@ def _check_tool(name: str) -> bool:
         return r.returncode == 0
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return False
+
+
+# L-30: tool availability used to be probed once at import time, so
+# analyzers installed after boot were never detected. Availability is now
+# checked lazily with a small TTL cache (thread-safe).
+_TOOL_TTL_SECONDS = 30.0
+_tool_cache: dict = {}
+_tool_cache_lock = threading.Lock()
+
+
+def tool_available(tool: str, ttl: float = _TOOL_TTL_SECONDS) -> bool:
+    """Deferred availability probe with a TTL cache."""
+    now = time.monotonic()
+    with _tool_cache_lock:
+        cached = _tool_cache.get(tool)
+        if cached is not None and (now - cached[0]) < ttl:
+            return cached[1]
+    ok = _check_tool(tool)
+    with _tool_cache_lock:
+        _tool_cache[tool] = (time.monotonic(), ok)
+    return ok
 
 
 # ─── Slither ───
@@ -173,26 +197,30 @@ def _run_mythril_on_code(code: str, tmp_dir: str) -> List[ExternalFinding]:
 
 
 # ─── Public API ───
-
-TOOL_AVAILABLE = {
-    "slither": _check_tool("slither"),
-    "mythril": _check_tool("myth"),
-}
-
+# L-30: TOOL_AVAILABLE (probed once at import) was replaced by the lazy
+# tool_available() probe above — see run_external_analyzers.
 
 def run_external_analyzers(code: str, tools: Optional[List[str]] = None) -> List[ExternalFinding]:
     """Run external analyzers and return a unified list of ExternalFinding."""
     if tools is None:
         tools = ["slither", "mythril"]
+    # L-30: availability is re-checked at call time, and the independent
+    # analyzer subprocesses run in parallel (slither + mythril used to run
+    # sequentially for up to ~7 minutes). Each tool gets its own scratch
+    # directory — both wrote contract.sol into the shared one.
+    selected = [t for t in tools if t in ("slither", "mythril") and tool_available(t)]
+    if not selected:
+        return []
     findings: List[ExternalFinding] = []
     with tempfile.TemporaryDirectory(prefix="sca_ext_") as tmp_dir:
-        for tool in tools:
-            if not TOOL_AVAILABLE.get(tool):
-                continue
-            if tool == "slither":
-                findings.extend(_run_slither_on_code(code, tmp_dir))
-            elif tool == "mythril":
-                findings.extend(_run_mythril_on_code(code, tmp_dir))
+        tool_dirs = {t: os.path.join(tmp_dir, t) for t in selected}
+        for d in tool_dirs.values():
+            os.makedirs(d, exist_ok=True)
+        runners = {"slither": _run_slither_on_code, "mythril": _run_mythril_on_code}
+        with ThreadPoolExecutor(max_workers=len(selected)) as pool:
+            futures = {t: pool.submit(runners[t], code, tool_dirs[t]) for t in selected}
+            for t in selected:  # merge in the caller's tool order
+                findings.extend(futures[t].result())
     return findings
 
 

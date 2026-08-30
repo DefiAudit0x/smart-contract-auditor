@@ -66,7 +66,13 @@ def detect_ai_generated(code: str) -> Dict:
             signals.append(sig)
     
     lines = code.split("\n")
-    natsec_count = sum(1 for l in lines if l.strip().startswith(("@notice", "@param", "@return")))
+    # L-26: NatSpec tags live inside /// or /** comments — a bare line
+    # never starts with "@notice", so natsec_count was always 0 and the
+    # AI-likelihood signal was dead. Match tags inside comment lines.
+    natsec_count = sum(
+        1 for l in lines
+        if re.match(r"^\s*(?:///|/\*\*)\s*@(notice|param|return|title|dev)\b", l)
+    )
     require_count = sum(1 for l in lines if "require(" in l)
     nonreentrant_count = sum(1 for l in lines if "nonReentrant" in l)
     

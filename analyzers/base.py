@@ -236,7 +236,9 @@ def detect_language(path: str) -> Optional[str]:
         return None
     if os.path.isfile(path):
         ext = os.path.splitext(path)[1].lower()
-        return {"sol": "solidity", ".sol": "solidity",
+        # L-29: the bare "sol" key was unreachable — splitext always yields
+        # a dotted extension.
+        return {".sol": "solidity",
                 ".clsp": "chialisp", ".clib": "chialisp",
                 ".move": "move", ".vy": "vyper"}.get(ext)
     exts = set()

@@ -69,7 +69,13 @@ def batch_audit(root_dir: str, max_workers: int = 4) -> dict:
     }
 
     # Save JSON report
-    out = os.path.join(os.path.dirname(__file__), "reports", "batch_summary.json")
+    # L-17: a fixed summary filename made concurrent batch audits overwrite
+    # each other's results (last writer won). Stamp the run into the name.
+    import uuid
+    out = os.path.join(
+        os.path.dirname(__file__), "reports",
+        f"batch_summary_{time.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}.json",
+    )
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)

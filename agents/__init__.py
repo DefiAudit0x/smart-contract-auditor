@@ -10,8 +10,8 @@ from agents.llm_client import (
 )
 from agents.pre_scan import (
     run_pre_scan,
-    _has_detector, _has_grep, _has_mcp, _has_ai_tools, _has_zksync, _has_gate, _has_external, _has_sbom,
-    _detector, _grep, _mcp, _ai_tools, _zksync, _gate,
+    _has_detector, _has_mcp, _has_ai_tools, _has_zksync, _has_gate, _has_external, _has_sbom,
+    _detector, _mcp, _ai_tools, _zksync, _gate,
 )
 from agents.validation import validate_report, self_critique, cvss_score_report, _has_cvss
 from agents.pipeline import (

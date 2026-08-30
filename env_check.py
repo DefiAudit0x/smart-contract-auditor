@@ -5,6 +5,7 @@ Ensures all tools and programs required for analysis are installed
 import importlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -171,7 +172,12 @@ class EnvChecker:
         if os.path.exists(env_path):
             with open(env_path, encoding="utf-8") as f:
                 content = f.read()
-            has_key = "OPENROUTER_API_KEY=sk-" in content or "OPENROUTER_API_KEY=or-" in content
+            # L-06: accept both OPENROUTER_API_KEY and the multi-key
+            # OPENROUTER_API_KEYS form, and any non-empty value — the old
+            # literal "=sk-"/"=or-" check missed quoted values, other
+            # prefixes and comma-separated key lists, making the doctor
+            # report valid configs as empty.
+            has_key = bool(re.search(r"(?m)^OPENROUTER_API_KEYS?\s*=\s*\S+", content))
             if has_key:
                 self._add(".env + API Key", "Config", True, "key found")
             else:
