@@ -160,6 +160,10 @@ def _regex_parse(code: str) -> List[VyperContract]:
         if sm:
             current_vars.append({"name": sm.group(1), "type": "struct"})
         if im2:
+            # An `import` line carries no parsing work: advance and move on.
+            # (Previously `continue` skipped the i += 1 below and spun the
+            # parser into an infinite loop on any file containing `import`.)
+            i += 1
             continue
         if s.startswith(("@external", "@public", "@internal", "@view", "@pure",
                          "@payable", "@nonreentrant", "@decorator")):
@@ -185,7 +189,9 @@ def _regex_parse(code: str) -> List[VyperContract]:
                         line_start=fn_start + 1, line_end=fn_end,
                         params=params, calls=calls,
                         has_raw_call="raw_call" in body,
-                        has_send="send" in body,
+                        # Substring `"send" in body` matched every occurrence
+                        # of msg.sender — use a call-shaped regex instead.
+                        has_send=bool(re.search(r"\bsend\s*\(", body)),
                         has_loop="for " in body or "while " in body,
                         uses_block="block." in body,
                         uses_tx="tx." in body,

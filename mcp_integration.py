@@ -51,7 +51,13 @@ _DEFI_DETECTORS = [
 
 
 def _run_slither(contract_path: str) -> List[Dict]:
-    """Run Slither on a contract and return findings."""
+    """Run Slither on a contract and return findings.
+
+    Slither's exit-code contract: 0 = no findings, 255 = findings, other
+    non-zero = error. Findings live in the JSON on stdout regardless, so
+    parse the output unconditionally instead of gating on returncode (the
+    old `if returncode == 0` silently discarded every real result).
+    """
     findings = []
     if not os.path.isfile(contract_path):
         logger.warning(f"Slither: file not found {contract_path}")
@@ -61,21 +67,23 @@ def _run_slither(contract_path: str) -> List[Dict]:
             ["slither", contract_path, "--json", "-"],
             capture_output=True, text=True, timeout=60
         )
-        if result.returncode == 0:
-            try:
-                data = json.loads(result.stdout)
-                for d in data.get("results", {}).get("detectors", []):
-                    findings.append({
-                        "tool": "slither",
-                        "name": d.get("check", d.get("description", "?")),
-                        "severity": d.get("impact", "Medium"),
-                        "description": d.get("description", ""),
-                        "elements": d.get("elements", []),
-                    })
-            except (json.JSONDecodeError, KeyError):
-                pass
+        if not result.stdout.strip():
+            logger.info("Slither produced no output (rc=%s)", result.returncode)
+            return findings
+        try:
+            data = json.loads(result.stdout)
+            for d in data.get("results", {}).get("detectors", []):
+                findings.append({
+                    "tool": "slither",
+                    "name": d.get("check", d.get("description", "?")),
+                    "severity": d.get("impact", "Medium"),
+                    "description": d.get("description", ""),
+                    "elements": d.get("elements", []),
+                })
+        except json.JSONDecodeError:
+            logger.warning("Slither output was not valid JSON (rc=%s)", result.returncode)
         if not findings:
-            logger.info("Slither: no findings or not available")
+            logger.info("Slither: no findings")
     except FileNotFoundError:
         logger.info("Slither: not installed (pip install slither-analyzer)")
     except subprocess.TimeoutExpired:
@@ -86,7 +94,11 @@ def _run_slither(contract_path: str) -> List[Dict]:
 
 
 def _run_aderyn(contract_path: str) -> List[Dict]:
-    """Run Aderyn on a contract and return findings."""
+    """Run Aderyn on a contract and return findings.
+
+    Like Slither, parse stdout whenever it is present — a non-zero exit
+    code with valid JSON output means findings were produced.
+    """
     findings = []
     if not os.path.isfile(contract_path):
         return findings
@@ -95,19 +107,21 @@ def _run_aderyn(contract_path: str) -> List[Dict]:
             ["aderyn", contract_path, "--json"],
             capture_output=True, text=True, timeout=30
         )
-        if result.returncode == 0:
-            try:
-                data = json.loads(result.stdout)
-                for f in data.get("findings", []):
-                    findings.append({
-                        "tool": "aderyn",
-                        "name": f.get("title", f.get("check", "?")),
-                        "severity": f.get("severity", "Medium"),
-                        "description": f.get("description", ""),
-                        "line": f.get("line", 0),
-                    })
-            except (json.JSONDecodeError, KeyError):
-                pass
+        if not result.stdout.strip():
+            logger.info("Aderyn produced no output (rc=%s)", result.returncode)
+            return findings
+        try:
+            data = json.loads(result.stdout)
+            for f in data.get("findings", []):
+                findings.append({
+                    "tool": "aderyn",
+                    "name": f.get("title", f.get("check", "?")),
+                    "severity": f.get("severity", "Medium"),
+                    "description": f.get("description", ""),
+                    "line": f.get("line", 0),
+                })
+        except json.JSONDecodeError:
+            logger.warning("Aderyn output was not valid JSON (rc=%s)", result.returncode)
     except FileNotFoundError:
         logger.info("Aderyn: not installed (cargo install aderyn)")
     except subprocess.TimeoutExpired:
