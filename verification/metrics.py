@@ -72,11 +72,15 @@ def _per_detector_metrics(cases: list[dict[str, Any]]) -> dict[str, dict[str, An
         true_positives = sum(detector in case["true_positives"] for case in cases)
         false_positives = sum(detector in case["false_positives"] for case in cases)
         false_negatives = sum(detector in case["false_negatives"] for case in cases)
-        true_negatives = sum(
+        # L-12: the TN estimate can go negative on small clean sets when
+        # false_positives outnumber expected detector slots — clamp so
+        # fp_rate never divides by a negative/zero denominator and never
+        # prints negative TNs.
+        true_negatives = max(0, sum(
             detector in case["expected_detectors"]
             for case in cases
             if case["metadata"].get("expected_clean") is True
-        ) - false_positives
+        ) - false_positives)
         precision = _rate(true_positives, true_positives + false_positives)
         recall = _rate(true_positives, true_positives + false_negatives)
         results[detector] = {
@@ -101,11 +105,11 @@ def calculate_metrics(cases: list[dict[str, Any]]) -> dict[str, Any]:
     false_positives = sum(len(case["false_positives"]) for case in cases)
     false_negatives = sum(len(case["false_negatives"]) for case in cases)
     expected_support = sum(len(case["expected_detectors"]) for case in cases)
-    true_negatives = sum(
+    true_negatives = max(0, sum(
         len(case["expected_detectors"])
         for case in cases
         if case["metadata"].get("expected_clean") is True
-    ) - false_positives
+    ) - false_positives)
     precision = _rate(true_positives, true_positives + false_positives)
     recall = _rate(true_positives, true_positives + false_negatives)
 
