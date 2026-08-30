@@ -14,19 +14,33 @@ logger = logging.getLogger(__name__)
 
 # Supports 10 major chains — add any new chain here
 CHAIN_CONFIG: Dict[str, Dict] = {
-    "ethereum":  {"api_url": "https://api.etherscan.io/api",          "explorer": "Etherscan"},
-    "bsc":       {"api_url": "https://api.bscscan.com/api",           "explorer": "BscScan"},
-    "polygon":   {"api_url": "https://api.polygonscan.com/api",       "explorer": "PolygonScan"},
-    "arbitrum":  {"api_url": "https://api.arbiscan.io/api",           "explorer": "ArbiScan"},
-    "optimism":  {"api_url": "https://api-optimistic.etherscan.io/api","explorer": "OptimisticScan"},
-    "avalanche": {"api_url": "https://api.snowtrace.io/api",          "explorer": "SnowTrace"},
-    "base":      {"api_url": "https://api.basescan.org/api",          "explorer": "BaseScan"},
-    "celo":      {"api_url": "https://api.celoscan.io/api",           "explorer": "CeloScan"},
-    "gnosis":    {"api_url": "https://api.gnosisscan.io/api",         "explorer": "GnosisScan"},
-    "scroll":    {"api_url": "https://api.scrollscan.com/api",        "explorer": "ScrollScan"},
+    # Per-chain credential isolation (M19 remediation): each provider gets
+    # its own env var instead of broadcasting ETHERSCAN_API_KEY to nine
+    # third-party domains with no contractual duty toward that secret.
+    "ethereum":  {"api_url": "https://api.etherscan.io/api",          "explorer": "Etherscan",     "key_var": "ETHERSCAN_API_KEY"},
+    "bsc":       {"api_url": "https://api.bscscan.com/api",           "explorer": "BscScan",       "key_var": "BSCSCAN_API_KEY"},
+    "polygon":   {"api_url": "https://api.polygonscan.com/api",       "explorer": "PolygonScan",   "key_var": "POLYGONSCAN_API_KEY"},
+    "arbitrum":  {"api_url": "https://api.arbiscan.io/api",           "explorer": "ArbiScan",      "key_var": "ARBISCAN_API_KEY"},
+    "optimism":  {"api_url": "https://api-optimistic.etherscan.io/api","explorer": "OptimisticScan","key_var": "OPTIMISM_API_KEY"},
+    "avalanche": {"api_url": "https://api.snowtrace.io/api",          "explorer": "SnowTrace",     "key_var": "SNOWTRACE_API_KEY"},
+    "base":      {"api_url": "https://api.basescan.org/api",          "explorer": "BaseScan",      "key_var": "BASESCAN_API_KEY"},
+    "celo":      {"api_url": "https://api.celoscan.io/api",           "explorer": "CeloScan",      "key_var": "CELOSCAN_API_KEY"},
+    "gnosis":    {"api_url": "https://api.gnosisscan.io/api",         "explorer": "GnosisScan",    "key_var": "GNOSISSCAN_API_KEY"},
+    "scroll":    {"api_url": "https://api.scrollscan.com/api",        "explorer": "ScrollScan",    "key_var": "SCROLLSCAN_API_KEY"},
 }
 
-ETHERSCAN_API_KEY: str = os.getenv("ETHERSCAN_API_KEY", "YourApiKeyToken")
+ETHERSCAN_API_KEY: str = os.getenv("ETHERSCAN_API_KEY", "")
+
+def _resolve_api_key(cfg: Dict, override: str = "") -> str:
+    """Explicit per-call override wins; otherwise the chain's own env var.
+    Empty and the 'YourApiKeyToken' placeholder both resolve to keyless
+    requests - the sentinel literal is never transmitted (M19 remediation)."""
+    if override and override.strip() != "YourApiKeyToken":
+        return override
+    val = os.getenv(cfg.get("key_var", ""), "").strip()
+    if not val or val == "YourApiKeyToken":
+        return ""
+    return val
 
 
 def _fetch_abi_source(api_url: str, address: str, apikey: str) -> Optional[Dict]:
@@ -66,7 +80,7 @@ def load_from_explorer(address: str, chain: str = "ethereum",
         logger.error(f"Invalid address: {address}")
         return None
 
-    apikey = api_key or ETHERSCAN_API_KEY
+    apikey = _resolve_api_key(cfg, api_key)
     result = _fetch_abi_source(cfg["api_url"], address, apikey)
     if not result:
         return None

@@ -17,6 +17,9 @@ ADDRESS_RE = re.compile(r"0x[a-fA-F0-9]{40}")
 EXTENSIONS = {".sol": "solidity", ".vy": "vyper", ".move": "move", ".clsp": "chialisp", ".clib": "chialisp"}
 MAX_WORKERS = 4
 STATS_FILE = os.path.join(os.path.dirname(__file__), "bot_stats.json")
+# Stats file is load-modify-saved from several worker threads (M16
+# remediation): without this lock updates get lost and torn JSON.
+_stats_lock = threading.Lock()
 CHAIN_EXPLORERS = {
     "etherscan": {"api": "https://api.etherscan.io/api", "key_var": "ETHERSCAN_API_KEY"},
     "bscscan": {"api": "https://api.bscscan.com/api", "key_var": "BSCSCAN_API_KEY"},
@@ -217,18 +220,22 @@ class TelegramBot:
             pass
 
     def _track(self, chat_id: int, action: str, findings_count: int = 0):
-        stats = self._load_stats()
-        if action == "audit":
-            stats["total_audits"] += 1
-        elif action == "gas":
-            stats["total_gas"] += 1
-        elif action == "pdf":
-            stats["total_pdf"] += 1
-        uid = str(chat_id)
-        if uid not in stats["users"]:
-            stats["users"][uid] = {"audits": 0, "gas": 0, "pdf": 0}
-        stats["users"][uid][action] += 1
-        self._save_stats(stats)
+        # Generic per-action accounting (M16 remediation): any action id
+        # (including "autopoc") is accepted - the previous fixed
+        # {audits,gas,pdf} dict threw KeyError AFTER the work had already
+        # succeeded, surfacing a bogus error to the user.
+        with _stats_lock:
+            stats = self._load_stats()
+            if action == "audit":
+                stats["total_audits"] = stats.get("total_audits", 0) + 1
+            elif action == "gas":
+                stats["total_gas"] = stats.get("total_gas", 0) + 1
+            elif action == "pdf":
+                stats["total_pdf"] = stats.get("total_pdf", 0) + 1
+            uid = str(chat_id)
+            user_stats = stats["users"].setdefault(uid, {})
+            user_stats[action] = user_stats.get(action, 0) + 1
+            self._save_stats(stats)
 
     # ── Multi-chain explorer ────────────────────────────────────
     def _fetch_chain_code(self, address: str) -> str:
@@ -602,13 +609,25 @@ class TelegramBot:
 
     # ── Polling ─────────────────────────────────────────────────
     def _poll(self):
+        backoff = 0
         while self._running:
             try:
                 resp = requests.get(f"{self.base}/getUpdates", params={
                     "offset": self._offset, "timeout": 30,
                 }, timeout=35)
                 if resp.status_code != 200:
+                    # Throttle EVERY failure path (M20 remediation): a
+                    # revoked token (401) or rate limiting (429) used to
+                    # turn the poller into a hot request hammer.
+                    retry_after = resp.headers.get("Retry-After")
+                    try:
+                        delay = float(retry_after)
+                    except (TypeError, ValueError):
+                        delay = min(30, 2 ** backoff) if backoff else 2
+                    time.sleep(max(1.0, delay))
+                    backoff = min(backoff + 1, 5)
                     continue
+                backoff = 0
                 for update in resp.json().get("result", []):
                     self._offset = update["update_id"] + 1
                     cb = update.get("callback_query")
@@ -624,6 +643,9 @@ class TelegramBot:
                     elif text and chat_id:
                         self._handle_message(text, chat_id, msg.get("message_id"))
             except Exception:
+                # Failures were previously swallowed invisibly (M20
+                # remediation): log the full traceback, then cool down.
+                logger.exception("telegram poll failed")
                 time.sleep(5)
 
     # ── Lifecycle ───────────────────────────────────────────────
