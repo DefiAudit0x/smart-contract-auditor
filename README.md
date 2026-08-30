@@ -21,12 +21,6 @@ An enterprise-grade, multi-language smart contract security auditor powered by a
 ## Quick Start (Docker)
 
 ```bash
-docker run -p 5000:5000 -e OLLAMA_API_KEY=your_key yourname/auditor-bot
-```
-
-Or build locally:
-
-```bash
 docker build -t smart-contract-auditor .
 docker run -p 5000:5000 \
   -v $(pwd)/.env:/app/.env:ro \
@@ -145,10 +139,6 @@ Archive uploads use traversal, symlink, executable-file, member-count, and expan
 
 Read [`THREAT_MODEL.md`](THREAT_MODEL.md) for assets, trust boundaries, threats, and residual risks.
 
-## Screenshots
-
-(Placeholder: add screenshots after deploying)
-
 ## License
 
-MIT
+[MIT](./LICENSE)
