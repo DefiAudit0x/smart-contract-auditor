@@ -2,7 +2,7 @@ name: Smart Contract Audit
 
 # Pull requests from forks run with a read-only token and no secrets;
 # the audited file list travels through an environment variable, never
-# through ${{ }} interpolation into the shell.
+# through GitHub expression interpolation into the shell.
 
 on:
   pull_request:
@@ -68,7 +68,8 @@ jobs:
         run: |
           echo "Auditing contracts..."
           # Iterate over the file list from an environment variable with
-          # quoted reads — ${{ }} never expands inside the shell script.
+          # quoted reads — the list never interpolates through GitHub
+          # expressions into the shell script.
           while IFS= read -r file; do
             [ -n "$file" ] || continue
             [ -f "$file" ] || continue
