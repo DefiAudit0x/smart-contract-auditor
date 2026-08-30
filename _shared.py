@@ -1,4 +1,5 @@
 import html
+import hashlib
 import os
 import sys
 import time
@@ -115,13 +116,13 @@ def _check_user_api_key(provided_key):
         from auth import find_user_by_api_key
         user = find_user_by_api_key(provided_key)
         if user:
-            # Update last_used_at
+            # Update last_used_at (key is stored hashed since M11 remediation)
             import sqlite3
             db_path = os.environ.get("AUTH_DB_PATH",
                 os.path.join(os.path.dirname(__file__), "instance", "auth.db"))
             conn = sqlite3.connect(db_path)
-            conn.execute("UPDATE api_keys SET last_used_at = (strftime('%s','now')) WHERE key = ?",
-                        (provided_key,))
+            conn.execute("UPDATE api_keys SET last_used_at = (strftime('%s','now')) WHERE key_hash = ?",
+                        (hashlib.sha256(provided_key.encode()).hexdigest(),))
             conn.commit()
             conn.close()
             return user

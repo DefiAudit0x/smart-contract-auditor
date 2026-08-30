@@ -1,4 +1,16 @@
 from web_ui import app
+import auth
+
+
+def _seed_access_code(code="SCA-TEST-0001"):
+    """Create an active access code so code-bound sessions authenticate."""
+    conn = auth._get_conn()
+    conn.execute(
+        "INSERT OR IGNORE INTO access_codes (code, is_active) VALUES (?, 1)",
+        (code,),
+    )
+    conn.commit()
+    return code
 
 
 def test_methodology_page_explains_review_limits():
@@ -23,9 +35,11 @@ def test_landing_links_to_methodology_and_review_warning():
 
 def test_authenticated_workspace_exposes_review_assistance_state():
     app.config.update(TESTING=True)
+    code = _seed_access_code()
     with app.test_client() as client:
         with client.session_transaction() as session:
             session["authenticated"] = True
+            session["access_code"] = code
         response = client.get("/app")
 
     assert response.status_code == 200
@@ -35,9 +49,11 @@ def test_authenticated_workspace_exposes_review_assistance_state():
 
 def test_workspace_tool_menu_links_to_existing_review_pages():
     app.config.update(TESTING=True)
+    code = _seed_access_code()
     with app.test_client() as client:
         with client.session_transaction() as session:
             session["authenticated"] = True
+            session["access_code"] = code
         response = client.get("/app")
 
     assert response.status_code == 200

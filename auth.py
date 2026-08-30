@@ -1,5 +1,6 @@
 """Access code authentication + audit history + quota system with SQLite backend."""
 
+import hashlib
 import sqlite3
 import logging
 import os
@@ -52,10 +53,15 @@ def find_user_by_github_id(github_id):
     return User(row) if row else None
 
 def find_user_by_api_key(api_key):
+    """Look up a user by raw API key. Only the SHA-256 digest is stored, so
+    a database leak never exposes usable keys (M11 remediation)."""
+    if not api_key:
+        return None
     conn = _get_conn()
+    digest = hashlib.sha256(api_key.encode()).hexdigest()
     row = conn.execute("""SELECT u.* FROM users u
         JOIN api_keys k ON k.user_id = u.id
-        WHERE k.key = ? AND k.is_active = 1""", (api_key,)).fetchone()
+        WHERE k.key_hash = ? AND k.is_active = 1""", (digest,)).fetchone()
     return User(row) if row else None
 
 def create_user(github_id, github_username, email, avatar_url):
@@ -116,17 +122,21 @@ def deduct_credit(user):
     return True
 
 def create_api_key(user_id, name=""):
+    """Create an API key. The raw key is returned exactly once; only a
+    SHA-256 digest (plus last4 for display) is persisted (M11 remediation)."""
     conn = _get_conn()
-    key = "sca_" + secrets.token_urlsafe(32)
-    conn.execute("INSERT INTO api_keys (user_id, key, name) VALUES (?, ?, ?)",
-                 (user_id, key, name or "Default"))
+    raw = "sca_" + secrets.token_urlsafe(32)
+    digest = hashlib.sha256(raw.encode()).hexdigest()
+    cursor = conn.execute(
+        "INSERT INTO api_keys (user_id, key_hash, last4, name) VALUES (?, ?, ?, ?)",
+        (user_id, digest, raw[-4:], name or "Default"))
     conn.commit()
-    row = conn.execute("SELECT * FROM api_keys WHERE key = ?", (key,)).fetchone()
-    return dict(row) if row else None
+    return {"id": cursor.lastrowid, "key": raw, "last4": raw[-4:],
+            "name": name or "Default"}
 
 def list_api_keys(user_id):
     conn = _get_conn()
-    rows = conn.execute("""SELECT id, name, key, created_at, last_used_at, is_active
+    rows = conn.execute("""SELECT id, name, last4, created_at, last_used_at, is_active
         FROM api_keys WHERE user_id = ? ORDER BY created_at DESC""", (user_id,)).fetchall()
     return [dict(r) for r in rows]
 
@@ -143,8 +153,43 @@ def _get_conn():
         _local.conn.execute("PRAGMA journal_mode=WAL")
     return _local.conn
 
+def _migrate_api_keys_schema(conn):
+    """Rebuild the legacy api_keys table (plaintext `key` column) into hashed
+    storage. Existing plaintext keys keep working: their SHA-256 digest is
+    stored and the plaintext value is scrubbed from the database."""
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(api_keys)").fetchall()]
+    if not cols or "key_hash" in cols:
+        return  # fresh database, or already migrated
+    conn.execute("""CREATE TABLE api_keys_migrated (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        key_hash TEXT UNIQUE NOT NULL,
+        last4 TEXT DEFAULT '',
+        name TEXT DEFAULT '',
+        created_at REAL DEFAULT (strftime('%s','now')),
+        last_used_at REAL DEFAULT 0,
+        is_active INTEGER DEFAULT 1,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )""")
+    for row in conn.execute(
+        "SELECT id, user_id, key, name, created_at, last_used_at, is_active FROM api_keys"
+    ).fetchall():
+        raw = row["key"] or ""
+        conn.execute(
+            "INSERT OR IGNORE INTO api_keys_migrated "
+            "(id, user_id, key_hash, last4, name, created_at, last_used_at, is_active) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (row["id"], row["user_id"], hashlib.sha256(raw.encode()).hexdigest(),
+             raw[-4:], row["name"], row["created_at"], row["last_used_at"],
+             row["is_active"]))
+    conn.execute("DROP TABLE api_keys")
+    conn.execute("ALTER TABLE api_keys_migrated RENAME TO api_keys")
+    conn.commit()
+    logger.info("api_keys table migrated to hashed key storage")
+
 def init_auth_db():
     conn = _get_conn()
+    _migrate_api_keys_schema(conn)
     conn.execute("""CREATE TABLE IF NOT EXISTS access_codes (
         code TEXT PRIMARY KEY,
         created_by TEXT DEFAULT '',
@@ -201,7 +246,8 @@ def init_auth_db():
     conn.execute("""CREATE TABLE IF NOT EXISTS api_keys (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
-        key TEXT UNIQUE NOT NULL,
+        key_hash TEXT UNIQUE NOT NULL,
+        last4 TEXT DEFAULT '',
         name TEXT DEFAULT '',
         created_at REAL DEFAULT (strftime('%s','now')),
         last_used_at REAL DEFAULT 0,
@@ -228,13 +274,23 @@ def create_access_code(created_by="", max_uses=-1):
 
 def verify_code(code):
     conn = _get_conn()
+    normalized = code.strip().upper()
     row = conn.execute(
         "SELECT * FROM access_codes WHERE code = ? AND is_active = 1",
-        (code.strip().upper(),)
+        (normalized,)
     ).fetchone()
     if row is None:
         return False
-    conn.execute("UPDATE access_codes SET used_count = used_count + 1 WHERE code = ?", (code.strip().upper(),))
+    # Enforce max_uses at login time as well (M2 remediation): a code whose
+    # quota is exhausted must not mint new authenticated sessions.
+    if row["max_uses"] != -1 and row["used_count"] >= row["max_uses"]:
+        conn.execute(
+            "INSERT INTO auth_log (code, ip, success) VALUES (?, ?, 0)",
+            (normalized, request.remote_addr if request else "")
+        )
+        conn.commit()
+        return False
+    conn.execute("UPDATE access_codes SET used_count = used_count + 1 WHERE code = ?", (normalized,))
     conn.execute(
         "INSERT INTO auth_log (code, ip, success) VALUES (?, ?, 1)",
         (code.strip().upper(), request.remote_addr if request else "")
@@ -245,7 +301,7 @@ def verify_code(code):
 def check_quota(code):
     conn = _get_conn()
     row = conn.execute(
-        "SELECT max_uses, used_count FROM access_codes WHERE code = ?",
+        "SELECT max_uses, used_count FROM access_codes WHERE code = ? AND is_active = 1",
         (code,)
     ).fetchone()
     if row is None:
@@ -418,7 +474,18 @@ def requires_auth(f):
         if current_user.is_authenticated:
             return f(*args, **kwargs)
         if 'authenticated' in session:
-            return f(*args, **kwargs)
+            # Re-validate the bound access code on every request (M1
+            # remediation): deactivating a code revokes its live sessions
+            # immediately instead of only blocking future logins.
+            code = session.get('access_code', '')
+            row = _get_conn().execute(
+                "SELECT 1 FROM access_codes WHERE code = ? AND is_active = 1",
+                (code,),
+            ).fetchone() if code else None
+            if row:
+                return f(*args, **kwargs)
+            session.pop('authenticated', None)
+            session.pop('access_code', None)
         if request.path.startswith('/api/'):
             return jsonify({"error": "Unauthorized"}), 401
         return redirect('/')
