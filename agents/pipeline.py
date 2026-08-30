@@ -230,14 +230,18 @@ def _split_functions(code: str) -> List[Dict[str, str]]:
     return chunks
 
 
+def _strip_untrusted_fences(code: str) -> str:
+    """L-15: strip BOTH the opening and closing fence tags, case-
+    insensitively. A source that plants "<untrusted_solidity_code>"
+    used to open a second, still-trusted context inside the block and
+    walk past the closing instructions."""
+    return re.sub(r"(?i)</?untrusted_solidity_code>", "", code)
+
+
 def _run_chunk(chunk: Dict) -> str:
     """Analyze a single function chunk."""
     fn_code = chunk["code"][:4000]
-    # L-15: strip BOTH the opening and closing fence tags, case-
-    # insensitively. A source that plants "<untrusted_solidity_code>"
-    # used to open a second, still-trusted context inside the block and
-    # walk past the closing instructions.
-    fn_code = re.sub(r"(?i)</?untrusted_solidity_code>", "", fn_code)
+    fn_code = _strip_untrusted_fences(fn_code)
     state_context = "\n".join(f"// {sv}" for sv in chunk["state_vars"][:10])
     prompt = f"""{CHUNK_PROMPT}
 
@@ -305,9 +309,9 @@ def analyze_code(code: str, model_key: str = "") -> str:
             if rag_context:
                 logger.info(f"RAG: added context from knowledge base ({len(rag_context)} chars)")
 
-    # L-15: see _run_chunk — both fence tags are stripped, not just the
-    # closing one.
-    safe_code = re.sub(r"(?i)</?untrusted_solidity_code>", "", code)
+    # L-15: see _strip_untrusted_fences — both fence tags are stripped, not
+    # just the closing one.
+    safe_code = _strip_untrusted_fences(code)
 
     pre_scan_context = run_pre_scan(code)
 
