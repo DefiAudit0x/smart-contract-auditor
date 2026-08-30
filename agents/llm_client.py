@@ -197,11 +197,12 @@ def call_model(model_id: str, prompt: str, timeout: int = 0) -> str:
     if cached is not None:
         return cached
     timeout = timeout or TIMEOUT
+    current_key = get_api_key()
+    # Compute before first use — the log line below references key_suffix.
+    key_suffix = _truncate_key(current_key) if current_key else "none"
     info = FREE_MODELS.get(model_id, {})
     ctx = info.get("context", 0)
     console.log(f"[bold cyan]{model_id}[/]  [dim]context: {ctx:,}  key: {key_suffix}[/]")
-    current_key = get_api_key()
-    key_suffix = _truncate_key(current_key) if current_key else "none"
     last_err = None
     for attempt in range(1, MAX_RETRIES + 1):
         try:

@@ -61,7 +61,9 @@ class AuditService:
     @staticmethod
     def run_critique(code: str) -> Tuple[str, str]:
         initial = audit(code)
-        critique = self_critique(initial, code, "english")
+        # self_critique(report, code) — passing a third positional argument
+        # here used to raise TypeError on every call.
+        critique = self_critique(initial, code)
         return initial, critique
 
     @staticmethod
