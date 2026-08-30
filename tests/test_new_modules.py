@@ -400,3 +400,16 @@ def test_score_report_labels_estimate_method_when_official_lib_missing():
         assert "not an official" in entry["note"]
     else:
         assert entry["method"] == "official"
+
+
+def test_hierarchical_progress_key_binds_to_code_content():
+    """Regression: progress was keyed by protocol name only, so auditing
+    contract B replayed contract A's saved layer results."""
+    from hierarchical_base import HierarchicalAuditor
+
+    auditor = HierarchicalAuditor(layer1_agents=[], layer2_agents=[])
+    key_a = auditor._progress_key("layer1", "contract A code")
+    key_b = auditor._progress_key("layer1", "contract B code")
+    assert key_a != key_b
+    assert key_a == auditor._progress_key("layer1", "contract A code")
+    assert "layer1" in key_a
