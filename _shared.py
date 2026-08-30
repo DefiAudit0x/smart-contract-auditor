@@ -15,6 +15,38 @@ from security_utils import extract_zip_safely
 
 logger = logging.getLogger(__name__)
 
+# analysis_type values accepted by orchestrator.dispatch_analysis plus the
+# UI-level presets (full/quick/deep). Anything else is rejected at the
+# entry points so it can never reach report filenames or the dispatch layer.
+ALLOWED_ANALYSIS_TYPES = frozenset({
+    "audit", "full", "quick", "deep", "unified",
+    "opcodes", "storage", "inheritance", "combined", "gas",
+    "permissions", "chunked", "external", "autopoc", "multi",
+    "hierarchical",
+})
+
+
+def is_allowed_analysis_type(analysis_type) -> bool:
+    """True only when analysis_type is a known, safe identifier."""
+    return isinstance(analysis_type, str) and analysis_type in ALLOWED_ANALYSIS_TYPES
+
+
+def _safe_report_filename(filename: str) -> str:
+    """Collapse a report filename to a bare name inside REPORT_DIR.
+
+    Defense-in-depth sink hardening: strips any directory components and
+    verifies the resolved path stays inside REPORT_DIR. Raises ValueError
+    on absolute paths, traversal segments, or escaping symlinks.
+    """
+    safe = os.path.basename(str(filename))
+    if not safe or safe in (".", ".."):
+        raise ValueError("Invalid report filename")
+    base = os.path.realpath(REPORT_DIR)
+    full = os.path.realpath(os.path.join(base, safe))
+    if full != base and not full.startswith(base + os.sep):
+        raise ValueError("Report filename escapes REPORT_DIR")
+    return full
+
 _HAS_REDIS_RATE_LIMIT = False
 _REDIS_RATE_CLIENT = None
 try:
@@ -253,7 +285,7 @@ hr {{ border: none; border-top: 1px solid #30363d; margin: 1rem 0; }}
 <hr>
 <p class="meta" style="margin-top: 2rem;">Smart Contract Auditor — Secure Analysis Engine</p>
 </body></html>"""
-    path = os.path.join(REPORT_DIR, filename)
+    path = _safe_report_filename(filename)
     with open(path, "w", encoding="utf-8") as f:
         f.write(page)
     logger.info(f"HTML report saved: {path}")

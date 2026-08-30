@@ -15,7 +15,7 @@ from _shared import (
     _has_grep, _grep_arsenal, _has_mcp, _mcp_int,
     _has_ai, _ai_scan, _has_zksync, _zksync_scan,
     _has_sarif, report_to_sarif, _has_h1, _h1_report_func,
-    _handle_zip_upload,
+    _handle_zip_upload, is_allowed_analysis_type,
 )
 from main import ensure_report_dir, save_report_txt, load_local_contract
 from config import OLLAMA_MODEL, GITHUB_TOKEN, SECRET_KEY, API_PROVIDER, ACTIVE_MODEL, FREE_MODELS
@@ -96,6 +96,8 @@ def _track_code_audit_stream(events, reservation):
 def api_analyze():
     ensure_report_dir()
     analysis_type = request.form.get('analysis_type', 'audit')
+    if not is_allowed_analysis_type(analysis_type):
+        return jsonify({"error": "Invalid analysis_type"}), 400
     code = None
     label = "upload"
     if 'file' in request.files and request.files['file'].filename:
@@ -153,6 +155,8 @@ def api_analyze_json():
         return jsonify({"error": "Field 'code' is required"}), 400
     code = truncate_code(data['code'])
     analysis_type = data.get('type', 'audit')
+    if not is_allowed_analysis_type(analysis_type):
+        return jsonify({"error": "Invalid analysis type"}), 400
     reservation, quota_error = _reserve_code_audit_usage()
     if quota_error:
         return quota_error
@@ -312,6 +316,8 @@ def api_analyze_chain():
     if not chain_data:
         return jsonify({"error": "Failed to fetch contract"}), 400
     analysis_type = data.get('analysis_type', 'audit')
+    if not is_allowed_analysis_type(analysis_type):
+        return jsonify({"error": "Invalid analysis_type"}), 400
     reservation, quota_error = _reserve_code_audit_usage()
     if quota_error:
         return quota_error
@@ -339,6 +345,8 @@ def api_analyze_github():
         return jsonify({"error": "GitHub URL is required"}), 400
     url = data['url'].strip()
     analysis_type = data.get('analysis_type', 'audit')
+    if not is_allowed_analysis_type(analysis_type):
+        return jsonify({"error": "Invalid analysis_type"}), 400
     reservation = None
     try:
         contracts = download_contracts(url, GITHUB_TOKEN if GITHUB_TOKEN else None)

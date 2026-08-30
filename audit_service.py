@@ -30,7 +30,15 @@ class AuditService:
     @staticmethod
     def save_report(filename: str, content: str) -> str:
         os.makedirs(AuditService.REPORT_DIR, exist_ok=True)
-        path = os.path.join(AuditService.REPORT_DIR, filename)
+        # Sink hardening: collapse to a bare name and verify the resolved
+        # path stays inside REPORT_DIR (blocks traversal/absolute paths).
+        safe = os.path.basename(str(filename))
+        if not safe or safe in (".", ".."):
+            raise ValueError("Invalid report filename")
+        base = os.path.realpath(AuditService.REPORT_DIR)
+        path = os.path.realpath(os.path.join(base, safe))
+        if path != base and not path.startswith(base + os.sep):
+            raise ValueError("Report filename escapes REPORT_DIR")
         with open(path, "w", encoding="utf-8") as f:
             f.write(content)
         return path

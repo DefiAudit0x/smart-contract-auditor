@@ -454,7 +454,9 @@ class TelegramBot:
             os.unlink(tmp.name)
             self._dispatch(self._run_audit, chat_id, code)
         except Exception as e:
-            logger.warning(f"File download failed: {e}")
+            # Never log the raw exception text: requests errors embed the full
+            # URL, which contains the bot token (…/file/bot<TOKEN>/…).
+            logger.warning("File download failed: %s", type(e).__name__)
 
     def _handle_github(self, chat_id: int, url: str):
         self._send(chat_id, f"🔄 Downloading `{url}`...")

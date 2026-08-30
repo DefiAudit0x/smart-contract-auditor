@@ -1,4 +1,5 @@
 """API Mode - REST API for programmatic use."""
+import hmac
 import os
 import sys
 import tempfile
@@ -48,15 +49,37 @@ cleanup_old_uploads()
 
 
 def require_auth(f):
-    """Middleware to verify API key."""
+    """Middleware to verify API key (fail-closed + constant-time compare)."""
     def wrapper(*args, **kwargs):
-        if API_KEY:
-            key = request.headers.get("X-API-Key", "")
-            if key != API_KEY:
-                return jsonify({"error": "Unauthorized"}), 401
+        if not API_KEY:
+            # Fail-closed: never serve unauthenticated audits when the
+            # deployment is missing AUDITOR_API_KEY.
+            return jsonify({"error": "Server misconfigured: AUDITOR_API_KEY is not set"}), 503
+        key = request.headers.get("X-API-Key", "")
+        if not hmac.compare_digest(key, API_KEY):
+            return jsonify({"error": "Unauthorized"}), 401
         return f(*args, **kwargs)
     wrapper.__name__ = f.__name__
     return wrapper
+
+
+# Only these roots may be scanned by /v1/batch and /v1/project.
+ALLOWED_SCAN_ROOTS = (
+    os.path.realpath(os.path.join(os.path.dirname(__file__), "examples")),
+    os.path.realpath(UPLOAD_DIR),
+)
+
+
+def safe_scan_path(p: str):
+    """Resolve `p` and allow it only if it lives under an allowed scan root."""
+    try:
+        root = os.path.realpath(p or "")
+    except (TypeError, ValueError):
+        return None
+    for allowed in ALLOWED_SCAN_ROOTS:
+        if root == allowed or root.startswith(allowed + os.sep):
+            return root
+    return None
 
 
 @app.route("/v1/audit", methods=["POST"])
@@ -120,8 +143,11 @@ def api_batch():
     data = request.get_json()
     if not data or "path" not in data:
         return jsonify({"error": "Field 'path' is required"}), 400
+    root = safe_scan_path(data["path"])
+    if not root:
+        return jsonify({"error": "Path not permitted"}), 400
     workers = data.get("workers", 4)
-    result = batch_audit(data["path"], workers)
+    result = batch_audit(root, workers)
     return jsonify(result)
 
 
@@ -156,7 +182,10 @@ def api_project():
     data = request.get_json()
     if not data or "path" not in data:
         return jsonify({"error": "Field 'path' is required"}), 400
-    result = analyze_project(data["path"], "english")
+    root = safe_scan_path(data["path"])
+    if not root:
+        return jsonify({"error": "Path not permitted"}), 400
+    result = analyze_project(root, "english")
     return jsonify({"result": result})
 
 
@@ -184,4 +213,7 @@ def run_api(host="0.0.0.0", port=5001, debug=False):
 
 
 if __name__ == "__main__":
-    run_api(debug=True)
+    # Never enable the interactive debugger implicitly: it exposes a
+    # remote code-execution console (Werkzeug /console) when reachable.
+    debug = os.environ.get("FLASK_DEBUG", "0") == "1"
+    run_api(debug=debug)
