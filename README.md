@@ -139,6 +139,12 @@ Archive uploads use traversal, symlink, executable-file, member-count, and expan
 
 Read [`THREAT_MODEL.md`](THREAT_MODEL.md) for assets, trust boundaries, threats, and residual risks.
 
+## Limitations
+
+The benchmark is a **reproducibility and regression instrument**, not a certification of security or an estimate of real-world detection performance. Results depend on the published corpus, configuration, detectors, compiler/toolchain versions, and ground-truth labels.
+
+An analysis result should be independently validated against the source code and protocol context. False negatives, false positives, novel vulnerability classes, specification errors, and environment-specific behavior remain possible.
+
 ## License
 
 [MIT](./LICENSE)
