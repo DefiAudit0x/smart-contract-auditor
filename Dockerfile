@@ -16,7 +16,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 COPY requirements.lock .
-RUN python -m pip install --no-cache-dir --require-hashes -r requirements.lock
+RUN python -m pip install --no-cache-dir --require-hashes --no-deps -r requirements.lock && \
+    python -m pip check
 
 COPY . .
 
