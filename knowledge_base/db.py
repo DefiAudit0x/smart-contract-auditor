@@ -221,16 +221,26 @@ class KnowledgeBase:
         except:
             pass
 
-    def confirm_pattern(self, pattern_id: int):
+    def confirm_pattern(self, pattern_id: int) -> bool:
+        """Record an independent confirmation of a stored vulnerability pattern."""
         try:
             with _lock:
                 conn = self._connect()
-                conn.execute("UPDATE vulnerability_patterns SET confirmed_count = confirmed_count + 1 WHERE id = ?",
-                             (pattern_id,))
+                row = conn.execute(
+                    "SELECT 1 FROM vulnerability_patterns WHERE id = ?", (pattern_id,)
+                ).fetchone()
+                if row is None:
+                    conn.close()
+                    return False
+                conn.execute(
+                    "UPDATE vulnerability_patterns SET confirmed_count = confirmed_count + 1 WHERE id = ?",
+                    (pattern_id,),
+                )
                 conn.commit()
                 conn.close()
-        except:
-            pass
+                return True
+        except Exception:
+            return False
 
     # ─── False Positives ───
 
