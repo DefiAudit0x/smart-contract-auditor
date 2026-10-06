@@ -212,6 +212,7 @@ def api_analyze_stream():
         reset_credits_if_needed(flask_login.current_user)
 
     def generate():
+        pre_scan = ""
         try:
             # Step 1: Pre-scan
             yield f"data: {json.dumps({'type': 'meta', 'message': 'Running pre-scan...'})}\n\n"
@@ -285,7 +286,7 @@ def api_analyze_stream():
             # KB learning (silent, no step)
             try:
                 from agents.pipeline import learn_from_audit
-                learn_from_audit(code, full_report)
+                learn_from_audit(code, full_report, pre_scan)
             except Exception as e:
                 logger.debug(f"KB learning skipped: {e}")
 
