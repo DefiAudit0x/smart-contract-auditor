@@ -926,7 +926,10 @@ def api_admin_confirm_pattern():
         return jsonify({"error": "Pattern not found"}), 404
     if current.get("confirmed_count", 0) > 0:
         return jsonify({"error": "Pattern already confirmed", "pattern": current}), 409
-    if not kb.confirm_pattern(pattern_id):
+    evidence = str(data.get("evidence", "")).strip()
+    if len(evidence) < 10:
+        return jsonify({"error": "evidence must contain at least 10 characters"}), 400
+    if not kb.confirm_pattern(pattern_id, evidence):
         return jsonify({"error": "Pattern could not be confirmed"}), 409
     confidence = kb.get_pattern_confidence(pattern_id)
     log_admin_event(f"confirm_pattern:{pattern_id}", True)
