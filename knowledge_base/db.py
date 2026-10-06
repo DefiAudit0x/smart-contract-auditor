@@ -242,7 +242,7 @@ class KnowledgeBase:
                         "SELECT 1 FROM vulnerability_patterns WHERE id = ?", (pattern_id,)
                     ).fetchone()
                     conn.close()
-                    return False if exists else False
+                    return False
                 conn.commit()
                 conn.close()
                 return True
@@ -521,9 +521,9 @@ class KnowledgeBase:
                 for r in rows:
                     item = dict(zip(cols, r))
                     hits, confirmed = item["hit_count"], item["confirmed_count"]
-                    item["confidence"] = round(
-                        min(1.0, (confirmed / max(hits, 1)) * 0.8 + 0.1), 3
-                    )
+                    # Human confirmation is a durable RAG gate. Automated
+                    # rediscovery must not dilute a previously verified pattern.
+                    item["confidence"] = 0.9 if confirmed > 0 else 0.1
                     results.append(item)
                 return results
         except Exception as e:
