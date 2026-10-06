@@ -16,7 +16,7 @@ An enterprise-grade, multi-language smart contract security auditor powered by a
 - Telegram Bot integration
 - Dark mode web UI with Chart.js severity charts
 - Pattern learner for continuous improvement
-- Cross-session knowledge base (17,000+ patterns)
+- Cross-session knowledge base with confidence-aware retrieval
 
 ## Quick Start (Docker)
 
