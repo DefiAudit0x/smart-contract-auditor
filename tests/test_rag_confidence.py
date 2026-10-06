@@ -1,0 +1,62 @@
+import os
+
+from knowledge_base.rag import RAGContext
+
+
+class FakeKB:
+    def __init__(self):
+        self.patterns = [
+            {
+                "id": 1,
+                "name": "Unverified pattern",
+                "severity": "High",
+                "description": "Should not enter model context.",
+                "fix_code": "",
+                "contract_type": "General",
+            },
+            {
+                "id": 2,
+                "name": "Confirmed pattern",
+                "severity": "High",
+                "description": "Eligible for model context.",
+                "fix_code": "use a guarded call",
+                "contract_type": "General",
+            },
+        ]
+
+    def get_pattern_confidence(self, pattern_id):
+        confidence = {1: 0.1, 2: 0.9}[pattern_id]
+        return {"confidence": confidence}
+
+    def get_patterns_by_severity(self, severity="", limit=50):
+        return self.patterns[:limit]
+
+    def find_similar_patterns(self, code_snippet, contract_type="", limit=5):
+        return self.patterns[:limit]
+
+
+def test_rag_rejects_unconfirmed_patterns(monkeypatch):
+    monkeypatch.setenv("KB_RAG_MIN_CONFIDENCE", "0.25")
+    rag = RAGContext(FakeKB())
+    rag._use_st = False
+    rag._use_tfidf = False
+
+    context = rag.build_context("contract Example {}")
+
+    assert "Confirmed pattern" in context
+    assert "Unverified pattern" not in context
+
+
+def test_rag_threshold_is_configurable(monkeypatch):
+    monkeypatch.setenv("KB_RAG_MIN_CONFIDENCE", "0.95")
+    rag = RAGContext(FakeKB())
+
+    assert rag.min_confidence == 0.95
+    assert rag._eligible_patterns(FakeKB().patterns) == []
+
+
+def test_invalid_rag_threshold_uses_safe_default(monkeypatch):
+    monkeypatch.setenv("KB_RAG_MIN_CONFIDENCE", "not-a-number")
+    rag = RAGContext(FakeKB())
+
+    assert rag.min_confidence == 0.25
