@@ -182,7 +182,7 @@ class RAGContext:
         if self._use_st or self._use_tfidf:
             patterns = self._vector_retrieve(code, top_k)
         else:
-            raw_patterns = self.kb.find_similar_patterns(code[:200], contract_type, limit=top_k * 4)
+            raw_patterns = self.kb.find_similar_patterns(code[:200], contract_type, limit=max(2000, top_k * 4))
             patterns = self._eligible_patterns(raw_patterns)[:top_k]
 
         if not patterns:
