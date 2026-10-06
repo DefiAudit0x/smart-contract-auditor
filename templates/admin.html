@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Admin - Access Codes</title>
+<meta name="csrf-token" content="{{ csrf_token() }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='vendor/fontawesome.min.css') }}">
 <style nonce="{{ csp_nonce }}">
 :root { --bg: #0d1117; --bg2: #161b22; --bg3: #21262d; --border: #30363d; --text: #e6edf3; --text2: #8b949e; --accent: #58a6ff; --green: #3fb950; --red: #da3633; }
@@ -74,6 +75,7 @@ th { color: var(--text2); font-weight: 500; }
 
 <script nonce="{{ csp_nonce }}">
 var adminAuthed = false;
+var csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
 function esc(str) { return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;').replace(/"/g,'&quot;'); }
 
