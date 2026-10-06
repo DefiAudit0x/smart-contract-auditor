@@ -82,3 +82,33 @@ def test_rag_vector_cache_excludes_low_confidence_patterns(monkeypatch):
     assert rag._cache is not None
     assert [pattern["name"] for pattern in rag._cache.patterns] == ["Confirmed pattern"]
     assert rag._pattern_count == 1
+
+def test_keyword_fallback_preserves_similarity_order(monkeypatch):
+    monkeypatch.setenv("KB_RAG_MIN_CONFIDENCE", "0.25")
+    rag = RAGContext(FakeKB())
+    rag._use_st = False
+    rag._use_tfidf = False
+
+    relevant = {
+        "id": 3,
+        "name": "Relevant fallback pattern",
+        "severity": "High",
+        "description": "Returned first by the keyword similarity layer.",
+        "fix_code": "",
+        "contract_type": "General",
+    }
+    unrelated = {
+        "id": 4,
+        "name": "Lower relevance pattern",
+        "severity": "Medium",
+        "description": "Returned second by the keyword similarity layer.",
+        "fix_code": "",
+        "contract_type": "General",
+    }
+
+    rag.kb.find_similar_patterns = lambda code, contract_type="", limit=5: [relevant, unrelated]
+    rag.kb.get_pattern_confidence = lambda pattern_id: {"confidence": 0.9}
+
+    context = rag.build_context("contract Example {}")
+
+    assert context.index("Relevant fallback pattern") < context.index("Lower relevance pattern")
