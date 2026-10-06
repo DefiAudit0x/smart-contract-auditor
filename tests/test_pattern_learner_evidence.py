@@ -9,7 +9,7 @@ def test_llm_mined_pattern_is_candidate_and_inactive(monkeypatch, tmp_path):
     monkeypatch.setattr(
         pl,
         "call_model_with_fallback",
-        lambda prompt, timeout=120: '[{"name":"Novel state sync","description":"Detects a novel state synchronization risk","severity":"High","patterns":["state\\s+sync"]}]',
+        lambda prompt, timeout=120: '[{"name":"Novel state sync","description":"Detects a novel state synchronization risk","severity":"High","patterns":["state\\\\s+sync"]}]',
     )
 
     pl.learn_from_audit(
