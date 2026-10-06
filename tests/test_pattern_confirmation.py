@@ -45,4 +45,6 @@ def test_confirmation_remains_high_after_automated_rediscovery(tmp_path):
     assert status["hit_count"] == 11
     assert status["confirmed_count"] == 1
     assert status["confidence"] == 0.9
-    assert [p["id"] for p in kb.get_patterns_for_rag(min_confidence=0.25)] == [pattern_id]
+    eligible = kb.get_patterns_for_rag(min_confidence=0.25)
+    assert [p["id"] for p in eligible] == [pattern_id]
+    assert eligible[0]["confidence"] == 0.9
