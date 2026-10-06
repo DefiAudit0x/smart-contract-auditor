@@ -1,5 +1,3 @@
-import pytest
-
 from knowledge_base.db import KnowledgeBase
 
 
