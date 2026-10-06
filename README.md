@@ -1,6 +1,6 @@
 # Smart Contract Auditor
 
-An enterprise-grade, multi-language smart contract security auditor powered by a multi-pass LLM pipeline and deep static analysis. Combines hierarchical AI analysis, 7 parallel pre-scan modules, and a real-time SSE streaming web UI to detect vulnerabilities in Solidity, Vyper, Move, and Chialisp contracts.
+A multi-language smart contract security auditor combining a multi-pass LLM pipeline with deterministic static analysis and verification tooling. Combines hierarchical AI analysis, 7 parallel pre-scan modules, and a real-time SSE streaming web UI to detect vulnerabilities in Solidity, Vyper, Move, and Chialisp contracts.
 
 ## Features
 
@@ -72,7 +72,7 @@ python run_bot.py
 | `API_PROVIDER` | LLM provider (`ollama`, `openrouter`, `groq`) | `ollama` |
 | `PORT` | Web UI port | `5000` |
 | `RATE_LIMIT_PER_MINUTE` | Max API requests per minute | `5` |
-| `KB_USE_ST` | Disable heavy sentence-transformers | `0` |
+| `KB_USE_ST` | Enable Sentence-Transformer semantic retrieval when installed | `1` |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot token | — |
 | `TELEGRAM_CHAT_ID` | Telegram target chat ID | — |
 | `ETHERSCAN_API_KEY` | Etherscan API key for on-chain fetch | — |
