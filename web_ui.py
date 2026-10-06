@@ -923,10 +923,15 @@ def api_admin_confirm_pattern():
 
     from knowledge_base.db import KnowledgeBase
     kb = KnowledgeBase(KB_DB_PATH)
-    if not kb.confirm_pattern(pattern_id):
+    current = kb.get_pattern_confidence(pattern_id)
+    if "id" not in current:
         return jsonify({"error": "Pattern not found"}), 404
+    if current.get("confirmed_count", 0) > 0:
+        return jsonify({"error": "Pattern already confirmed", "pattern": current}), 409
+    if not kb.confirm_pattern(pattern_id):
+        return jsonify({"error": "Pattern could not be confirmed"}), 409
     confidence = kb.get_pattern_confidence(pattern_id)
-    log_admin_event("confirm_pattern", True)
+    log_admin_event(f"confirm_pattern:{pattern_id}", True)
     return jsonify({"success": True, "pattern": confidence})
 
 
