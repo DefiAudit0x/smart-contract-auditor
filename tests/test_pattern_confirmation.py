@@ -18,6 +18,11 @@ def test_confirm_pattern_promotes_confidence(tmp_path):
     eligible = kb.get_patterns_for_rag(min_confidence=0.25)
     assert [p["id"] for p in eligible] == [pattern_id]
 
+    # A second confirmation must not inflate confidence in the current
+    # single-admin model.
+    assert kb.confirm_pattern(pattern_id) is False
+    assert kb.get_pattern_confidence(pattern_id)["confirmed_count"] == 1
+
 
 def test_confirm_pattern_rejects_unknown_id(tmp_path):
     kb = KnowledgeBase(str(tmp_path / "knowledge.db"))
