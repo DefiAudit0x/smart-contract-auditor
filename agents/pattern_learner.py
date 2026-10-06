@@ -8,6 +8,7 @@ import logging
 import os
 import re
 import threading
+import time
 
 from agents.llm_client import call_model_with_fallback
 
@@ -76,20 +77,63 @@ def _save_learned(patterns: list):
         json.dump(patterns, f, indent=2, ensure_ascii=False)
 
 
+def _is_confirmed(pattern: dict) -> bool:
+    """Only explicitly verified patterns are active learning artifacts."""
+    return pattern.get("verification_status") == "confirmed"
+
+
 def patterns_text() -> str:
-    """Return learned patterns as formatted text for pre-scan context."""
-    patterns = _load_learned()
+    """Return only verified learned patterns as pre-scan context."""
+    patterns = [p for p in _load_learned() if _is_confirmed(p)]
     if not patterns:
         return ""
-    parts = ["### Pre-Scan: Learned Patterns (from past AI audits)"]
-    for p in patterns[-10:]:  # show last 10
+    parts = ["### Pre-Scan: Verified Learned Patterns"]
+    for p in patterns[-10:]:
         parts.append(f"- [{p['severity']}] {p['name']}: {p['description']}")
     return "\n".join(parts)
 
 
+def list_candidates() -> list:
+    """Return unverified regex-learning candidates for review."""
+    return [p for p in _load_learned()
+            if not _is_confirmed(p)
+            and p.get("verification_status", "candidate") == "candidate"]
+
+
+def confirm_pattern(name: str, evidence: str) -> bool:
+    """Promote one regex-learning candidate only with explicit evidence."""
+    evidence = (evidence or "").strip()
+    if len(evidence) < 10:
+        return False
+    patterns = _load_learned()
+    for p in patterns:
+        if p.get("name") == name and p.get("verification_status", "candidate") == "candidate":
+            p["verification_status"] = "confirmed"
+            p["verification_evidence"] = evidence[:2000]
+            p["verified_at"] = time.time()
+            _save_learned(patterns)
+            return True
+    return False
+
+
+def reject_pattern(name: str, evidence: str) -> bool:
+    """Reject one regex-learning candidate so it can never become active."""
+    evidence = (evidence or "").strip()
+    if len(evidence) < 10:
+        return False
+    patterns = _load_learned()
+    for p in patterns:
+        if p.get("name") == name and p.get("verification_status", "candidate") == "candidate":
+            p["verification_status"] = "rejected"
+            p["verification_evidence"] = evidence[:2000]
+            p["verified_at"] = time.time()
+            _save_learned(patterns)
+            return True
+    return False
+
 def get_learned_bug_classes() -> dict:
     """Return learned patterns as _BUG_CLASSES-compatible dict for bug_detector."""
-    patterns = _load_learned()
+    patterns = [p for p in _load_learned() if _is_confirmed(p)]
     classes = {}
     for i, p in enumerate(patterns):
         key = f"learned_{i}"
@@ -223,6 +267,9 @@ Rules:
         p["patterns"] = [pat for pat in p["patterns"] if _validate_candidate_pattern(pat)]
         if not p["patterns"]:
             continue
+        p["verification_status"] = "candidate"
+        p.pop("verification_evidence", None)
+        p.pop("verified_at", None)
         validated.append(p)
 
     if not validated:
@@ -245,7 +292,7 @@ Rules:
 
     if added:
         _save_learned(existing)
-        logger.info(f"Pattern learner: saved {added} new pattern(s) (total: {len(existing)})")
+        logger.info(f"Pattern learner: stored {added} candidate pattern(s); candidates remain inactive until independently verified")
 
 
 def _extract_json(text: str) -> str:
