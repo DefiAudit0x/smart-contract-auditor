@@ -100,11 +100,14 @@ class RAGContext:
 
     def _eligible_patterns(self, patterns: List[Dict]) -> List[Dict]:
         """Keep only patterns whose stored confidence clears the RAG threshold."""
-        return [
-            pattern for pattern in patterns
-            if pattern.get("confidence", self.kb.get_pattern_confidence(pattern["id"]).get("confidence", 0.0))
-            >= self.min_confidence
-        ]
+        eligible = []
+        for pattern in patterns:
+            confidence = pattern.get("confidence")
+            if confidence is None:
+                confidence = self.kb.get_pattern_confidence(pattern["id"]).get("confidence", 0.0)
+            if confidence >= self.min_confidence:
+                eligible.append(pattern)
+        return eligible
 
     def _get_rag_patterns(self, contract_type: str = "", limit: int = 2000) -> List[Dict]:
         """Fetch confidence-filtered patterns without per-pattern DB queries."""
