@@ -287,7 +287,7 @@ class TestPatternLearner:
         pl.LEARNED_PATTERNS_PATH = test_path
         try:
             # save
-            pl._save_learned([{"name": "TestBug", "description": "desc", "severity": "High", "patterns": ["test"]}])
+            pl._save_learned([{"name": "TestBug", "description": "desc", "severity": "High", "patterns": ["test"], "verification_status": "confirmed"}])
             # load
             loaded = pl._load_learned()
             assert len(loaded) == 1
