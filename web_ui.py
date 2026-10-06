@@ -910,7 +910,7 @@ csrf.exempt(api_admin_check)
 
 @app.route('/api/admin/patterns/confirm', methods=['POST'])
 def api_admin_confirm_pattern():
-    """Confirm a vulnerability pattern after independent human verification."""
+    """Confirm a vulnerability pattern after authorized admin verification."""
     if 'admin_authenticated' not in session:
         return jsonify({"error": "Unauthorized"}), 401
     data = request.get_json() or {}
