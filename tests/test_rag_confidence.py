@@ -28,6 +28,15 @@ class FakeKB:
         confidence = {1: 0.1, 2: 0.9}[pattern_id]
         return {"confidence": confidence}
 
+    def get_patterns_for_rag(self, contract_type="", limit=2000, min_confidence=0.0):
+        return [
+            pattern
+            | {"confidence": self.get_pattern_confidence(pattern["id"])["confidence"]}
+            for pattern in self.patterns[:limit]
+            if self.get_pattern_confidence(pattern["id"])["confidence"] >= min_confidence
+        ]
+
+
     def get_patterns_by_severity(self, severity="", limit=50):
         return self.patterns[:limit]
 
@@ -60,3 +69,16 @@ def test_invalid_rag_threshold_uses_safe_default(monkeypatch):
     rag = RAGContext(FakeKB())
 
     assert rag.min_confidence == 0.25
+
+
+def test_rag_vector_cache_excludes_low_confidence_patterns(monkeypatch):
+    monkeypatch.setenv("KB_RAG_MIN_CONFIDENCE", "0.25")
+    rag = RAGContext(FakeKB())
+    rag._use_st = False
+    rag._use_tfidf = True
+
+    rag.update_embeddings()
+
+    assert rag._cache is not None
+    assert [pattern["name"] for pattern in rag._cache.patterns] == ["Confirmed pattern"]
+    assert rag._pattern_count == 1
