@@ -222,20 +222,27 @@ class KnowledgeBase:
             pass
 
     def confirm_pattern(self, pattern_id: int) -> bool:
-        """Record an independent confirmation of a stored vulnerability pattern."""
+        """Record one explicit human confirmation for a stored pattern.
+
+        A confirmation is intentionally one-shot. The current admin model does
+        not track distinct reviewers, so repeated confirmations by the same
+        admin must not inflate confidence.
+        """
         try:
             with _lock:
                 conn = self._connect()
-                row = conn.execute(
-                    "SELECT 1 FROM vulnerability_patterns WHERE id = ?", (pattern_id,)
-                ).fetchone()
-                if row is None:
-                    conn.close()
-                    return False
-                conn.execute(
-                    "UPDATE vulnerability_patterns SET confirmed_count = confirmed_count + 1 WHERE id = ?",
+                cursor = conn.execute(
+                    """UPDATE vulnerability_patterns
+                       SET confirmed_count = 1
+                       WHERE id = ? AND confirmed_count = 0""",
                     (pattern_id,),
                 )
+                if cursor.rowcount != 1:
+                    exists = conn.execute(
+                        "SELECT 1 FROM vulnerability_patterns WHERE id = ?", (pattern_id,)
+                    ).fetchone()
+                    conn.close()
+                    return False if exists else False
                 conn.commit()
                 conn.close()
                 return True
