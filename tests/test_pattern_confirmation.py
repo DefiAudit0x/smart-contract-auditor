@@ -10,7 +10,7 @@ def test_confirm_pattern_promotes_confidence(tmp_path):
     assert before["confidence"] == 0.1
     assert kb.get_patterns_for_rag(min_confidence=0.25) == []
 
-    assert kb.confirm_pattern(pattern_id) is True
+    assert kb.confirm_pattern(pattern_id, "Independent verification reproduced the finding") is True
 
     after = kb.get_pattern_confidence(pattern_id)
     assert after["confirmed_count"] == 1
@@ -20,7 +20,7 @@ def test_confirm_pattern_promotes_confidence(tmp_path):
 
     # A second confirmation must not inflate confidence in the current
     # single-admin model.
-    assert kb.confirm_pattern(pattern_id) is False
+    assert kb.confirm_pattern(pattern_id, "Independent verification reproduced the finding") is False
     assert kb.get_pattern_confidence(pattern_id)["confirmed_count"] == 1
 
 
@@ -33,7 +33,7 @@ def test_confirmation_remains_high_after_automated_rediscovery(tmp_path):
     kb = KnowledgeBase(str(tmp_path / "knowledge.db"))
     pattern_id = kb.add_pattern("Stable confirmed pattern", "Medium")
 
-    assert kb.confirm_pattern(pattern_id) is True
+    assert kb.confirm_pattern(pattern_id, "Independent verification reproduced the finding") is True
     assert kb.get_pattern_confidence(pattern_id)["confidence"] == 0.9
 
     # Repeated automated rediscovery increments hits but is not independent
