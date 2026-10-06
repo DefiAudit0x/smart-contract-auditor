@@ -40,5 +40,6 @@ gevent>=23.9.0
 Flask-Login>=0.6.0
 Flask-Dance>=7.0.0
 
-# NOTE: To generate pinned versions for reproducible builds, run:
-#   pip install -r requirements.txt && pip freeze > requirements.lock
+# NOTE: requirements.lock is generated from the declared runtime requirements
+# for reproducible builds. Update the lockfile with the project's pinned
+# dependency workflow rather than using an ad-hoc pip freeze.
