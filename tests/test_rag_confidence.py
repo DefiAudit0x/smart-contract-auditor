@@ -107,6 +107,10 @@ def test_keyword_fallback_preserves_similarity_order(monkeypatch):
     }
 
     rag.kb.find_similar_patterns = lambda code, contract_type="", limit=5: [relevant, unrelated]
+    rag.kb.get_patterns_for_rag = lambda contract_type="", limit=2000, min_confidence=0.0: [
+        relevant | {"confidence": 0.9},
+        unrelated | {"confidence": 0.9},
+    ]
     rag.kb.get_pattern_confidence = lambda pattern_id: {"confidence": 0.9}
 
     context = rag.build_context("contract Example {}")

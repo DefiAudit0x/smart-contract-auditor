@@ -203,6 +203,22 @@ class RAGContext:
                 code[:200], contract_type, limit=max(top_k * 4, top_k)
             )
             patterns = self._eligible_patterns(candidates)[:top_k]
+            # Keyword fallback must use the same authoritative verification
+            # gate as vector retrieval. Preserve similarity order, but only
+            # allow IDs returned by the verification-aware KB query.
+            if hasattr(self.kb, "get_patterns_for_rag"):
+                verified_ids = {
+                    pattern["id"]
+                    for pattern in self.kb.get_patterns_for_rag(
+                        contract_type=contract_type,
+                        limit=2000,
+                        min_confidence=self.min_confidence,
+                    )
+                }
+                patterns = [pattern for pattern in patterns if pattern.get("id") in verified_ids][:top_k]
+            else:
+                logger.warning("RAG disabled: legacy keyword KB lacks verification-aware retrieval")
+                patterns = []
 
         if not patterns:
             return ""
