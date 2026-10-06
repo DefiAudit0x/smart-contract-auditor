@@ -26,7 +26,7 @@ from flask_limiter.util import get_remote_address
 from flask_cors import CORS
 from api_routes import api_bp
 from audit_service import AuditService
-from config import KB_ENABLED, CACHE_ENABLED, REPORT_DIR, GITHUB_TOKEN, SECRET_KEY
+from config import KB_ENABLED, CACHE_ENABLED, REPORT_DIR, GITHUB_TOKEN, SECRET_KEY, KB_DB_PATH
 from main import ensure_report_dir, save_report_txt, load_local_contract
 from batch_audit import batch_audit
 from gas_analysis import analyze_gas, estimate_gas_savings
@@ -906,6 +906,31 @@ def api_admin_check():
     return jsonify({"authenticated": 'admin_authenticated' in session})
 
 csrf.exempt(api_admin_check)
+
+
+@app.route('/api/admin/patterns/confirm', methods=['POST'])
+def api_admin_confirm_pattern():
+    """Confirm a vulnerability pattern after independent human verification."""
+    if 'admin_authenticated' not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json() or {}
+    try:
+        pattern_id = int(data.get('pattern_id'))
+    except (TypeError, ValueError):
+        return jsonify({"error": "pattern_id must be an integer"}), 400
+    if pattern_id <= 0:
+        return jsonify({"error": "pattern_id must be positive"}), 400
+
+    from knowledge_base.db import KnowledgeBase
+    kb = KnowledgeBase(KB_DB_PATH)
+    if not kb.confirm_pattern(pattern_id):
+        return jsonify({"error": "Pattern not found"}), 404
+    confidence = kb.get_pattern_confidence(pattern_id)
+    log_admin_event("confirm_pattern", True)
+    return jsonify({"success": True, "pattern": confidence})
+
+
+csrf.exempt(api_admin_confirm_pattern)
 
 
 @app.route('/api/admin/codes', methods=['GET', 'POST'])
