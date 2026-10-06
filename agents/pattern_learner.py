@@ -296,13 +296,15 @@ Rules:
 
 
 def _extract_json(text: str) -> str:
-    """Extract JSON array from LLM response (handles markdown fences)."""
+    """Extract one JSON array from an LLM response, including nested arrays."""
     if not text:
         return ""
-    m = re.search(r"```(?:json)?\s*\n(\[.*?\])\s*\n```", text, re.DOTALL)
-    if m:
-        return m.group(1)
-    m = re.search(r"(\[.*?\])", text, re.DOTALL)
-    if m:
-        return m.group(1)
-    return ""
+    start = text.find("[")
+    if start < 0:
+        return ""
+    try:
+        decoder = json.JSONDecoder()
+        _, end = decoder.raw_decode(text[start:])
+    except json.JSONDecodeError:
+        return ""
+    return text[start:start + end]
