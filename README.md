@@ -102,11 +102,11 @@ Copy `.env.example` to `.env` and fill in your values.
 
 The repository includes a deterministic ten-case benchmark covering reentrancy, delegatecall, selfdestruct, unauthorised public minting, `tx.origin` authentication, flash loans, storage collision, unchecked transfers, unbounded loops, and timestamp-dependent gates. Each case pairs `vulnerable.sol` with `fixed.sol` and includes metadata, a comparator evidence path, a declared invariant, and a Foundry PoC fixture. Supplementary negative controls, attack variants, and adversarial comparator fixtures are maintained separately.
 
-The documented baseline run with Solidity `0.8.25` and Foundry `v1.7.1` reports:
+The recorded cross-track baseline with Solidity `0.8.25` and Foundry `v1.7.1` reports 340 passed in the full Python suite. This is a historical baseline snapshot; subsequent maintenance commits may add tests without changing the benchmark results.
 
 | Metric | Result |
 |---|---:|
-| Full Python suite | 286 passed |
+| Full Python suite at baseline snapshot | 340 passed |
 | Primary benchmark cases | 10 |
 | True positives | 10 |
 | False positives | 0 |
