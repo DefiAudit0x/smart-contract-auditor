@@ -73,6 +73,7 @@ python run_bot.py
 | `PORT` | Web UI port | `5000` |
 | `RATE_LIMIT_PER_MINUTE` | Max API requests per minute | `5` |
 | `KB_USE_ST` | Enable Sentence-Transformer semantic retrieval when installed | `1` |
+| `KB_RAG_MIN_CONFIDENCE` | Minimum stored pattern confidence eligible for RAG context | `0.25` |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot token | — |
 | `TELEGRAM_CHAT_ID` | Telegram target chat ID | — |
 | `ETHERSCAN_API_KEY` | Etherscan API key for on-chain fetch | — |
@@ -101,7 +102,7 @@ Copy `.env.example` to `.env` and fill in your values.
 
 The repository includes a deterministic ten-case benchmark covering reentrancy, delegatecall, selfdestruct, unauthorised public minting, `tx.origin` authentication, flash loans, storage collision, unchecked transfers, unbounded loops, and timestamp-dependent gates. Each case pairs `vulnerable.sol` with `fixed.sol` and includes metadata, a comparator evidence path, a declared invariant, and a Foundry PoC fixture. Supplementary negative controls, attack variants, and adversarial comparator fixtures are maintained separately.
 
-The latest run with Solidity `0.8.25` and Foundry `v1.7.1` reports:
+The documented baseline run with Solidity `0.8.25` and Foundry `v1.7.1` reports:
 
 | Metric | Result |
 |---|---:|
