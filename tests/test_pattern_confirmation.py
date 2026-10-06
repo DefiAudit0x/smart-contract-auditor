@@ -17,6 +17,7 @@ def test_confirm_pattern_promotes_confidence(tmp_path):
     assert after["confidence"] == 0.9
     eligible = kb.get_patterns_for_rag(min_confidence=0.25)
     assert [p["id"] for p in eligible] == [pattern_id]
+    assert eligible[0]["confidence"] == 0.9
 
     # A second confirmation must not inflate confidence in the current
     # single-admin model.
