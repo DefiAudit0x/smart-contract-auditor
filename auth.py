@@ -310,36 +310,52 @@ def create_access_code(created_by="", max_uses=-1):
 
 def verify_code(code):
     conn = _get_conn()
-    normalized = code.strip().upper()
-    row = conn.execute(
-        "SELECT * FROM access_codes WHERE code = ? AND is_active = 1",
-        (normalized,)
-    ).fetchone()
-    if row is None:
-        # L-02: log failed attempts for unknown/inactive codes too — without
-        # this row there is no way to investigate code-guessing campaigns.
+    normalized = (code or "").strip().upper()
+    # Serialize login-code consumption so concurrent requests cannot both
+    # observe the last remaining use and mint multiple authenticated sessions.
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        row = conn.execute(
+            "SELECT * FROM access_codes WHERE code = ? AND is_active = 1",
+            (normalized,)
+        ).fetchone()
+        if row is None:
+            conn.execute(
+                "INSERT INTO auth_log (code, ip, success) VALUES (?, ?, 0)",
+                (normalized, request.remote_addr if request else "")
+            )
+            conn.commit()
+            return False
+
+        # Enforce max_uses at login time while the write lock is held.
+        if row["max_uses"] != -1 and row["used_count"] >= row["max_uses"]:
+            conn.execute(
+                "INSERT INTO auth_log (code, ip, success) VALUES (?, ?, 0)",
+                (normalized, request.remote_addr if request else "")
+            )
+            conn.commit()
+            return False
+
+        updated = conn.execute(
+            """UPDATE access_codes
+               SET used_count = used_count + 1
+               WHERE code = ? AND is_active = 1
+                 AND (max_uses = -1 OR used_count < max_uses)""",
+            (normalized,),
+        )
+        if updated.rowcount != 1:
+            conn.rollback()
+            return False
+
         conn.execute(
-            "INSERT INTO auth_log (code, ip, success) VALUES (?, ?, 0)",
+            "INSERT INTO auth_log (code, ip, success) VALUES (?, ?, 1)",
             (normalized, request.remote_addr if request else "")
         )
         conn.commit()
-        return False
-    # Enforce max_uses at login time as well (M2 remediation): a code whose
-    # quota is exhausted must not mint new authenticated sessions.
-    if row["max_uses"] != -1 and row["used_count"] >= row["max_uses"]:
-        conn.execute(
-            "INSERT INTO auth_log (code, ip, success) VALUES (?, ?, 0)",
-            (normalized, request.remote_addr if request else "")
-        )
-        conn.commit()
-        return False
-    conn.execute("UPDATE access_codes SET used_count = used_count + 1 WHERE code = ?", (normalized,))
-    conn.execute(
-        "INSERT INTO auth_log (code, ip, success) VALUES (?, ?, 1)",
-        (code.strip().upper(), request.remote_addr if request else "")
-    )
-    conn.commit()
-    return True
+        return True
+    except Exception:
+        conn.rollback()
+        raise
 
 def check_quota(code):
     conn = _get_conn()
