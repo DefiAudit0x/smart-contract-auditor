@@ -463,7 +463,7 @@ class KnowledgeBase:
                 hits, confirmed = row
                 if hits == 0:
                     return 0.0
-                return min(1.0, (confirmed / max(hits, 1)) * 0.8 + 0.1)
+                return 0.9 if confirmed > 0 else 0.1
         except:
             return 0.0
 
@@ -502,7 +502,9 @@ class KnowledgeBase:
                 conn = self._connect()
                 sql = """
                     SELECT * FROM vulnerability_patterns
-                    WHERE ((confirmed_count * 1.0) / MAX(hit_count, 1)) * 0.8 + 0.1 >= ?
+                    WHERE (
+                        CASE WHEN confirmed_count > 0 THEN 0.9 ELSE 0.1 END
+                    ) >= ?
                 """
                 params = [min_confidence]
                 if contract_type:
@@ -542,7 +544,9 @@ class KnowledgeBase:
                     return {"confidence": 0.0, "score": 0}
                 hits, confirmed = row[3], row[4]
                 score = hits + confirmed
-                confidence = min(1.0, (confirmed / max(hits, 1)) * 0.8 + 0.1)
+                # A human confirmation is a durable gate, not a ratio that
+                # decays as the automated learner encounters the same pattern.
+                confidence = 0.9 if confirmed > 0 else 0.1
                 return {
                     "id": row[0],
                     "name": row[1],
@@ -572,7 +576,7 @@ class KnowledgeBase:
                 results = []
                 for r in rows:
                     hits, confirmed = r[3], r[4]
-                    confidence = min(1.0, (confirmed / max(hits, 1)) * 0.8 + 0.1)
+                    confidence = 0.9 if confirmed > 0 else 0.1
                     if confidence >= min_confidence:
                         results.append({
                             "id": r[0],
@@ -608,13 +612,13 @@ class KnowledgeBase:
             with _lock:
                 conn = self._connect()
                 total = conn.execute("SELECT COUNT(*) FROM vulnerability_patterns").fetchone()[0]
+                # Confirmation is an explicit human-verification signal.
+                # Automated rediscovery (hit_count) must not dilute it.
                 high_conf = conn.execute(
-                    """SELECT COUNT(*) FROM vulnerability_patterns
-                    WHERE confirmed_count > 0 AND (CAST(confirmed_count AS REAL) / MAX(hit_count, 1)) > 0.5"""
+                    "SELECT COUNT(*) FROM vulnerability_patterns WHERE confirmed_count > 0"
                 ).fetchone()[0]
                 low_conf = conn.execute(
-                    """SELECT COUNT(*) FROM vulnerability_patterns
-                    WHERE confirmed_count = 0 OR (CAST(confirmed_count AS REAL) / MAX(hit_count, 1)) <= 0.1"""
+                    "SELECT COUNT(*) FROM vulnerability_patterns WHERE confirmed_count = 0"
                 ).fetchone()[0]
                 top = conn.execute(
                     """SELECT name, (hit_count + confirmed_count) as score
