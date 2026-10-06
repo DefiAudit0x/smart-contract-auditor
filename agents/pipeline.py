@@ -369,34 +369,48 @@ def analyze_code(code: str, model_key: str = "") -> str:
         result += cvss_note
         logger.info("CVSS 4.0 scoring added to report")
 
+    # Knowledge learning is centralized so CLI, HTTP, and streaming audit
+    # paths use the same extraction semantics. Only actual findings extracted
+    # from the report become KB patterns; never create a synthetic placeholder.
     if KB_AUTO_LEARN and result:
-        valid_audit_indicators = ["vulnerability", "severity", "impact", "recommendation", "reentrancy", "overflow"]
-        if any(indicator in result.lower() for indicator in valid_audit_indicators):
-            extractor = _kb_manager.extractor
-            if extractor:
-                try:
-                    learned = extractor.learn_from_report(result, code, protocol_name="auto", contract_type="")
-                    if learned and _has_gate:
-                        kb2 = _kb_manager.kb
-                        if kb2:
-                            kb2.learn_cross_session(
-                                "cross_session", "Medium",
-                                code_snippet=code[:200],
-                                description="Auto-learned cross-session pattern",
-                                protocol="auto"
-                            )
-                except Exception as e:
-                    logger.debug(f"KB auto-learn skipped: {e}")
+        learn_from_audit(code, result, pre_scan_context)
 
-    # Pattern learner: discover new regex patterns from LLM findings
-    if result and pre_scan_context:
-        try:
-            from agents.pattern_learner import learn_from_audit
-            learn_from_audit(code, result, pre_scan_context)
-        except Exception as e:
-            logger.debug(f"Pattern learner skipped: {e}")
 
     return result
+
+
+def learn_from_audit(code: str, report: str, pre_scan_context: str = "") -> int:
+    """Persist real findings from an audit report and mine novel regex patterns.
+
+    This is the single learning entry point for synchronous and streaming
+    audit paths. The KB extractor stores named findings; the regex miner is
+    separate and remains bounded/complexity-checked.
+    """
+    learned = 0
+    if not KB_AUTO_LEARN or not report:
+        return learned
+
+    valid_audit_indicators = (
+        "vulnerability", "severity", "impact", "recommendation",
+        "reentrancy", "overflow",
+    )
+    if any(indicator in report.lower() for indicator in valid_audit_indicators):
+        extractor = _kb_manager.extractor
+        if extractor:
+            try:
+                learned = extractor.learn_from_report(
+                    report, code, protocol_name="auto", contract_type=""
+                )
+            except Exception as e:
+                logger.debug(f"KB auto-learn skipped: {e}")
+
+    if pre_scan_context:
+        try:
+            from agents.pattern_learner import learn_from_audit as mine_patterns
+            mine_patterns(code, report, pre_scan_context)
+        except Exception as e:
+            logger.debug(f"Pattern learner skipped: {e}")
+    return learned
 
 
 def audit(code: str) -> str:
