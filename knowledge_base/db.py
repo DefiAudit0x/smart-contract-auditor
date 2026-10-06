@@ -476,6 +476,41 @@ class KnowledgeBase:
         return self.add_pattern(name, severity, "solidity", code_snippet, description, fix_code,
                                 protocol_name=protocol_name)
 
+    def get_patterns_for_rag(self, contract_type: str = "", limit: int = 2000,
+                            min_confidence: float = 0.0) -> List[Dict]:
+        """Fetch RAG-eligible patterns in one query, including confidence metadata."""
+        try:
+            min_confidence = max(0.0, min(1.0, float(min_confidence)))
+            with _lock:
+                conn = self._connect()
+                sql = """
+                    SELECT * FROM vulnerability_patterns
+                    WHERE ((confirmed_count * 1.0) / MAX(hit_count, 1)) * 0.8 + 0.1 >= ?
+                """
+                params = [min_confidence]
+                if contract_type:
+                    sql += " AND contract_type = ?"
+                    params.append(contract_type)
+                sql += " ORDER BY (confirmed_count + hit_count) DESC, created_at DESC LIMIT ?"
+                params.append(limit)
+                rows = conn.execute(sql, params).fetchall()
+                conn.close()
+                cols = ["id", "name", "severity", "pattern_type", "code_snippet",
+                        "description", "fix_code", "contract_type", "source_report",
+                        "protocol_name", "created_at", "hit_count", "confirmed_count"]
+                results = []
+                for r in rows:
+                    item = dict(zip(cols, r))
+                    hits, confirmed = item["hit_count"], item["confirmed_count"]
+                    item["confidence"] = round(
+                        min(1.0, (confirmed / max(hits, 1)) * 0.8 + 0.1), 3
+                    )
+                    results.append(item)
+                return results
+        except Exception as e:
+            logger.debug(f"KB get_patterns_for_rag error: {e}")
+            return []
+
     def get_pattern_confidence(self, pattern_id: int) -> Dict:
         """Get detailed confidence info for a pattern."""
         try:
