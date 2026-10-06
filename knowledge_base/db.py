@@ -521,9 +521,7 @@ class KnowledgeBase:
                 for r in rows:
                     item = dict(zip(cols, r))
                     hits, confirmed = item["hit_count"], item["confirmed_count"]
-                    item["confidence"] = round(
-                        min(1.0, (confirmed / max(hits, 1)) * 0.8 + 0.1), 3
-                    )
+                    item["confidence"] = 0.9 if confirmed > 0 else 0.1
                     results.append(item)
                 return results
         except Exception as e:
