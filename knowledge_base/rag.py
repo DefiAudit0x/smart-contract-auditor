@@ -117,7 +117,11 @@ class RAGContext:
                 limit=limit,
                 min_confidence=self.min_confidence,
             )
-        return self._eligible_patterns(self.kb.get_patterns_by_severity(limit=limit))
+        # Legacy KB implementations without the explicit verification-aware
+        # query are not safe RAG sources. Failing closed avoids re-introducing
+        # candidate patterns when KB_RAG_MIN_CONFIDENCE is configured to 0.
+        logger.warning("RAG disabled: KnowledgeBase lacks get_patterns_for_rag")
+        return []
 
     def _encode_texts(self, texts: List[str]) -> object:
         if self._use_st:

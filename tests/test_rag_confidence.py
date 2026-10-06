@@ -112,3 +112,33 @@ def test_keyword_fallback_preserves_similarity_order(monkeypatch):
     context = rag.build_context("contract Example {}")
 
     assert context.index("Relevant fallback pattern") < context.index("Lower relevance pattern")
+
+
+def test_rag_fails_closed_without_verification_aware_kb(monkeypatch):
+    monkeypatch.setenv("KB_RAG_MIN_CONFIDENCE", "0.0")
+    rag = RAGContext(FakeKB())
+    rag._use_st = False
+    rag._use_tfidf = False
+    rag.kb.get_patterns_for_rag = None
+    delattr(rag.kb, "get_patterns_for_rag")
+    rag.kb.get_patterns_by_severity = lambda severity="", limit=50: [
+        {
+            "id": 99,
+            "name": "Legacy unverified pattern",
+            "severity": "Critical",
+            "description": "Must never enter RAG through a legacy fallback.",
+            "fix_code": "",
+            "contract_type": "General",
+        }
+    ]
+    rag.kb.find_similar_patterns = lambda code, contract_type="", limit=5: [
+        {
+            "id": 99,
+            "name": "Legacy unverified pattern",
+            "severity": "Critical",
+            "description": "Must never enter RAG through a legacy fallback.",
+            "fix_code": "",
+            "contract_type": "General",
+        }
+    ]
+    assert rag.build_context("contract Example {}") == ""
