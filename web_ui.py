@@ -935,7 +935,6 @@ def api_admin_confirm_pattern():
     return jsonify({"success": True, "pattern": confidence})
 
 
-csrf.exempt(api_admin_confirm_pattern)
 
 
 @app.route('/api/admin/codes', methods=['GET', 'POST'])
