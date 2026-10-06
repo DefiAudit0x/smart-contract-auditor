@@ -141,4 +141,5 @@ def test_rag_fails_closed_without_verification_aware_kb(monkeypatch):
             "contract_type": "General",
         }
     ]
+    rag.kb.get_pattern_confidence = lambda pattern_id: {"confidence": 0.9}
     assert rag.build_context("contract Example {}") == ""
