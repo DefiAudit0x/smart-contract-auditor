@@ -29,7 +29,10 @@ CREATE TABLE IF NOT EXISTS vulnerability_patterns (
     protocol_name TEXT DEFAULT '',
     created_at  REAL NOT NULL,
     hit_count   INTEGER DEFAULT 1,
-    confirmed_count INTEGER DEFAULT 0
+    confirmed_count INTEGER DEFAULT 0,
+    verification_status TEXT DEFAULT 'candidate',
+    verification_evidence TEXT DEFAULT '',
+    verified_at REAL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS false_positives (
@@ -99,11 +102,24 @@ class KnowledgeBase:
                 conn = sqlite3.connect(self.db_path, timeout=30)
                 conn.execute("PRAGMA journal_mode=WAL")
                 conn.executescript(SCHEMA_SQL)
+                self._migrate_pattern_verification(conn)
                 conn.commit()
                 conn.close()
             logger.info(f"Knowledge Base initialised: {self.db_path}")
         except Exception as e:
             logger.warning(f"KB init failed: {e}")
+
+    def _migrate_pattern_verification(self, conn: sqlite3.Connection) -> None:
+        """Migrate old KBs to explicit candidate/confirmed/rejected states."""
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(vulnerability_patterns)").fetchall()}
+        if "verification_status" not in cols:
+            conn.execute("ALTER TABLE vulnerability_patterns ADD COLUMN verification_status TEXT DEFAULT 'candidate'")
+        if "verification_evidence" not in cols:
+            conn.execute("ALTER TABLE vulnerability_patterns ADD COLUMN verification_evidence TEXT DEFAULT ''")
+        if "verified_at" not in cols:
+            conn.execute("ALTER TABLE vulnerability_patterns ADD COLUMN verified_at REAL DEFAULT 0")
+        conn.execute("UPDATE vulnerability_patterns SET verification_status='confirmed' WHERE confirmed_count > 0")
+        conn.commit()
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path, timeout=30)
