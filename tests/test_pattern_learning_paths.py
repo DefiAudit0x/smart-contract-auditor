@@ -28,6 +28,6 @@ def test_audit_finding_creates_real_cross_session_pattern(tmp_path):
     # under the default confidence gate.
     assert kb.get_patterns_for_rag(min_confidence=0.25) == []
 
-    assert kb.confirm_pattern(rows[0]["id"]) is True
+    assert kb.confirm_pattern(rows[0]["id"], "Independent verification reproduced the finding") is True
     eligible = kb.get_patterns_for_rag(min_confidence=0.25)
     assert [p["name"] for p in eligible] == ["Unchecked Low-Level Call Return Value"]
