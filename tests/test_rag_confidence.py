@@ -116,30 +116,33 @@ def test_keyword_fallback_preserves_similarity_order(monkeypatch):
 
 def test_rag_fails_closed_without_verification_aware_kb(monkeypatch):
     monkeypatch.setenv("KB_RAG_MIN_CONFIDENCE", "0.0")
-    rag = RAGContext(FakeKB())
+
+    class LegacyKB:
+        def get_pattern_confidence(self, pattern_id):
+            return {"confidence": 0.9}
+
+        def get_patterns_by_severity(self, severity="", limit=50):
+            return [{
+                "id": 99,
+                "name": "Legacy unverified pattern",
+                "severity": "Critical",
+                "description": "Must never enter RAG through a legacy fallback.",
+                "fix_code": "",
+                "contract_type": "General",
+            }]
+
+        def find_similar_patterns(self, code_snippet, contract_type="", limit=5):
+            return [{
+                "id": 99,
+                "name": "Legacy unverified pattern",
+                "severity": "Critical",
+                "description": "Must never enter RAG through a legacy fallback.",
+                "fix_code": "",
+                "contract_type": "General",
+            }]
+
+    rag = RAGContext(LegacyKB())
     rag._use_st = False
     rag._use_tfidf = False
-    rag.kb.get_patterns_for_rag = None
-    delattr(rag.kb, "get_patterns_for_rag")
-    rag.kb.get_patterns_by_severity = lambda severity="", limit=50: [
-        {
-            "id": 99,
-            "name": "Legacy unverified pattern",
-            "severity": "Critical",
-            "description": "Must never enter RAG through a legacy fallback.",
-            "fix_code": "",
-            "contract_type": "General",
-        }
-    ]
-    rag.kb.find_similar_patterns = lambda code, contract_type="", limit=5: [
-        {
-            "id": 99,
-            "name": "Legacy unverified pattern",
-            "severity": "Critical",
-            "description": "Must never enter RAG through a legacy fallback.",
-            "fix_code": "",
-            "contract_type": "General",
-        }
-    ]
-    rag.kb.get_pattern_confidence = lambda pattern_id: {"confidence": 0.9}
+
     assert rag.build_context("contract Example {}") == ""
