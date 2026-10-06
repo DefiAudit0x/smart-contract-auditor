@@ -197,7 +197,7 @@ class KnowledgeBase:
                 conn.close()
                 cols = ["id", "name", "severity", "pattern_type", "code_snippet",
                         "description", "fix_code", "contract_type", "source_report",
-                        "protocol_name", "created_at", "hit_count", "confirmed_count"]
+                        "protocol_name", "created_at", "hit_count", "confirmed_count", "verification_status", "verification_evidence", "verified_at"]
                 for r in rows:
                     results.append(dict(zip(cols, r)))
         except Exception as e:
@@ -237,33 +237,49 @@ class KnowledgeBase:
         except:
             pass
 
-    def confirm_pattern(self, pattern_id: int) -> bool:
-        """Record one explicit human confirmation for a stored pattern.
-
-        A confirmation is intentionally one-shot. The current admin model does
-        not track distinct reviewers, so repeated confirmations by the same
-        admin must not inflate confidence.
-        """
+    def confirm_pattern(self, pattern_id: int, evidence: str = "") -> bool:
+        """Promote a candidate only with explicit verification evidence."""
+        evidence = (evidence or "").strip()
+        if len(evidence) < 10:
+            return False
         try:
             with _lock:
                 conn = self._connect()
-                cursor = conn.execute(
+                cur = conn.execute(
                     """UPDATE vulnerability_patterns
-                       SET confirmed_count = 1
-                       WHERE id = ? AND confirmed_count = 0""",
-                    (pattern_id,),
+                       SET confirmed_count=1, verification_status='confirmed',
+                           verification_evidence=?, verified_at=?
+                       WHERE id=? AND confirmed_count=0
+                         AND verification_status='candidate'""",
+                    (evidence[:2000], time.time(), pattern_id),
                 )
-                if cursor.rowcount != 1:
-                    exists = conn.execute(
-                        "SELECT 1 FROM vulnerability_patterns WHERE id = ?", (pattern_id,)
-                    ).fetchone()
-                    conn.close()
-                    return False
                 conn.commit()
                 conn.close()
-                return True
+                return cur.rowcount == 1
         except Exception:
             return False
+
+    def reject_pattern(self, pattern_id: int, evidence: str = "") -> bool:
+        """Reject a candidate so it cannot enter RAG."""
+        evidence = (evidence or "").strip()
+        if len(evidence) < 10:
+            return False
+        try:
+            with _lock:
+                conn = self._connect()
+                cur = conn.execute(
+                    """UPDATE vulnerability_patterns
+                       SET verification_status='rejected',
+                           verification_evidence=?, verified_at=?
+                       WHERE id=? AND verification_status='candidate'""",
+                    (evidence[:2000], time.time(), pattern_id),
+                )
+                conn.commit()
+                conn.close()
+                return cur.rowcount == 1
+        except Exception:
+            return False
+
 
     # ─── False Positives ───
 
@@ -518,9 +534,8 @@ class KnowledgeBase:
                 conn = self._connect()
                 sql = """
                     SELECT * FROM vulnerability_patterns
-                    WHERE (
-                        CASE WHEN confirmed_count > 0 THEN 0.9 ELSE 0.1 END
-                    ) >= ?
+                    WHERE verification_status = 'confirmed'
+                      AND (CASE WHEN confirmed_count > 0 THEN 0.9 ELSE 0.0 END) >= ?
                 """
                 params = [min_confidence]
                 if contract_type:
