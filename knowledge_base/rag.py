@@ -102,8 +102,19 @@ class RAGContext:
         """Keep only patterns whose stored confidence clears the RAG threshold."""
         return [
             pattern for pattern in patterns
-            if self.kb.get_pattern_confidence(pattern["id"]).get("confidence", 0.0) >= self.min_confidence
+            if pattern.get("confidence", self.kb.get_pattern_confidence(pattern["id"]).get("confidence", 0.0))
+            >= self.min_confidence
         ]
+
+    def _get_rag_patterns(self, contract_type: str = "", limit: int = 2000) -> List[Dict]:
+        """Fetch confidence-filtered patterns without per-pattern DB queries."""
+        if hasattr(self.kb, "get_patterns_for_rag"):
+            return self.kb.get_patterns_for_rag(
+                contract_type=contract_type,
+                limit=limit,
+                min_confidence=self.min_confidence,
+            )
+        return self._eligible_patterns(self.kb.get_patterns_by_severity(limit=limit))
 
     def _encode_texts(self, texts: List[str]) -> object:
         if self._use_st:
@@ -131,8 +142,7 @@ class RAGContext:
         return []
 
     def update_embeddings(self):
-        raw_patterns = self.kb.get_patterns_by_severity(limit=2000)
-        patterns = self._eligible_patterns(raw_patterns)
+        patterns = self._get_rag_patterns(limit=2000)
         if not patterns:
             self._cache = None
             self._pattern_count = 0
@@ -155,7 +165,7 @@ class RAGContext:
         self._pattern_count = len(patterns)
 
     def _vector_retrieve(self, code: str, top_k: int) -> List[Dict]:
-        eligible_count = len(self._eligible_patterns(self.kb.get_patterns_by_severity(limit=2000)))
+        eligible_count = len(self._get_rag_patterns(limit=2000))
         if self._cache is None or self._pattern_count != eligible_count:
             self.update_embeddings()
         if self._cache is None:
@@ -182,8 +192,7 @@ class RAGContext:
         if self._use_st or self._use_tfidf:
             patterns = self._vector_retrieve(code, top_k)
         else:
-            raw_patterns = self.kb.find_similar_patterns(code[:200], contract_type, limit=max(2000, top_k * 4))
-            patterns = self._eligible_patterns(raw_patterns)[:top_k]
+            patterns = self._get_rag_patterns(contract_type=contract_type, limit=max(2000, top_k * 4))[:top_k]
 
         if not patterns:
             return ""
