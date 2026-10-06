@@ -888,7 +888,6 @@ def api_admin_login():
     log_admin_event("login", False)
     return jsonify({"success": False, "error": "Invalid credentials"}), 403
 
-csrf.exempt(api_admin_login)
 
 
 @app.route('/api/admin/logout', methods=['POST'])
@@ -898,7 +897,6 @@ def api_admin_logout():
     log_admin_event("logout", True)
     return jsonify({"success": True})
 
-csrf.exempt(api_admin_logout)
 
 
 @app.route('/api/admin/check')
@@ -960,7 +958,6 @@ def api_admin_codes():
         return jsonify({"code": code})
     return jsonify({"codes": list_codes()})
 
-csrf.exempt(api_admin_codes)
 
 
 @app.route('/api/admin/codes/deactivate', methods=['POST'])
@@ -973,7 +970,6 @@ def api_admin_deactivate():
         return jsonify({"success": True})
     return jsonify({"error": "Code required"}), 400
 
-csrf.exempt(api_admin_deactivate)
 
 
 @app.route('/cicd')
