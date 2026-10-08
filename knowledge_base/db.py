@@ -141,9 +141,19 @@ class KnowledgeBase:
         try:
             with _lock:
                 conn = self._connect()
+                cutoff = time.time() - (keep_days * 86400)
+                # Feedback references sessions, so delete dependent feedback
+                # before deleting the parent session rows.
+                conn.execute(
+                    """DELETE FROM feedback
+                       WHERE session_id IN (
+                           SELECT id FROM audit_sessions WHERE created_at < ?
+                       )""",
+                    (cutoff,),
+                )
                 c = conn.execute(
-                    "DELETE FROM audit_sessions WHERE created_at < strftime('%s','now') - ?",
-                    (keep_days * 86400,),
+                    "DELETE FROM audit_sessions WHERE created_at < ?",
+                    (cutoff,),
                 )
                 conn.commit()
                 deleted = c.rowcount
