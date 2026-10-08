@@ -205,3 +205,48 @@ def test_pipeline_uses_verification_aware_gate_query(monkeypatch):
 
     pipeline.analyze_code("contract Example {}")
     assert fake_kb.called
+
+
+def test_prune_sessions_deletes_feedback_before_expired_sessions(tmp_path):
+    from knowledge_base.db import KnowledgeBase
+
+    kb = KnowledgeBase(str(tmp_path / "kb.sqlite"))
+    session_id = kb.start_session("old", "contract Old {}")
+    assert session_id > 0
+    kb.add_feedback(session_id, "Old finding", is_fp=True, comment="retention test")
+
+    conn = kb._connect()
+    conn.execute(
+        "UPDATE audit_sessions SET created_at=? WHERE id=?",
+        (0, session_id),
+    )
+    conn.commit()
+    conn.close()
+
+    assert kb.prune_sessions(keep_days=1) == 1
+
+    conn = kb._connect()
+    assert conn.execute(
+        "SELECT COUNT(*) FROM audit_sessions WHERE id=?", (session_id,)
+    ).fetchone()[0] == 0
+    assert conn.execute(
+        "SELECT COUNT(*) FROM feedback WHERE session_id=?", (session_id,)
+    ).fetchone()[0] == 0
+    conn.close()
+
+
+def test_prune_sessions_preserves_recent_feedback(tmp_path):
+    from knowledge_base.db import KnowledgeBase
+
+    kb = KnowledgeBase(str(tmp_path / "kb.sqlite"))
+    session_id = kb.start_session("recent", "contract Recent {}")
+    assert session_id > 0
+    kb.add_feedback(session_id, "Recent finding", is_fp=False, comment="keep")
+
+    assert kb.prune_sessions(keep_days=1) == 0
+
+    conn = kb._connect()
+    assert conn.execute(
+        "SELECT COUNT(*) FROM feedback WHERE session_id=?", (session_id,)
+    ).fetchone()[0] == 1
+    conn.close()
