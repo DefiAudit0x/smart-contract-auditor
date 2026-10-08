@@ -204,6 +204,35 @@ class KnowledgeBase:
             logger.debug(f"KB find_similar error: {e}")
         return results
 
+    def get_confirmed_patterns_for_gate(self, severity: str = "", limit: int = 50) -> List[Dict]:
+        """Return only human-confirmed patterns for the report deduplication gate."""
+        try:
+            with _lock:
+                conn = self._connect()
+                if severity:
+                    rows = conn.execute(
+                        """SELECT * FROM vulnerability_patterns
+                        WHERE severity=? AND verification_status='confirmed'
+                        ORDER BY created_at DESC LIMIT ?""",
+                        (severity, limit)
+                    ).fetchall()
+                else:
+                    rows = conn.execute(
+                        """SELECT * FROM vulnerability_patterns
+                        WHERE verification_status='confirmed'
+                        ORDER BY (confirmed_count + hit_count) DESC LIMIT ?""",
+                        (limit,)
+                    ).fetchall()
+                conn.close()
+                cols = ["id", "name", "severity", "pattern_type", "code_snippet",
+                        "description", "fix_code", "contract_type", "source_report",
+                        "protocol_name", "created_at", "hit_count", "confirmed_count",
+                        "verification_status", "verification_evidence", "verified_at"]
+                return [dict(zip(cols, r)) for r in rows]
+        except Exception as e:
+            logger.debug(f"KB get confirmed gate patterns error: {e}")
+            return []
+
     def get_patterns_by_severity(self, severity: str = "", limit: int = 50) -> List[Dict]:
         try:
             with _lock:

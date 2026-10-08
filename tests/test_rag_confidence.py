@@ -150,3 +150,58 @@ def test_rag_fails_closed_without_verification_aware_kb(monkeypatch):
     rag._use_tfidf = False
 
     assert rag.build_context("contract Example {}") == ""
+
+
+def test_gate_kb_query_returns_only_confirmed_patterns(tmp_path):
+    from knowledge_base.db import KnowledgeBase
+
+    kb = KnowledgeBase(str(tmp_path / "kb.sqlite"))
+    candidate_id = kb.add_pattern("Candidate pattern", "High")
+    rejected_id = kb.add_pattern("Rejected pattern", "High")
+    confirmed_id = kb.add_pattern("Confirmed pattern", "High")
+
+    assert candidate_id and rejected_id and confirmed_id
+    assert kb.confirm_pattern(confirmed_id, "Verified against an executable regression case.")
+    assert kb.reject_pattern(rejected_id, "False positive reproduced with a safe control case.")
+
+    patterns = kb.get_confirmed_patterns_for_gate(limit=100)
+    names = {p["name"] for p in patterns}
+
+    assert "Confirmed pattern" in names
+    assert "Candidate pattern" not in names
+    assert "Rejected pattern" not in names
+    assert all(p["verification_status"] == "confirmed" for p in patterns)
+
+
+def test_pipeline_uses_verification_aware_gate_query(monkeypatch):
+    import agents.pipeline as pipeline
+
+    class FakeKB:
+        def __init__(self):
+            self.called = False
+
+        def get_confirmed_patterns_for_gate(self, limit=100):
+            self.called = True
+            return [{"name": "Confirmed pattern", "verification_status": "confirmed"}]
+
+        def get_patterns_by_severity(self, limit=100):
+            raise AssertionError("broad KB query must not be used by the gate")
+
+    class FakeGate:
+        def validate_report(self, report, code, patterns):
+            assert patterns == [{"name": "Confirmed pattern", "verification_status": "confirmed"}]
+            return report
+
+    fake_kb = FakeKB()
+    monkeypatch.setattr(pipeline._kb_manager, "_kb", fake_kb)
+    monkeypatch.setattr(pipeline, "_has_gate", True)
+    monkeypatch.setattr(pipeline, "_gate", FakeGate())
+    monkeypatch.setattr(pipeline, "API_PROVIDER", "openrouter")
+    monkeypatch.setattr(pipeline, "run_pre_scan", lambda code: "")
+    monkeypatch.setattr(pipeline, "call_model_with_fallback", lambda *a, **k: "report")
+    monkeypatch.setattr(pipeline, "validate_report", lambda report, code, language: report)
+    monkeypatch.setattr(pipeline, "cvss_score_report", lambda report: {"findings": []})
+    monkeypatch.setattr(pipeline, "KB_AUTO_LEARN", False)
+
+    pipeline.analyze_code("contract Example {}")
+    assert fake_kb.called
