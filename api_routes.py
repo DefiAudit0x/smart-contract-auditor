@@ -799,13 +799,20 @@ def api_hackerone():
         return jsonify({"error": "Field 'report' is required"}), 400
     label = data.get('label', 'Smart Contract')
     code = data.get('code', '')
-    if _has_h1:
-        h1_report = _h1_report_func(data['report'], code, label)
-        return jsonify({"report": h1_report})
-    else:
+    generator = _h1_report_func if _has_h1 else None
+    if generator is None:
         from agents import generate_hackerone_report
-        h1_report = generate_hackerone_report(data['report'], code, label)
+        generator = generate_hackerone_report
+    reservation, quota_error = _reserve_tool_usage()
+    if quota_error:
+        return quota_error
+    try:
+        h1_report = generator(data['report'], code, label)
+        _complete_code_audit_usage(reservation)
         return jsonify({"report": h1_report})
+    except Exception:
+        _release_code_audit_usage(reservation)
+        raise
 
 
 @api_bp.route('/grep-arsenal', methods=['POST'])
@@ -817,8 +824,16 @@ def api_grep_arsenal():
         return jsonify({"error": "Field 'code' is required"}), 400
     if not _has_grep:
         return jsonify({"error": "Grep arsenal not available"}), 500
-    summary = _grep_arsenal.get_summary(data['code'])
-    return jsonify({"summary": summary})
+    reservation, quota_error = _reserve_tool_usage()
+    if quota_error:
+        return quota_error
+    try:
+        summary = _grep_arsenal.get_summary(data['code'])
+        _complete_code_audit_usage(reservation)
+        return jsonify({"summary": summary})
+    except Exception:
+        _release_code_audit_usage(reservation)
+        raise
 
 
 @api_bp.route('/mcp-scan', methods=['POST'])
@@ -830,8 +845,16 @@ def api_mcp_scan():
         return jsonify({"error": "Field 'code' is required"}), 400
     if not _has_mcp:
         return jsonify({"error": "MCP scanner not available"}), 500
-    result = _mcp_int.analyze_contract(data['code'])
-    return jsonify(result)
+    reservation, quota_error = _reserve_tool_usage()
+    if quota_error:
+        return quota_error
+    try:
+        result = _mcp_int.analyze_contract(data['code'])
+        _complete_code_audit_usage(reservation)
+        return jsonify(result)
+    except Exception:
+        _release_code_audit_usage(reservation)
+        raise
 
 
 @api_bp.route('/ai-detect', methods=['POST'])
@@ -843,9 +866,17 @@ def api_ai_detect():
         return jsonify({"error": "Field 'code' is required"}), 400
     if not _has_ai:
         return jsonify({"error": "AI detector not available"}), 500
-    ai_check = _ai_scan.detect_ai_generated(data['code'])
-    vulns = _ai_scan.check_ai_vulnerabilities(data['code'])
-    return jsonify({"ai_likely": ai_check, "vulnerabilities": vulns})
+    reservation, quota_error = _reserve_tool_usage()
+    if quota_error:
+        return quota_error
+    try:
+        ai_check = _ai_scan.detect_ai_generated(data['code'])
+        vulns = _ai_scan.check_ai_vulnerabilities(data['code'])
+        _complete_code_audit_usage(reservation)
+        return jsonify({"ai_likely": ai_check, "vulnerabilities": vulns})
+    except Exception:
+        _release_code_audit_usage(reservation)
+        raise
 
 
 @api_bp.route('/zksync-analyze', methods=['POST'])
@@ -857,8 +888,16 @@ def api_zksync_analyze():
         return jsonify({"error": "Field 'code' is required"}), 400
     if not _has_zksync:
         return jsonify({"error": "ZKsync analyzer not available"}), 500
-    result = _zksync_scan.check_vulnerable_patterns(data['code'])
-    return jsonify(result)
+    reservation, quota_error = _reserve_tool_usage()
+    if quota_error:
+        return quota_error
+    try:
+        result = _zksync_scan.check_vulnerable_patterns(data['code'])
+        _complete_code_audit_usage(reservation)
+        return jsonify(result)
+    except Exception:
+        _release_code_audit_usage(reservation)
+        raise
 
 
 @api_bp.route('/poc', methods=['POST'])
@@ -871,12 +910,20 @@ def api_poc():
     bug_class = data.get('bug_class', 'reentrancy')
     target_addr = data.get('target_addr', '0x...')
     fork_block = data.get('fork_block', 18000000)
+    reservation, quota_error = _reserve_tool_usage()
+    if quota_error:
+        return quota_error
     try:
         from hackerone_report import _get_poc_template
         poc = _get_poc_template(bug_class, target_addr, fork_block)
+        _complete_code_audit_usage(reservation)
         return jsonify({"poc": poc, "filename": f"ExploitPoC_{bug_class}.t.sol"})
     except ImportError:
+        _release_code_audit_usage(reservation)
         return jsonify({"error": "PoC generator not available"}), 500
+    except Exception:
+        _release_code_audit_usage(reservation)
+        raise
 
 
 @api_bp.route('/analyze/poc', methods=['POST'])
@@ -888,6 +935,7 @@ def api_generate_poc():
         return jsonify({"error": "Field 'report' is required"}), 400
     report = data['report']
     code = data.get('code', '')
+    reservation = None
     try:
         from hackerone_report import _extract_findings
         from analyzers.base import Finding
@@ -900,6 +948,10 @@ def api_generate_poc():
                 break
         if not target:
             return jsonify({"error": "No Critical or High findings found to generate PoC"}), 400
+
+        reservation, quota_error = _reserve_tool_usage()
+        if quota_error:
+            return quota_error
 
         finding = Finding(
             agent_name=target.get('name', 'Vulnerability'),
@@ -918,11 +970,13 @@ def api_generate_poc():
                 os.unlink(poc_path)
             except OSError:
                 pass
+            _complete_code_audit_usage(reservation)
             return jsonify({"poc": poc_code, "filename": os.path.basename(poc_path)})
 
         from hackerone_report import _get_poc_template
         cat = (target.get('category', '') or '') or (target.get('name', '') or '')
         poc = _get_poc_template(cat)
+        _complete_code_audit_usage(reservation)
         return jsonify({"poc": poc, "filename": f"PoC_{target.get('name', 'vuln').replace(' ', '_')}.t.sol"})
 
     except ImportError as e:
@@ -931,6 +985,7 @@ def api_generate_poc():
         logger.warning("PoC generator import failed: %s", e)
         return jsonify({"error": "PoC generator is not available on this deployment"}), 500
     except Exception:
+        _release_code_audit_usage(reservation)
         logger.exception("PoC generation failed")
         return jsonify({"error": "PoC generation failed"}), 500
 
@@ -944,10 +999,15 @@ def api_sarif():
         return jsonify({"error": "Field 'report' is required"}), 400
     if not _has_sarif:
         return jsonify({"error": "SARIF exporter not available"}), 500
+    reservation, quota_error = _reserve_tool_usage()
+    if quota_error:
+        return quota_error
     try:
         sarif = report_to_sarif(data['report'], data.get('code', ''), data.get('label', 'contract'))
+        _complete_code_audit_usage(reservation)
         return Response(sarif, mimetype='application/json',
                         headers={'Content-Disposition': 'attachment; filename=audit.sarif'})
-    except Exception as e:
+    except Exception:
+        _release_code_audit_usage(reservation)
         logger.exception("Internal error")
         return jsonify({"error": "An internal error occurred"}), 500

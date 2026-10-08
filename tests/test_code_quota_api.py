@@ -66,3 +66,16 @@ def test_stream_analysis_requires_an_idempotency_key_for_access_codes(quota_clie
 
     assert response.status_code == 400
     assert auth.check_quota(code)["used"] == 0
+
+
+def test_tool_endpoint_charges_access_code_quota(quota_client):
+    client, code = quota_client
+    with patch.object(api_routes._grep_arsenal, "get_summary", return_value={"matches": []}):
+        first = client.post("/api/grep-arsenal", json={"code": "contract Example {}"})
+        second = client.post("/api/grep-arsenal", json={"code": "contract Example {}"})
+        third = client.post("/api/grep-arsenal", json={"code": "contract Example {}"})
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert third.status_code == 402
+    assert auth.check_quota(code)["used"] == 2
