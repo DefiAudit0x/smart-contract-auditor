@@ -349,7 +349,9 @@ def analyze_code(code: str, model_key: str = "") -> str:
             kb_pats = None
             kb = _kb_manager.kb
             if kb:
-                kb_pats = kb.get_patterns_by_severity(limit=100)
+                # Only independently verified patterns may influence the
+                # deduplication gate; unverified candidates are not evidence.
+                kb_pats = kb.get_confirmed_patterns_for_gate(limit=100)
             gated = _gate.validate_report(result, code, kb_pats)
             if gated and len(gated) > 20:
                 result = gated
