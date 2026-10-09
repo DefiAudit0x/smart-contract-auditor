@@ -1,7 +1,7 @@
 import auth
 import api_routes
 import pytest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from web_ui import app
 
 
@@ -66,3 +66,20 @@ def test_stream_analysis_requires_an_idempotency_key_for_access_codes(quota_clie
 
     assert response.status_code == 400
     assert auth.check_quota(code)["used"] == 0
+
+
+def test_tool_endpoint_charges_access_code_quota(quota_client):
+    client, code = quota_client
+    grep_mock = Mock()
+    grep_mock.get_summary.return_value = {"matches": []}
+    with patch.object(api_routes, "_has_grep", True), patch.object(
+        api_routes, "_grep_arsenal", grep_mock
+    ):
+        first = client.post("/api/grep-arsenal", json={"code": "contract Example {}"})
+        second = client.post("/api/grep-arsenal", json={"code": "contract Example {}"})
+        third = client.post("/api/grep-arsenal", json={"code": "contract Example {}"})
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert third.status_code == 402
+    assert auth.check_quota(code)["used"] == 2
