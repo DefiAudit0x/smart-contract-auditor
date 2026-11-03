@@ -26,6 +26,16 @@ try:
     _has_cfg = True
 except ImportError:
     pass
+try:
+    from analyzers.reentrancy_evidence import (
+        GUARD_MODIFIERS,
+        callback_capable_calls,
+        function_read_write_sets,
+        cross_function_pairs,
+    )
+    _has_reentrancy_evidence = True
+except ImportError:
+    _has_reentrancy_evidence = False
 
 
 def _get_function_body(code: str, func_name: str, params: list) -> str:
@@ -64,13 +74,28 @@ def _find_external_calls(body: str) -> list:
 
 
 def _find_state_writes(body: str, state_vars: list) -> list:
-    """Find state variable assignments in function body."""
+    """Find state variable assignments in function body.
+
+    Only genuine writes count: ``=``/``+=``/``-=``/``*=``/``/=``/``%=``,
+    ``++``/``--``, and ``delete`` of a state variable (including indexed
+    and struct-field forms).  The previous pattern also matched any
+    ``balances[`` *read* (and the word ``mapping``), which misclassified
+    reads as writes and could hide or invent CEI violations.
+    """
     writes = []
     var_names = [sv.get("name", "") for sv in state_vars if sv.get("name")]
     for v in var_names:
-        # Match: var = ..., var += ..., var -= ..., var[index] = ..., mapping[v].field = ...
-        pat = rf"(?:{re.escape(v)}\s*\[[^\]]*\]\s*=|{re.escape(v)}\s*=|mapping|balances?\s*\[)"
+        pat = rf"\b{re.escape(v)}\b(?:\s*\[[^\]]*\]|\s*\.\s*[A-Za-z_]\w*)*"
         for m in re.finditer(pat, body):
+            tail = body[m.end():m.end() + 4].lstrip()
+            prefix = body[max(0, m.start() - 8):m.start()]
+            is_write = (
+                re.search(r"\bdelete\s*$", prefix) is not None
+                or tail.startswith(("++", "--"))
+                or re.match(r"[+\-*/%]?=", tail) is not None
+            )
+            if not is_write:
+                continue
             line_no = body[:m.start()].count("\n") + 1
             writes.append((m.start(), f"state_write:{v}", m.group()[:40], line_no))
     return sorted(writes, key=lambda x: x[0])
@@ -160,27 +185,49 @@ def _arbitrary_call(func, body: str) -> tuple:
     return False, ""
 
 
-def _cross_function_reentrancy(contract) -> tuple:
-    """Detect cross-function reentrancy risk: 2+ functions sharing state + external calls."""
-    ext_call_fns = []
+def _cross_function_reentrancy(contract, code: str = "") -> tuple:
+    """Detect cross-function reentrancy (issue #32).
+
+    The old implementation associated *every* unguarded external-call
+    function with *every* contract state variable, so two unrelated
+    functions could be reported as sharing state they never touch.
+    This version builds per-function read/write sets from each
+    function's body and requires a shared, actually-used state variable
+    plus a feasible reentrant sequence (see
+    ``analyzers.reentrancy_evidence.cross_function_pairs``).  Without
+    source text no read/write sets can be built, so no finding is
+    emitted rather than a false positive.
+    """
+    if not code:
+        return False, ""
+    state_vars = [sv.get("name", "") for sv in contract.state_vars if sv.get("name")]
+    functions = []
     for func in contract.functions:
-        if func.external_calls and not any(
-            mod in func.modifiers for mod in ("nonReentrant", "reentrancyGuard")
-        ):
-            ext_call_fns.append(func.name)
-    shared_state = {}
-    for func in contract.functions:
-        if func.name in ext_call_fns:
-            for sv in contract.state_vars:
-                sv_name = sv.get("name", "")
-                if sv_name:
-                    shared_state.setdefault(sv_name, []).append(func.name)
-    risky_pairs = [(s, fns) for s, fns in shared_state.items() if len(fns) >= 2]
-    if risky_pairs:
-        details = "; ".join(f"{s}: {', '.join(fns)}" for s, fns in risky_pairs[:3])
+        body = _get_function_body(code, func.name, func.parameters)
+        if not body:
+            continue
+        functions.append({
+            "name": func.name,
+            "modifiers": list(func.modifiers or []),
+            "body": body,
+            # ASTFunction.visibility defaults to "public"; only
+            # externally callable functions can be re-entered.
+            "callable": getattr(func, "visibility", "public") in (
+                "public", "external",
+            ),
+        })
+    if _has_reentrancy_evidence:
+        pairs = cross_function_pairs(functions, state_vars)
+    else:  # pragma: no cover - evidence module is part of the package
+        pairs = []
+    if pairs:
+        details = "; ".join(
+            f"{p['caller']} -> {p['callee']} via {', '.join(p['shared'])}"
+            for p in pairs[:3]
+        )
         return True, (
             f"Cross-function reentrancy in '{contract.name}': "
-            f"{len(ext_call_fns)} unprotected external-call functions share state ({details})"
+            f"reentrant call sequence ({details})"
         )
     return False, ""
 
@@ -228,7 +275,7 @@ def analyze_ast(code: str) -> str:
                 if ok:
                     findings.append(f"- [{severity}] {rule_name}: {msg}")
 
-        ok, msg = _cross_function_reentrancy(contract)
+        ok, msg = _cross_function_reentrancy(contract, code)
         if ok:
             findings.append(f"- [Critical] Cross-function Reentrancy: {msg}")
 
