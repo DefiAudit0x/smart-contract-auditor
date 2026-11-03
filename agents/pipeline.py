@@ -298,6 +298,28 @@ def chunked_audit(code: str) -> str:
     return header + body
 
 
+def _mark_unverified(report: str, reason: str) -> str:
+    """Fail-closed (issue #27): share the gate's UNVERIFIED banner wording.
+
+    Prefer gate_validator.mark_unverified when the gate module is
+    available; fall back to the same banner text so a missing gate
+    import can never silently restore the original report as validated.
+    """
+    if report.startswith("### Validation Warning"):
+        return report
+    if _has_gate and _gate is not None and hasattr(_gate, "mark_unverified"):
+        try:
+            return _gate.mark_unverified(report, reason)
+        except Exception:
+            pass
+    return (
+        "### Validation Warning\n\n"
+        f"The validation gate failed to validate this run ({reason}). The "
+        "original report is preserved below UNCHANGED for human review - "
+        "treat this run as UNVERIFIED, not as a clean audit.\n\n"
+    ) + report
+
+
 def analyze_code(code: str, model_key: str = "") -> str:
     code = truncate_code(code, model_key)
 
@@ -342,7 +364,17 @@ def analyze_code(code: str, model_key: str = "") -> str:
                 result = validated
                 logger.info("Second-pass validation applied — false positives stripped")
         except Exception as e:
-            logger.debug(f"Validation skipped: {e}")
+            # Fail-closed (issue #27): never continue with the original
+            # LLM report as if validation had succeeded.  Return early
+            # so the gate step, CVSS scoring and KB learning cannot strip
+            # the UNVERIFIED banner or learn unvalidated findings.
+            logger.warning(f"Validation failed, marking report UNVERIFIED: {e}")
+            return _mark_unverified(result, f"second-pass validation error: {e}")
+        # The second-pass validator itself returns an UNVERIFIED banner
+        # on failure (see agents/validation.py); do not let the gate
+        # step rebuild a cleaned report from it and drop that banner.
+        if result.startswith("### Validation Warning"):
+            return result
 
     if result and _has_gate:
         try:
@@ -357,7 +389,8 @@ def analyze_code(code: str, model_key: str = "") -> str:
                 result = gated
                 logger.info("Third-pass (7-Question Gate) validation applied")
         except Exception as e:
-            logger.debug(f"7-Question Gate validation skipped: {e}")
+            logger.warning(f"7-Question Gate validation failed, marking report UNVERIFIED: {e}")
+            return _mark_unverified(result, f"gate validation error: {e}")
 
     cvss_data = cvss_score_report(result)
     if cvss_data.get("findings"):

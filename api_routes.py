@@ -267,7 +267,15 @@ def api_analyze_stream():
                     if validated and len(validated) > 50:
                         full_report = validated
                 except Exception as e:
-                    logger.debug(f"Validation in stream skipped: {e}")
+                    # Fail-closed (issue #27): do not stream the original
+                    # report as if validation had succeeded.
+                    logger.warning(f"Validation in stream failed, marking UNVERIFIED: {e}")
+                    full_report = (
+                        "### Validation Warning\n\n"
+                        f"The validation gate failed to validate this run (stream validation error: {e}). The "
+                        "original report is preserved below UNCHANGED for human review - "
+                        "treat this run as UNVERIFIED, not as a clean audit.\n\n"
+                    ) + full_report
                 yield f"data: {json.dumps({'type': 'step', 'step': 3, 'status': 'done'})}\n\n"
 
             # Step 4: CVSS scoring

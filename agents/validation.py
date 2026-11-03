@@ -59,8 +59,17 @@ def validate_report(report: str, code: str, language: str = "english") -> str:
     try:
         return call_model_with_fallback(prompt)
     except Exception as e:
+        # Fail-closed (issue #27): an LLM validator failure must never
+        # be mistaken for a successful validation.  Return the original
+        # report only with an explicit UNVERIFIED banner; the pipeline
+        # detects this banner and returns it without further cleaning.
         logger.warning(f"Validation failed: {e}")
-        return report
+        return (
+            "### Validation Warning\n\n"
+            f"The validation gate failed to validate this run (second-pass validation error: {e}). The "
+            "original report is preserved below UNCHANGED for human review - "
+            "treat this run as UNVERIFIED, not as a clean audit.\n\n"
+        ) + report
 
 
 def self_critique(report: str, code: str) -> str:
