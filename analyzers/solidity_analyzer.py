@@ -9,6 +9,7 @@ from .solidity_ast import (
     compile_to_ast, analyze_contracts, _extract_function, _traverse, _get_node_type, _get_name, HAS_SOLCAST,
     ASTContract, ASTFunction,
 )
+from .reentrancy_evidence import classify_function, extract_function_body
 
 logger = logging.getLogger(__name__)
 
@@ -133,16 +134,60 @@ class SolidityAnalyzer(LanguageAnalyzer):
     # ════════════════════════════════════════
 
     def _check_reentrancy_ast(self, fname, code):
-        """AST: detect reentrancy — external call without nonReentrant"""
+        """AST reentrancy (issue #31).
+
+        Old behaviour: any function with an external call and no
+        ``nonReentrant`` modifier was reported as Critical reentrancy,
+        with no proof of callback capability, state mutation, or a
+        reentrant path.  New behaviour, via
+        ``analyzers.reentrancy_evidence.classify_function``:
+        * guarded (``nonReentrant``/``reentrancyGuard``) -> no finding;
+        * callback-capable call (``call``/``delegatecall``) followed by
+          a write to a declared state variable -> Critical
+          "Reentrancy (AST)", citing the call and the written variable;
+        * any external call but no such evidence -> Medium
+          "External Call Without Recognized Guard", explicitly *not*
+          a confirmed reentrancy finding.  A missing function body is
+          also "no evidence", never Critical.
+        """
         findings = []
         for c in self._contracts_for(fname):
+            state_vars = [sv.get("name", "") for sv in c.state_vars if sv.get("name")]
             for fn in c.functions:
-                if fn.external_calls and 'nonReentrant' not in fn.modifiers:
+                if not fn.external_calls:
+                    continue
+                body = extract_function_body(code, fn.name)
+                if not body:
+                    # AST says the function makes external calls but its
+                    # source could not be located: no evidence, so a
+                    # guard note at most -- never Critical.
+                    if "nonReentrant" not in fn.modifiers and "reentrancyGuard" not in fn.modifiers:
+                        findings.append(Finding("External Call Without Recognized Guard", "Medium", "Reentrancy",
+                                       fname, fn.name,
+                                       f"Function '{fn.name}' calls {fn.external_calls[0]} without a recognized "
+                                       f"reentrancy guard, but its body could not be located to confirm "
+                                       f"call-before-state-write evidence",
+                                       f"def {fn.name}(): calls={fn.external_calls}", 0,
+                                       "Add nonReentrant or follow the checks-effects-interactions pattern"))
+                    continue
+                kind, evidence = classify_function(fn.modifiers, body, state_vars)
+                if kind == "confirmed":
+                    _, call_member, write_var, _ = evidence
                     findings.append(Finding("Reentrancy (AST)", "Critical", "Reentrancy",
                                    fname, fn.name,
-                                   f"Function '{fn.name}' calls {fn.external_calls[0]} without nonReentrant",
+                                   f"Function '{fn.name}': callback-capable '{call_member}' "
+                                   f"followed by state write to '{write_var}' "
+                                   f"without a recognized reentrancy guard",
                                    f"def {fn.name}(): calls={fn.external_calls}", 0,
                                    "Follow the checks-effects-interactions pattern or add nonReentrant"))
+                elif kind == "guard-note":
+                    findings.append(Finding("External Call Without Recognized Guard", "Medium", "Reentrancy",
+                                   fname, fn.name,
+                                   f"Function '{fn.name}' calls {fn.external_calls[0]} without a recognized "
+                                   f"reentrancy guard, but no confirmed call-before-state-write evidence "
+                                   f"was found, so this is not reported as confirmed reentrancy",
+                                   f"def {fn.name}(): calls={fn.external_calls}", 0,
+                                   "Add nonReentrant or follow the checks-effects-interactions pattern"))
         return findings
 
     def _check_delegatecall(self, fname, code):

@@ -13,22 +13,48 @@ except ImportError:
     pass
 
 _EXTERNAL_CALL_MEMBERS = {'call', 'delegatecall', 'staticcall', 'transfer', 'send'}
+# Only these can call back into the contract and change state.  A
+# staticcall cannot write state, and transfer/send forward only 2300
+# gas, so neither is a callback-capable channel for confirmed
+# reentrancy (issue #33, staticcall semantics).
+_CALLBACK_CAPABLE_MEMBERS = {'call', 'delegatecall'}
 
 
-def _has_external_call(node) -> bool:
-    """Check if a node subtree contains an external call (MemberAccess with call/transfer/etc)."""
+def _external_call_members(node) -> set:
+    """MemberAccess call kinds found in a node subtree."""
+    members = set()
     try:
         for child in node.children():
             ct = _get_node_type(child)
             if ct == 'MemberAccess':
                 member = getattr(child, 'memberName', '')
                 if member in _EXTERNAL_CALL_MEMBERS:
-                    return True
-            if _has_external_call(child):
-                return True
+                    members.add(member)
+            members.update(_external_call_members(child))
     except Exception:
         pass
-    return False
+    return members
+
+
+def _has_external_call(node) -> bool:
+    """Check if a node subtree contains an external call (MemberAccess with call/transfer/etc)."""
+    return bool(_external_call_members(node))
+
+
+def _func_modifiers(func_node) -> list:
+    """Modifier names applied to a function definition node."""
+    mods = []
+    try:
+        for child in func_node.children():
+            if _get_node_type(child) == 'ModifierInvocation':
+                mod_name = getattr(child, 'modifierName', None)
+                mods.append(_get_name(mod_name) if mod_name is not None else _get_name(child))
+    except Exception:
+        pass
+    return mods
+
+
+_GUARD_MODIFIERS = {'nonReentrant', 'reentrancyGuard'}
 
 
 def _find_state_writes(node, state_vars: Set[str]) -> Set[str]:
@@ -41,6 +67,18 @@ def _find_state_writes(node, state_vars: Set[str]) -> Set[str]:
             if lhs_name in state_vars:
                 writes.add(lhs_name)
             base_expr = getattr(lhs, 'baseExpression', None) or getattr(lhs, 'base', None)
+            if base_expr:
+                base_name = _get_name(base_expr)
+                if base_name in state_vars:
+                    writes.add(base_name)
+    elif nt == 'UnaryOperation' and getattr(node, 'operator', '') in ('++', '--'):
+        # Counter increments/decrements (issue #33 regression list).
+        sub = getattr(node, 'subExpression', None)
+        if sub is not None:
+            sub_name = _get_name(sub)
+            if sub_name in state_vars:
+                writes.add(sub_name)
+            base_expr = getattr(sub, 'baseExpression', None) or getattr(sub, 'base', None)
             if base_expr:
                 base_name = _get_name(base_expr)
                 if base_name in state_vars:
@@ -74,7 +112,8 @@ def _find_state_reads(node, state_vars: Set[str]) -> Set[str]:
 
 
 class Block:
-    __slots__ = ('id', 'stmts', 'succ', 'pred', 'has_call', 'has_write', 'writes', 'calls', 'reads', 'has_terminator')
+    __slots__ = ('id', 'stmts', 'succ', 'pred', 'has_call', 'has_write', 'writes', 'calls', 'reads', 'has_terminator',
+                 'call_stmts', 'write_stmts')
     def __init__(self, bid: int):
         self.id = bid
         self.stmts = []
@@ -86,6 +125,12 @@ class Block:
         self.calls = []
         self.reads = set()
         self.has_terminator = False
+        # Statement indices *within* this block, so a call and a later
+        # write in the same straight-line block can be ordered
+        # (issue #33).  Previously every call/write was recorded with
+        # index 0 and same-block pairs were ignored entirely.
+        self.call_stmts = []   # [(stmt_index, member), ...]
+        self.write_stmts = []  # [(stmt_index, var), ...]
 
 
 class CFG:
@@ -109,7 +154,7 @@ class CFG:
             return after[0] if after else -1
         entry = self._new_block()
         cur = entry
-        for stmt in stmts:
+        for stmt_index, stmt in enumerate(stmts):
             nt = _get_node_type(stmt)
             if nt == 'IfStatement':
                 cur = self._build_if(stmt, state_vars, cur, after)
@@ -121,13 +166,18 @@ class CFG:
                 cur = self._new_block()
             else:
                 cur.stmts.append(stmt)
-                if _has_external_call(stmt):
+                members = _external_call_members(stmt)
+                callback_members = members & _CALLBACK_CAPABLE_MEMBERS
+                if callback_members:
                     cur.has_call = True
-                    cur.calls.append((0, nt))
+                    for member in sorted(callback_members):
+                        cur.calls.append((stmt_index, member))
+                        cur.call_stmts.append((stmt_index, member))
                 writes = _find_state_writes(stmt, state_vars)
                 if writes:
                     cur.has_write = True
-                    cur.writes.extend((0, w) for w in writes)
+                    cur.writes.extend((stmt_index, w) for w in writes)
+                    cur.write_stmts.extend((stmt_index, w) for w in writes)
                 reads = _find_state_reads(stmt, state_vars)
                 cur.reads.update(reads)
         if not cur.has_terminator and after:
@@ -192,6 +242,26 @@ class CFG:
 
     def find_reentrancy_paths(self) -> List[dict]:
         findings = []
+        # (a) Same-block, straight-line CALL -> WRITE (issue #33).  This
+        # was previously impossible: the old code required
+        # call_block != write_block, so the classic withdraw pattern --
+        # call and state write in one straight-line body -- was missed.
+        # Statement indices are monotonic within a block, so index
+        # order is execution order here.
+        for bid, b in self.blocks.items():
+            if b.has_terminator:
+                continue
+            for call_index, member in b.call_stmts:
+                for write_index, var in b.write_stmts:
+                    if write_index > call_index:
+                        findings.append({
+                            'call_block': bid,
+                            'write_block': bid,
+                            'same_block': True,
+                            'calls': [(call_index, member)],
+                            'writes': [(write_index, var)],
+                        })
+        # (b) Cross-block CALL -> WRITE along a CFG edge.
         call_blocks = [bid for bid, b in self.blocks.items() if b.has_call and not b.has_terminator]
         write_blocks = [bid for bid, b in self.blocks.items() if b.has_write]
         for cbid in call_blocks:
@@ -200,13 +270,22 @@ class CFG:
                     findings.append({
                         'call_block': cbid,
                         'write_block': wbid,
+                        'same_block': False,
                         'calls': self.blocks[cbid].calls,
                         'writes': self.blocks[wbid].writes,
                     })
         return findings
 
 
-def analyze_func_flow(func_node, state_vars: Set[str]) -> dict:
+def analyze_func_flow(func_node, state_vars: Set[str], modifiers=None) -> dict:
+    # Guard modifiers (issue #33): a guarded function cannot be
+    # re-entered, so its CFG paths are not confirmed reentrancy.
+    if modifiers and any(m in _GUARD_MODIFIERS for m in modifiers):
+        return {
+            'reentrancy_paths': 0,
+            'reentrancy_details': [],
+            'blocks': 0,
+        }
     cfg = CFG()
     cfg.build(func_node, state_vars)
     reentrancy = cfg.find_reentrancy_paths()
@@ -231,7 +310,7 @@ def analyze_flow(code: str) -> List[str]:
         state_vars = {sv['name'] for sv in contract.state_vars if sv.get('name')}
         for func_node in _get_func_nodes(units, contract.name):
             func_name = _get_name(func_node)
-            flow = analyze_func_flow(func_node, state_vars)
+            flow = analyze_func_flow(func_node, state_vars, _func_modifiers(func_node))
             if flow['reentrancy_paths'] > 0:
                 details = flow['reentrancy_details'][:3]
                 detail_str = ', '.join(
