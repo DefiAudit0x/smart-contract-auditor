@@ -293,7 +293,7 @@ def generate_h1_report(report: str, code: str = "", label: str = "Smart Contract
             f"## Vulnerability #{i}: {finding['name']}",
             "",
             f"**Severity**: {finding['severity']}",
-            f"**CVSS 4.0 Score**: {finding['cvss_score']}/10 ({finding['cvss_severity']})",
+            f"**CVSS 4.0 Score**: {'Not assessed' if finding['cvss_score'] is None else str(finding['cvss_score']) + '/10 (' + finding['cvss_severity'] + ')'} [{finding.get('method', '')} | {finding.get('provenance', '')}]",
             f"**CVSS Vector**: `{finding['cvss_vector']}`",
             "",
             f"### Description",
@@ -374,7 +374,8 @@ def generate_h1_short(report: str, label: str = "Smart Contract") -> str:
 
     for i, finding in enumerate(cvss["findings"], 1):
         lines.append(f"### {i}. {finding['name']}")
-        lines.append(f"**CVSS**: {finding['cvss_score']}/10 | **Severity**: {finding['severity']}")
+        score_txt = 'Not assessed' if finding['cvss_score'] is None else f"{finding['cvss_score']}/10"
+        lines.append(f"**CVSS**: {score_txt} [{finding.get('method', '')} | {finding.get('provenance', '')}] | **Severity**: {finding['severity']}")
         lines.append("")
 
     lines.append("")
