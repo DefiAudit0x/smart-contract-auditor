@@ -89,10 +89,16 @@ def _find_state_writes(body: str, state_vars: list) -> list:
         for m in re.finditer(pat, body):
             tail = body[m.end():m.end() + 4].lstrip()
             prefix = body[max(0, m.start() - 8):m.start()]
+            # A comparison '==' is not a write: the naive pattern
+            # '[+-*/%]?=' matches the first '=' of '==', so e.g.
+            # 'strategy.maker == address(0)' was misread as a write
+            # to 'maker'.  Reject an operator match followed by '='
+            # ('==') or '>' ('=>'); '>='/'<='/'!=' never match here.
+            _m = re.match(r"[+\-*/%]?=", tail)
             is_write = (
                 re.search(r"\bdelete\s*$", prefix) is not None
                 or tail.startswith(("++", "--"))
-                or re.match(r"[+\-*/%]?=", tail) is not None
+                or (_m is not None and tail[_m.end():_m.end() + 1] not in ("=", ">"))
             )
             if not is_write:
                 continue

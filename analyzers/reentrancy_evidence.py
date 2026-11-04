@@ -96,6 +96,23 @@ def _var_ref_pattern(var: str) -> str:
     return rf"\b{v}\b(?:\s*\[[^\]]*\]|\s*\.\s*[A-Za-z_]\w*)*"
 
 
+def _is_assignment_tail(tail: str) -> bool:
+    """True only for a genuine assignment operator at the start of *tail*.
+
+    ``==`` is a comparison, not a write: the naive pattern ``[+-*/%]?=``
+    matches the first '=' of '==', so a comparison such as
+    ``strategy.maker == address(0)`` was misread as a write to 'maker'.
+    Reject an operator match immediately followed by '=' (``==``) or '>'
+    (``=>``); a plain '=', '+=', '-=', '*=', '/=' or '%=' followed by
+    anything else is a write.  '>=' / '<=' / '!=' never match in the
+    first place because their first character is not in the set.
+    """
+    m = re.match(r"[+\-*/%]?=", tail or "")
+    if m is None:
+        return False
+    return tail[m.end():m.end() + 1] not in ("=", ">")
+
+
 def function_read_write_sets(body: str, state_vars):
     """Per-function read/write sets for the given state variables.
 
@@ -125,7 +142,7 @@ def function_read_write_sets(body: str, state_vars):
                 writes.add(var)
                 reads.add(var)
                 continue
-            if re.match(r"[+\-*/%]?=", tail):
+            if _is_assignment_tail(tail):
                 writes.add(var)
                 reads.add(var)
                 continue
@@ -161,7 +178,7 @@ def call_before_write_evidence(body: str, state_vars):
             is_write = (
                 re.search(r"\bdelete\s*$", prefix) is not None
                 or tail.startswith(("++", "--"))
-                or re.match(r"[+\-*/%]?=", tail) is not None
+                or _is_assignment_tail(tail)
             )
             if is_write:
                 return (first_call_pos, first_call_member, var, m.start())

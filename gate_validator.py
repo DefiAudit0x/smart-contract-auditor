@@ -140,9 +140,21 @@ _KEYWORDS = {
 
 
 def _extract_function_body(code: str, start: int) -> str:
-    """Return the brace-matched body starting at the first '{' at/after start."""
+    """Return the brace-matched body starting at the first '{' at/after start.
+
+    A ';' before that '{' means the match was a body-less declaration
+    (interface function, abstract function), not a real function: there
+    is no body to extract, so return "" instead of jumping forward to
+    the next '{' in the file (which would be another declaration's or
+    the enclosing contract's brace, misattributing its whole body to
+    the declaration).  A real function header never contains ';'
+    before its opening brace.
+    """
     open_idx = code.find("{", start)
     if open_idx < 0:
+        return ""
+    semi_idx = code.find(";", start)
+    if 0 <= semi_idx < open_idx:
         return ""
     depth = 0
     for i in range(open_idx, len(code)):
@@ -160,6 +172,20 @@ def _parse_code_functions(code: str) -> Dict[str, Dict]:
     for m in _FUNCTION_RE.finditer(code or ""):
         name, params, suffix = m.group(1), m.group(2), m.group(3) or ""
         if name in _KEYWORDS:
+            continue
+        # Skip body-less declarations (interface / abstract functions):
+        # their match ends before a ';' with no '{' body, so they must
+        # never appear as analysable functions.  Without this, the
+        # extractor below would hand them the enclosing contract's
+        # body and every finding in that body would be misattributed
+        # to the declaration (e.g. a Critical reentrancy "in addr()"
+        # for an interface declaration at line 11 of MandateAquaApp).
+        # Note: this checks for a body, not for a non-empty body --
+        # a real function with an empty '{}' body still counts as a
+        # function, it just yields no findings.
+        _open = code.find("{", m.end())
+        _semi = code.find(";", m.end())
+        if _open < 0 or (0 <= _semi < _open):
             continue
         functions[name] = {
             "params": params,
