@@ -23,6 +23,197 @@ _ESTIMATE_NOTE = (
     "publication. Install the 'cvss' package for official scoring."
 )
 
+# Explicit CVSS 4.0 base metrics (issue #29). A finding is only an
+# attribute assessment when all eight are supplied; anything else is
+# either a labelled fallback estimate or "not assessed" — never a
+# precise-looking score silently completed from a severity label.
+_BASE_METRICS = ("AV", "AC", "AT", "PR", "UI", "VC", "VI", "VA")
+_SUBSEQUENT_METRICS = ("SC", "SI", "SA")
+_METRIC_LEGAL_VALUES = {
+    "AV": {"N", "A", "L", "P"},
+    "AC": {"L", "H"},
+    "AT": {"N", "P"},
+    "PR": {"N", "L", "H"},
+    "UI": {"N", "P", "A"},
+    "VC": {"N", "L", "H"},
+    "VI": {"N", "L", "H"},
+    "VA": {"N", "L", "H"},
+    "SC": {"N", "L", "H"},
+    "SI": {"N", "L", "H"},
+    "SA": {"N", "L", "H"},
+}
+
+# Phrases that negate a category mention in nearby text, e.g.
+# "not vulnerable to reentrancy", "no reentrancy found",
+# "reentrancy is not present". A negated mention must never trigger
+# the positive category mapping (issue #29).
+_NEGATION_WORDS = (
+    "not", "no", "never", "without", "absent", "none",
+    "not vulnerable", "not exploitable", "not present", "not affected",
+    "no evidence", "no impact", "not applicable",
+)
+
+import re as _re
+
+
+def _is_negated(text: str, start: int, end: int) -> bool:
+    """True if a category mention at text[start:end] is negated nearby."""
+    before = text[max(0, start - 60):start].lower()
+    after = text[end:end + 40].lower()
+    # Negation before the mention: "not vulnerable to reentrancy",
+    # "no reentrancy", "without oracle manipulation".
+    for phrase in _NEGATION_WORDS:
+        if phrase in before:
+            return True
+    # Negation after the mention: "reentrancy is not present",
+    # "reentrancy: not exploitable", "oracle manipulation — no impact".
+    for phrase in ("not present", "not exploitable", "not vulnerable",
+                   "not applicable", "is absent", "no impact", "not found"):
+        if phrase in after:
+            return True
+    return False
+
+
+def category_hint_vector(text: str):
+    """Return (vector_part, category) for a non-negated category mention.
+
+    Matching is word-boundary based, not raw substring matching, so
+    e.g. "permissions" does not accidentally match a shorter key, and
+    any negated mention is skipped entirely.
+    """
+    lowered = (text or "").lower()
+    for key, (vec_part, _default_sev) in _VULN_CATEGORY_MAP.items():
+        pattern = r"\b" + _re.escape(key) + r"\b"
+        for match in _re.finditer(pattern, lowered):
+            if not _is_negated(lowered, match.start(), match.end()):
+                return vec_part, key
+    return None, None
+
+
+def validate_vector(vector: str):
+    """Validate a CVSS 4.0 vector string. Returns a list of error strings.
+
+    An empty list means the vector is well-formed: CVSS:4.0/ prefix,
+    all eight base metrics present with legal values, and any
+    subsequent metrics present with legal values.
+    """
+    errors = []
+    if not vector or not vector.startswith("CVSS:4.0/"):
+        return ["vector must start with 'CVSS:4.0/'"]
+    metrics = parse_vector(vector)
+    for metric in _BASE_METRICS:
+        if metric not in metrics:
+            errors.append(f"missing base metric {metric}")
+        elif metrics[metric] not in _METRIC_LEGAL_VALUES[metric]:
+            errors.append(
+                f"illegal value {metrics[metric]!r} for metric {metric}")
+    for metric, value in metrics.items():
+        if metric not in _METRIC_LEGAL_VALUES:
+            errors.append(f"unknown metric {metric}")
+        elif value not in _METRIC_LEGAL_VALUES[metric]:
+            errors.append(f"illegal value {value!r} for metric {metric}")
+    return errors
+
+
+def build_vector(attributes) -> str:
+    """Build a canonical CVSS 4.0 vector from explicit attributes.
+
+    All eight base metrics are required. Subsequent metrics default
+    to N when not supplied. Raises ValueError listing missing metrics
+    or illegal values instead of silently completing a vector.
+    """
+    attrs = {str(k).upper(): str(v).upper() for k, v in (attributes or {}).items()}
+    missing = [m for m in _BASE_METRICS if m not in attrs]
+    if missing:
+        raise ValueError(f"missing CVSS attributes: {', '.join(missing)}")
+    for metric, value in attrs.items():
+        if metric not in _METRIC_LEGAL_VALUES:
+            raise ValueError(f"unknown CVSS metric {metric}")
+        if value not in _METRIC_LEGAL_VALUES[metric]:
+            raise ValueError(f"illegal CVSS value {value!r} for metric {metric}")
+    parts = []
+    for metric in _BASE_METRICS + _SUBSEQUENT_METRICS:
+        parts.append(f"{metric}:{attrs.get(metric, 'N')}")
+    return "CVSS:4.0/" + "/".join(parts)
+
+
+def parse_cvss_attributes(text: str):
+    """Parse an explicit CVSS attribute/vector line, or return None.
+
+    Only structured lines are read — e.g. a finding line
+    "- **CVSS Attributes**: AV:N, AC:L, AT:N, PR:N, UI:N, VC:H, VI:H, VA:H"
+    or "- **CVSS Vector**: CVSS:4.0/AV:N/...". Free-text descriptions
+    are never parsed as attributes, so prose cannot fabricate them.
+    Returns {"vector": ...} or {"attributes": {...}}.
+    """
+    if not text:
+        return None
+    vector_match = _re.search(r"CVSS:4\.0/[A-Za-z0-9/:]+", text)
+    if vector_match:
+        return {"vector": vector_match.group(0)}
+    pairs = dict(_re.findall(r"\b(AV|AC|AT|PR|UI|VC|VI|VA|SC|SI|SA)\s*:\s*([A-Za-z])\b", text))
+    if pairs:
+        return {"attributes": pairs}
+    return None
+
+
+def _score_vector_with_provenance(vector: str, provenance: str) -> dict:
+    """Score a validated vector, labelling official vs estimate."""
+    official = _official_score(vector)
+    if official is not None:
+        return {"cvss_score": official, "method": "official",
+                "note": "", "provenance": provenance, "status": "assessed"}
+    metrics = parse_vector(vector)
+    return {"cvss_score": compute_base_score(metrics),
+            "method": "internal_estimate", "note": _ESTIMATE_NOTE,
+            "provenance": provenance, "status": "assessed"}
+
+
+def score_from_attributes(attributes) -> dict:
+    """Score explicit CVSS attributes, or return 'not assessed'.
+
+    Missing base attributes produce not_assessed (score None) rather
+    than a vector silently completed from defaults or a severity label.
+    """
+    attrs = {str(k).upper(): str(v).upper() for k, v in (attributes or {}).items()}
+    missing = [m for m in _BASE_METRICS if m not in attrs]
+    if missing:
+        return {"cvss_score": None, "cvss_vector": None,
+                "cvss_severity": "Not Assessed", "method": "not_assessed",
+                "provenance": "explicit_attributes",
+                "status": "not_assessed",
+                "note": ("Not assessed: missing CVSS attributes: "
+                         + ", ".join(missing)),
+                "missing": missing}
+    try:
+        vector = build_vector(attrs)
+    except ValueError as exc:
+        return {"cvss_score": None, "cvss_vector": None,
+                "cvss_severity": "Not Assessed", "method": "not_assessed",
+                "provenance": "explicit_attributes",
+                "status": "not_assessed", "note": f"Not assessed: {exc}"}
+    scored = _score_vector_with_provenance(vector, "explicit_attributes")
+    scored.update({"cvss_vector": vector,
+                   "cvss_severity": severity_from_score(scored["cvss_score"])})
+    return scored
+
+
+def score_from_vector(vector: str) -> dict:
+    """Score an explicit vector, or return 'not assessed' if invalid."""
+    errors = validate_vector(vector or "")
+    if errors:
+        return {"cvss_score": None, "cvss_vector": None,
+                "cvss_severity": "Not Assessed", "method": "not_assessed",
+                "provenance": "explicit_vector",
+                "status": "not_assessed",
+                "note": "Not assessed: invalid vector: " + "; ".join(errors),
+                "errors": errors}
+    scored = _score_vector_with_provenance(vector, "explicit_vector")
+    scored.update({"cvss_vector": vector,
+                   "cvss_severity": severity_from_score(scored["cvss_score"])})
+    return scored
+
+
 # CVSS 4.0 severity bands
 SEVERITY_BANDS = {
     "None": (0.0, 0.0),
@@ -133,12 +324,18 @@ def severity_from_score(score: float) -> str:
 
 
 def vector_from_severity(severity: str, category_hint: str = "") -> str:
-    """Generate a CVSS 4.0 vector string from severity and optional category."""
-    hint = category_hint.lower().strip()
-    for key, (vec_part, default_sev) in _VULN_CATEGORY_MAP.items():
-        if key in hint:
-            full_vec = f"CVSS:4.0/{vec_part}/SC:N/SI:N/SA:N"
-            return full_vec
+    """Legacy hint vector (kept for backward compatibility only).
+
+    Category matching is now word-boundary based and negated mentions
+    are skipped, so "not reentrancy" no longer triggers the reentrancy
+    vector. New assessments must use score_from_attributes() or
+    score_from_vector() instead: a vector built from a severity label
+    alone is a fallback estimate, never an attribute assessment, and
+    score_report() labels it as such.
+    """
+    vec_part, _category = category_hint_vector(category_hint)
+    if vec_part is not None:
+        return f"CVSS:4.0/{vec_part}/SC:N/SI:N/SA:N"
 
     clean_sev = severity.replace("*", "").replace("`", "").strip()
     for key in _DEFAULT_VECTORS:
@@ -148,7 +345,17 @@ def vector_from_severity(severity: str, category_hint: str = "") -> str:
 
 
 def score_report(report: str) -> Dict:
-    """Extract findings from a report and compute CVSS 4.0 scores for each."""
+    """Extract findings from a report and compute CVSS 4.0 scores for each.
+
+    Precedence per finding:
+      1. An explicit CVSS Vector / Attributes line -> attribute
+         assessment (or "not assessed" if invalid/incomplete).
+      2. Otherwise a legacy fallback estimate from a non-negated
+         category hint or, failing that, the severity label alone.
+         Fallbacks are labelled provenance="category_hint_estimate" or
+         "severity_hint_estimate" and are never presented as official
+         or as attribute assessments.
+    """
     import re
     findings = []
     lines = report.split("\n")
@@ -164,6 +371,12 @@ def score_report(report: str) -> Dict:
             current["severity"] = raw.replace("*", "").replace("`", "").strip()
         elif s.startswith("- **Description**") and current:
             current["description"] = s.split(":", 1)[1].strip() if ":" in s else ""
+        elif current and (s.startswith("- **CVSS Attributes**")
+                          or s.startswith("- **CVSS Vector**")
+                          or s.startswith("- **Vector**")):
+            parsed = parse_cvss_attributes(s.split(":", 1)[1] if ":" in s else "")
+            if parsed:
+                current["cvss_explicit"] = parsed
 
     if current and current.get("name"):
         findings.append(current)
@@ -173,39 +386,124 @@ def score_report(report: str) -> Dict:
         name = f.get("name", "?")
         sev = f.get("severity", "Medium")
         desc = f.get("description", "")
-        vector = vector_from_severity(sev, desc)
-        metrics = parse_vector(vector)
-        official = _official_score(vector)
-        if official is not None:
-            score = official
-            method = "official"
-            note = ""
+        explicit = f.get("cvss_explicit")
+        if explicit and "vector" in explicit:
+            result = score_from_vector(explicit["vector"])
+            result.update({"name": name, "severity": sev,
+                           "requested_severity": sev})
+            scored.append(result)
+            continue
+        if explicit and "attributes" in explicit:
+            result = score_from_attributes(explicit["attributes"])
+            result.update({"name": name, "severity": sev,
+                           "requested_severity": sev})
+            scored.append(result)
+            continue
+        # Legacy fallback: labelled estimate, never an assessment.
+        vec_part, category = category_hint_vector(desc)
+        if vec_part is not None:
+            vector = f"CVSS:4.0/{vec_part}/SC:N/SI:N/SA:N"
+            provenance = "category_hint_estimate"
+            fallback_note = (
+                "Category-hint estimate — not assessed from explicit "
+                f"CVSS attributes (hint: {category}); " + _ESTIMATE_NOTE)
         else:
-            score = compute_base_score(metrics)
-            method = "internal_estimate"
-            note = _ESTIMATE_NOTE
-        severity_band = severity_from_score(score)
+            vector = vector_from_severity(sev, "")
+            provenance = "severity_hint_estimate"
+            fallback_note = (
+                "Severity-hint estimate — vector derived from the "
+                "severity label alone, not from explicit CVSS "
+                "attributes; " + _ESTIMATE_NOTE)
+        scored_part = _score_vector_with_provenance(vector, provenance)
         scored.append({
             "name": name,
             "severity": sev,
             "cvss_vector": vector,
-            "cvss_score": score,
-            "cvss_severity": severity_band,
+            "cvss_score": scored_part["cvss_score"],
+            "cvss_severity": severity_from_score(scored_part["cvss_score"]),
             "requested_severity": sev,
-            "method": method,
-            "note": note,
+            "method": scored_part["method"],
+            "note": fallback_note if scored_part["method"] == "internal_estimate" else (
+                "Category/severity-hint estimate scored with the official "
+                "formula — still not an attribute assessment; "
+                f"provenance: {provenance}."),
+            "provenance": provenance,
+            "status": "fallback_estimate",
         })
 
-    overall_score = 0.0
-    if scored:
-        overall_score = max(s["cvss_score"] for s in scored)
+    numeric_scores = [s["cvss_score"] for s in scored
+                      if isinstance(s.get("cvss_score"), (int, float))]
+    overall_score = max(numeric_scores) if numeric_scores else 0.0
     overall_severity = severity_from_score(overall_score)
+    if all(s.get("status") == "not_assessed" for s in scored) and scored:
+        overall_status = "not_assessed"
+    elif any(s.get("status") == "not_assessed" for s in scored):
+        overall_status = "partially_assessed"
+    else:
+        overall_status = "assessed_or_estimated"
 
     return {
         "findings": scored,
         "overall_score": overall_score,
         "overall_severity": overall_severity,
+        "overall_status": overall_status,
         "total_findings": len(scored),
+    }
+
+
+def _first_letter(value, metric: str) -> str:
+    """Map a metric argument to its CVSS letter, validating it.
+
+    Accepts a single letter ("N") or a word ("Network" -> "N").
+    Raises ValueError for anything that does not map to a legal value
+    instead of silently scoring a mis-parsed metric.
+    """
+    if not value:
+        raise ValueError(f"missing CVSS metric {metric}")
+    letter = str(value).strip()[0].upper()
+    if letter not in _METRIC_LEGAL_VALUES[metric]:
+        raise ValueError(f"illegal CVSS value {value!r} for metric {metric}")
+    return letter
+
+
+def compute_cvss_detailed(attack_vector: str = "N", complexity: str = "L",
+                          privileges: str = "N", user_interaction: str = "N",
+                          confidentiality: str = "H", integrity: str = "H",
+                          availability: str = "H") -> Dict:
+    """Compute CVSS 4.0 from explicit metric values, with provenance.
+
+    AT, SC, SI and SA are not parameters of this helper and are fixed
+    to N; that limitation is stated in the returned note, not hidden.
+    Returns a dict including method ("official" or "internal_estimate")
+    so callers can never mistake an estimate for an official score.
+    """
+    metrics = {
+        "AV": _first_letter(attack_vector, "AV"),
+        "AC": _first_letter(complexity, "AC"),
+        "AT": "N",
+        "PR": _first_letter(privileges, "PR"),
+        "UI": _first_letter(user_interaction, "UI"),
+        "VC": _first_letter(confidentiality, "VC"),
+        "VI": _first_letter(integrity, "VI"),
+        "VA": _first_letter(availability, "VA"),
+        "SC": "N",
+        "SI": "N",
+        "SA": "N",
+    }
+    vector = build_vector(metrics)
+    scored = _score_vector_with_provenance(vector, "explicit_attributes")
+    note = scored["note"]
+    if note:
+        note += " AT/SC/SI/SA fixed to N by this helper."
+    return {
+        "cvss_score": scored["cvss_score"],
+        "cvss_severity": severity_from_score(scored["cvss_score"]),
+        "cvss_vector": vector,
+        "method": scored["method"],
+        "provenance": "explicit_attributes",
+        "status": "assessed",
+        "note": note,
+        "attributes": metrics,
     }
 
 
@@ -213,26 +511,16 @@ def compute_cvss(attack_vector: str = "N", complexity: str = "L",
                  privileges: str = "N", user_interaction: str = "N",
                  confidentiality: str = "H", integrity: str = "H",
                  availability: str = "H") -> Tuple[float, str, str]:
-    """Compute CVSS 4.0 from individual metric values. Returns (score, severity, vector)."""
-    metrics = {
-        "AV": attack_vector[0].upper() if attack_vector else "N",
-        "AC": complexity[0].upper() if complexity else "L",
-        "AT": "N",
-        "PR": privileges[0].upper() if privileges else "N",
-        "UI": user_interaction[0].upper() if user_interaction else "N",
-        "VC": confidentiality[0].upper() if confidentiality else "H",
-        "VI": integrity[0].upper() if integrity else "H",
-        "VA": availability[0].upper() if availability else "H",
-        "SC": "N",
-        "SI": "N",
-        "SA": "N",
-    }
-    vector = f"CVSS:4.0/AV:{metrics['AV']}/AC:{metrics['AC']}/AT:N/PR:{metrics['PR']}/UI:{metrics['UI']}/VC:{metrics['VC']}/VI:{metrics['VI']}/VA:{metrics['VA']}/SC:N/SI:N/SA:N"
-    score = _official_score(vector)
-    if score is None:
-        score = compute_base_score(metrics)
-    sev = severity_from_score(score)
-    return score, sev, vector
+    """Compute CVSS 4.0 from individual metric values. Returns (score, severity, vector).
+
+    Kept as a tuple for backward compatibility with the web UI; use
+    compute_cvss_detailed() when provenance (official vs estimate)
+    matters, which it does for any client-facing output.
+    """
+    detailed = compute_cvss_detailed(
+        attack_vector, complexity, privileges, user_interaction,
+        confidentiality, integrity, availability)
+    return detailed["cvss_score"], detailed["cvss_severity"], detailed["cvss_vector"]
 
 
 def cvss_explanation(score: float, severity: str, vector: str) -> str:

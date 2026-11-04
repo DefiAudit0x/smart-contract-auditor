@@ -396,9 +396,21 @@ def analyze_code(code: str, model_key: str = "") -> str:
     if cvss_data.get("findings"):
         cvss_note = "\n\n### CVSS 4.0 Assessment\n"
         for f in cvss_data["findings"]:
+            # Provenance must reach the client-facing report (issue #29):
+            # an estimate or a not-assessed finding must never read as
+            # an official attribute assessment.
+            if f.get("cvss_score") is None:
+                score_text = "Not assessed"
+                vector_text = f.get("note", "Not assessed")
+            else:
+                score_text = f"{f['cvss_score']}/10 ({f['cvss_severity']})"
+                vector_text = f"`{f['cvss_vector']}`"
+            provenance = f.get("provenance", "")
+            method = f.get("method", "")
+            provenance_text = f" [{method} | {provenance}]" if provenance else ""
             cvss_note += (
-                f"- **{f['name']}**: {f['cvss_score']}/10 ({f['cvss_severity']}) "
-                f"`{f['cvss_vector']}`\n"
+                f"- **{f['name']}**: {score_text} "
+                f"{vector_text}{provenance_text}\n"
             )
         cvss_note += f"\n**Overall Max CVSS**: {cvss_data['overall_score']}/10 ({cvss_data['overall_severity']})"
         result += cvss_note
