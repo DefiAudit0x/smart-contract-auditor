@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Optional
@@ -17,6 +18,71 @@ from cli_display import console
 from agents.cache import _cache_get, _cache_set
 
 logger = logging.getLogger(__name__)
+
+# Streaming bounds (issues #25 and #26).
+# The old code passed ``timeout`` straight to ``requests.post(..., stream=True)``.
+# In requests that timeout is per read, not a total deadline: a provider that
+# trickles one chunk every < timeout seconds can keep a stream alive
+# indefinitely, and the generator never closed the upstream response on
+# disconnect. Hence two separate bounds, enforced in the streamers below:
+#   * total: the whole stream must finish within this many seconds
+#     (checked at every chunk boundary, so the worst case is total + idle,
+#     the time of one final read that was already in flight);
+#   * idle: the per-read timeout handed to requests, so a stalled trickle
+#     fails after this many seconds without a chunk, instead of after the
+#     old 300 s per-read timeout.
+# Defaults preserve the old nominal 300 s total budget while cutting the
+# idle allowance to 60 s, which is generous for LLM token gaps (normally
+# seconds) but bounds a slow trickle. Callers may override both per call.
+STREAM_TOTAL_TIMEOUT = 300
+STREAM_IDLE_TIMEOUT = 60
+
+# Stable, generic client-facing streaming error (issue #25). Upstream
+# exception text and provider error bodies are never sent to the caller;
+# they are only logged, redacted, on the server side.
+_STREAM_CLIENT_ERROR = "Upstream streaming failed. Please try again."
+
+_SECRET_PATTERNS = (
+    re.compile(r"Bearer\s+[^\s,;]+", re.IGNORECASE),
+    re.compile(r"sk-[A-Za-z0-9_-]{4,}"),
+    re.compile(r"(api[_-]?key|token|secret|password)\s*[:=]\s*[^\s,&\"]+", re.IGNORECASE),
+)
+
+
+def _redact_secrets(text: str) -> str:
+    """Redact credential-like fragments from a log message (best effort)."""
+    redacted = text or ""
+    for pattern in _SECRET_PATTERNS:
+        redacted = pattern.sub("[REDACTED]", redacted)
+    return redacted[:200]
+
+
+def _log_stream_error(provider: str, exc: BaseException) -> None:
+    """Log a streaming failure for the server side only, redacted."""
+    logger.warning(
+        "Streaming failed (%s, %s): %s",
+        provider,
+        type(exc).__name__,
+        _redact_secrets(str(exc)),
+    )
+
+
+def _stream_error_event() -> str:
+    return f"data: {json.dumps({'error': _STREAM_CLIENT_ERROR})}\n\n"
+
+
+def _resolve_stream_timeouts(timeout: int, total_timeout=None, idle_timeout=None):
+    """Return (total, idle) seconds for a stream call.
+
+    ``timeout`` keeps its old meaning as the nominal budget; explicit
+    total/idle overrides win. Idle never exceeds total, so a small total
+    (e.g. in tests) still bounds a single read.
+    """
+    total = total_timeout if total_timeout is not None else (timeout or STREAM_TOTAL_TIMEOUT)
+    idle = idle_timeout if idle_timeout is not None else STREAM_IDLE_TIMEOUT
+    total = max(1, int(total))
+    idle = max(1, min(int(idle), total))
+    return total, idle
 
 
 def _validate_text_input(prompt: str) -> str:
@@ -88,13 +154,23 @@ def _call_ollama(model_name: str, prompt: str, timeout: int = 0) -> str:
     raise Exception(f"Ollama failed after {MAX_RETRIES} attempts")
 
 
-def _stream_ollama(model_name: str, prompt: str, timeout: int = 300):
-    """Generator that yields tokens from Ollama as they arrive (SSE-style)."""
+def _stream_ollama(model_name: str, prompt: str, timeout: int = 300,
+                   total_timeout=None, idle_timeout=None):
+    """Generator that yields tokens from Ollama as they arrive (SSE-style).
+
+    Bounded (issue #26): the stream ends with a generic error once the
+    total budget is exceeded at a chunk boundary (worst case total + one
+    idle read), and a read that stalls longer than ``idle`` raises via
+    requests. The upstream response is always closed (finally), including
+    when the consumer disconnects and the generator is closed.
+    Errors are sanitized (issue #25): the caller only ever sees the
+    generic streaming error, never upstream exception text.
+    """
     prompt = _validate_text_input(prompt)
     if not prompt:
         yield "data: ERROR: Image files are not supported.\n\n"
         return
-    timeout = timeout or OLLAMA_TIMEOUT
+    total, idle = _resolve_stream_timeouts(timeout or OLLAMA_TIMEOUT, total_timeout, idle_timeout)
     if OLLAMA_API_KEY:
         url = f"{OLLAMA_BASE_URL.rstrip('/')}/api/chat"
         headers = {
@@ -111,11 +187,16 @@ def _stream_ollama(model_name: str, prompt: str, timeout: int = 300):
         url = f"{OLLAMA_BASE_URL.rstrip('/')}/api/generate"
         headers = {}
         payload = {"model": model_name, "prompt": prompt, "stream": True, "temperature": TEMPERATURE}
+    resp = None
     try:
-        resp = requests.post(url, headers=headers, json=payload, timeout=timeout, stream=True)
+        resp = requests.post(url, headers=headers, json=payload, timeout=idle, stream=True)
         resp.raise_for_status()
         full = []
+        started = time.monotonic()
         for line in resp.iter_lines(decode_unicode=True):
+            if time.monotonic() - started > total:
+                yield _stream_error_event()
+                return
             if not line:
                 continue
             if line.startswith("data: "):
@@ -124,9 +205,12 @@ def _stream_ollama(model_name: str, prompt: str, timeout: int = 300):
                 chunk = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            # Check if the model returned an API-level error
+            # Check if the model returned an API-level error. The provider
+            # text is logged (redacted) only; the caller gets the generic
+            # error, never the raw provider body.
             if 'error' in chunk:
-                yield f"data: {json.dumps({'error': chunk['error']})}\n\n"
+                _log_stream_error("ollama", Exception(str(chunk['error'])))
+                yield _stream_error_event()
                 return
             if OLLAMA_API_KEY:
                 delta = chunk.get("message", {}).get("content", "")
@@ -139,26 +223,47 @@ def _stream_ollama(model_name: str, prompt: str, timeout: int = 300):
                 yield f"data: {json.dumps({'done': True, 'full': ''.join(full)})}\n\n"
                 return
     except Exception as e:
-        yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        _log_stream_error("ollama", e)
+        yield _stream_error_event()
+    finally:
+        if resp is not None:
+            try:
+                resp.close()
+            except Exception:
+                pass
 
 
-def _stream_openrouter(model_id: str, prompt: str, timeout: int = 300):
-    """Generator that yields tokens from OpenRouter as they arrive (SSE-style)."""
+def _stream_openrouter(model_id: str, prompt: str, timeout: int = 300,
+                       total_timeout=None, idle_timeout=None):
+    """Generator that yields tokens from OpenRouter as they arrive (SSE-style).
+
+    Same bounds and sanitization as :func:`_stream_ollama` (issues #26
+    and #25): total budget checked at every chunk boundary, per-read
+    idle timeout handed to requests, upstream response always closed,
+    and the caller only ever sees the generic streaming error.
+    """
     from config import OPENROUTER_BASE_URL, get_api_key, TEMPERATURE
     key = get_api_key()
     if not key:
-        yield f"data: {json.dumps({'error': 'No OpenRouter API key configured'})}\n\n"
+        logger.warning("Streaming failed (openrouter): no API key configured")
+        yield _stream_error_event()
         return
+    total, idle = _resolve_stream_timeouts(timeout, total_timeout, idle_timeout)
+    resp = None
     try:
         resp = requests.post(
             f"{OPENROUTER_BASE_URL}/chat/completions",
             headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
             json={"model": model_id, "messages": [{"role": "user", "content": prompt}], "stream": True, "temperature": TEMPERATURE},
-            timeout=timeout, stream=True
+            timeout=idle, stream=True
         )
         resp.raise_for_status()
         full = []
+        started = time.monotonic()
         for line in resp.iter_lines(decode_unicode=True):
+            if time.monotonic() - started > total:
+                yield _stream_error_event()
+                return
             if not line or not line.startswith("data: "):
                 continue
             data_str = line[6:].strip()
@@ -179,7 +284,14 @@ def _stream_openrouter(model_id: str, prompt: str, timeout: int = 300):
         if full:
             yield f"data: {json.dumps({'done': True, 'full': ''.join(full)})}\n\n"
     except Exception as e:
-        yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        _log_stream_error("openrouter", e)
+        yield _stream_error_event()
+    finally:
+        if resp is not None:
+            try:
+                resp.close()
+            except Exception:
+                pass
 
 
 def call_model(model_id: str, prompt: str, timeout: int = 0) -> str:
