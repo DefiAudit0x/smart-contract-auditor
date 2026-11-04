@@ -204,8 +204,24 @@ def _triage_one(finding: dict, source: str, functions: dict, state_vars):
             or "external call" in lowered
         )
         if is_reentrancy_or_guard:
-            for func_name, info in functions.items():
-                if func_name.lower() not in lowered:
+            # Match function names as whole words, longest first. A
+            # plain substring match misattributes fixed variants to
+            # the vulnerable function: "withdrawbalance" is a substring
+            # of "withdrawbalance_fixed", so a guard note for the fixed
+            # variant was triaged as Confirmed for the vulnerable one
+            # (NS-RE-01 showed 3 Confirmed for 1 Critical). A word
+            # boundary fails after "withdrawbalance" when "_" follows,
+            # because "_" is a word character, so the fixed variant
+            # now matches itself, not its vulnerable prefix.
+            for func_name, info in sorted(
+                functions.items(), key=lambda kv: -len(kv[0])
+            ):
+                if not re.search(
+                    r"(?<![A-Za-z0-9_])"
+                    + re.escape(func_name.lower())
+                    + r"(?![A-Za-z0-9_])",
+                    lowered,
+                ):
                     continue
                 body = info.get("body", "")
                 modifiers = _modifiers_from_suffix(info.get("suffix", ""))
@@ -366,11 +382,37 @@ def generate_mini_review(
         triaged = []
 
     counts, other = _severity_counts(triaged)
-    by_evidence = {}
-    for item in triaged:
-        by_evidence[item["evidence_status"]] = (
-            by_evidence.get(item["evidence_status"], 0) + 1
-        )
+    # Summary evidence counts are counted by severity + status, never
+    # by evidence label alone. A Medium guard note can carry an
+    # evidence note whose text mentions confirmation (it is triaged
+    # against the same function), and the old label-only count turned
+    # NS-RE-01's 1 Critical + 2 Medium guard notes into "Confirmed by
+    # code evidence: 3". A summary must never claim more Confirmed
+    # findings than there are Critical findings, so only Critical
+    # findings with a Confirmed status count here; guard-note and
+    # unverified counts are by status, as before. Per-finding
+    # severities and evidence statuses are unchanged by this: the fix
+    # is in the summary arithmetic, not in hiding a finding.
+    by_evidence = {
+        "Confirmed by code evidence": sum(
+            1
+            for item in triaged
+            if item["severity"] == "Critical"
+            and item["evidence_status"] == "Confirmed by code evidence"
+        ),
+        "Confirmed by code evidence / PoC": sum(
+            1
+            for item in triaged
+            if item["severity"] == "Critical"
+            and item["evidence_status"] == "Confirmed by code evidence / PoC"
+        ),
+        "Guard note only": sum(
+            1 for item in triaged if item["evidence_status"] == "Guard note only"
+        ),
+        "Unverified": sum(
+            1 for item in triaged if item["evidence_status"] == "Unverified"
+        ),
+    }
 
     lines = []
     lines.append("# Mini-Review Report")
