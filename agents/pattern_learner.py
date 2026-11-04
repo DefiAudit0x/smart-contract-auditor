@@ -8,8 +8,10 @@ import logging
 import multiprocessing
 import os
 import re
+import tempfile
 import threading
 import time
+from contextlib import contextmanager
 
 from agents.llm_client import call_model_with_fallback
 
@@ -215,20 +217,149 @@ def _validate_candidate_pattern(pat) -> bool:
     return _safe_search_with_timeout(rx, _CANARY_INPUT, timeout=1.0)
 
 
+# Serialisation for learned-pattern updates (issue #22, F-10).
+# _learned_lock() is re-entrant in one thread: an outer load-modify-save
+# holds it, and _save_learned() inside re-enters without deadlocking.
+# In-process it is a threading.RLock, so concurrent writers in one
+# Python process are serialised. On POSIX it additionally holds an
+# flock on a sidecar "<path>.lock" file for the whole update, so writers
+# in separate processes are serialised too; on non-POSIX platforms the
+# flock step is best-effort and the in-process lock is the bound. The
+# lock file is deliberately left on disk (deleting a flocked file is
+# racy); it contains no pattern data.
+_LEARNED_WRITE_LOCK = threading.RLock()
+_LEARNED_LOCK_STATE = {"depth": 0, "fd": None}
+
+
+@contextmanager
+def _learned_lock():
+    """Hold the learned-pattern update lock for a load-modify-save.
+
+    Readers (_load_learned on its own) do not need it: _save_learned
+    replaces the destination atomically, so a reader sees either the
+    old complete file or the new complete file, never a partial one.
+    """
+    with _LEARNED_WRITE_LOCK:
+        if _LEARNED_LOCK_STATE["depth"] == 0:
+            fd = None
+            try:
+                import fcntl
+
+                lock_path = os.fspath(LEARNED_PATTERNS_PATH) + ".lock"
+                fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+                fcntl.flock(fd, fcntl.LOCK_EX)
+            except Exception:
+                if fd is not None:
+                    try:
+                        os.close(fd)
+                    except OSError:
+                        pass
+                    fd = None
+            _LEARNED_LOCK_STATE["fd"] = fd
+        _LEARNED_LOCK_STATE["depth"] += 1
+        try:
+            yield
+        finally:
+            _LEARNED_LOCK_STATE["depth"] -= 1
+            if _LEARNED_LOCK_STATE["depth"] == 0:
+                fd = _LEARNED_LOCK_STATE["fd"]
+                if fd is not None:
+                    try:
+                        import fcntl
+
+                        fcntl.flock(fd, fcntl.LOCK_UN)
+                    except Exception:
+                        pass
+                    try:
+                        os.close(fd)
+                    except OSError:
+                        pass
+                _LEARNED_LOCK_STATE["fd"] = None
+
+
 def _load_learned() -> list:
     if not os.path.isfile(LEARNED_PATTERNS_PATH):
         return []
     try:
         with open(LEARNED_PATTERNS_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
-            return data if isinstance(data, list) else []
-    except (json.JSONDecodeError, OSError):
+    except json.JSONDecodeError as exc:
+        # Observable, not silent: the corrupt file is left intact on
+        # disk for inspection, and this call returns [] so existing
+        # callers (patterns_text, get_learned_bug_classes, confirm /
+        # reject) keep working instead of crashing the scan.
+        logger.error(
+            "Learned patterns file is corrupt (%s): %s; "
+            "treating as empty for this call and leaving the file intact",
+            LEARNED_PATTERNS_PATH,
+            exc,
+        )
         return []
+    except OSError as exc:
+        logger.error(
+            "Learned patterns file could not be read (%s): %s; "
+            "treating as empty for this call",
+            LEARNED_PATTERNS_PATH,
+            exc,
+        )
+        return []
+    if not isinstance(data, list):
+        logger.warning(
+            "Learned patterns file does not contain a list (%s); "
+            "treating as empty for this call",
+            LEARNED_PATTERNS_PATH,
+        )
+        return []
+    return data
 
 
 def _save_learned(patterns: list):
-    with open(LEARNED_PATTERNS_PATH, "w", encoding="utf-8") as f:
-        json.dump(patterns, f, indent=2, ensure_ascii=False)
+    """Persist learned patterns atomically (issue #22, F-10).
+
+    Writes to a temporary file in the same directory, flushes and
+    fsyncs it, then atomically replaces the destination with
+    os.replace, so an interrupted or failed write leaves the prior
+    valid file intact and never exposes a partial file to readers.
+    The write is serialised by _learned_lock(). A directory fsync
+    after the replace is best-effort (crash durability only).
+    """
+    data = json.dumps(patterns, indent=2, ensure_ascii=False)
+    dest = os.fspath(LEARNED_PATTERNS_PATH)
+    directory = os.path.dirname(os.path.abspath(dest))
+    with _learned_lock():
+        fd, tmp_path = tempfile.mkstemp(
+            dir=directory, prefix=".learned_patterns.", suffix=".tmp"
+        )
+        written = False
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(data)
+                f.flush()
+                os.fsync(f.fileno())
+            written = True
+            os.replace(tmp_path, dest)
+            tmp_path = None
+            try:
+                dir_fd = os.open(directory, os.O_RDONLY)
+                try:
+                    os.fsync(dir_fd)
+                finally:
+                    os.close(dir_fd)
+            except OSError:
+                pass
+        except Exception:
+            if not written:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+            raise
+        finally:
+            if tmp_path is not None:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
 
 
 def _is_confirmed(pattern: dict) -> bool:
@@ -259,14 +390,17 @@ def confirm_pattern(name: str, evidence: str) -> bool:
     evidence = (evidence or "").strip()
     if len(evidence) < 10:
         return False
-    patterns = _load_learned()
-    for p in patterns:
-        if p.get("name") == name and p.get("verification_status", "candidate") == "candidate":
-            p["verification_status"] = "confirmed"
-            p["verification_evidence"] = evidence[:2000]
-            p["verified_at"] = time.time()
-            _save_learned(patterns)
-            return True
+    # Load-modify-save under one lock, so two concurrent confirmations
+    # of different candidates cannot overwrite each other (issue #22).
+    with _learned_lock():
+        patterns = _load_learned()
+        for p in patterns:
+            if p.get("name") == name and p.get("verification_status", "candidate") == "candidate":
+                p["verification_status"] = "confirmed"
+                p["verification_evidence"] = evidence[:2000]
+                p["verified_at"] = time.time()
+                _save_learned(patterns)
+                return True
     return False
 
 
@@ -275,14 +409,15 @@ def reject_pattern(name: str, evidence: str) -> bool:
     evidence = (evidence or "").strip()
     if len(evidence) < 10:
         return False
-    patterns = _load_learned()
-    for p in patterns:
-        if p.get("name") == name and p.get("verification_status", "candidate") == "candidate":
-            p["verification_status"] = "rejected"
-            p["verification_evidence"] = evidence[:2000]
-            p["verified_at"] = time.time()
-            _save_learned(patterns)
-            return True
+    with _learned_lock():
+        patterns = _load_learned()
+        for p in patterns:
+            if p.get("name") == name and p.get("verification_status", "candidate") == "candidate":
+                p["verification_status"] = "rejected"
+                p["verification_evidence"] = evidence[:2000]
+                p["verified_at"] = time.time()
+                _save_learned(patterns)
+                return True
     return False
 
 def get_learned_bug_classes() -> dict:
@@ -407,24 +542,27 @@ Rules:
     if not validated:
         return
 
-    existing = _load_learned()
-    if len(existing) >= MAX_LEARNED_PATTERNS:
-        logger.info("Pattern learner: storage full (%d), skipping save", MAX_LEARNED_PATTERNS)
-        return
-    names = {e["name"] for e in existing}
-    added = 0
-    for p in validated:
-        if len(existing) + added >= MAX_LEARNED_PATTERNS:
-            logger.info("Pattern learner: storage bound reached (%d)", MAX_LEARNED_PATTERNS)
-            break
-        if p["name"] not in names:
-            existing.append(p)
-            names.add(p["name"])
-            added += 1
+    # Only the final load-modify-save is locked (issue #22); the LLM
+    # call above deliberately runs outside the lock.
+    with _learned_lock():
+        existing = _load_learned()
+        if len(existing) >= MAX_LEARNED_PATTERNS:
+            logger.info("Pattern learner: storage full (%d), skipping save", MAX_LEARNED_PATTERNS)
+            return
+        names = {e["name"] for e in existing}
+        added = 0
+        for p in validated:
+            if len(existing) + added >= MAX_LEARNED_PATTERNS:
+                logger.info("Pattern learner: storage bound reached (%d)", MAX_LEARNED_PATTERNS)
+                break
+            if p["name"] not in names:
+                existing.append(p)
+                names.add(p["name"])
+                added += 1
 
-    if added:
-        _save_learned(existing)
-        logger.info(f"Pattern learner: stored {added} candidate pattern(s); candidates remain inactive until independently verified")
+        if added:
+            _save_learned(existing)
+            logger.info(f"Pattern learner: stored {added} candidate pattern(s); candidates remain inactive until independently verified")
 
 
 def _extract_json(text: str) -> str:
