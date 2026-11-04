@@ -5,6 +5,7 @@ that the static grep-based pre-scan missed, and persists them for future scans.
 
 import json
 import logging
+import multiprocessing
 import os
 import re
 import threading
@@ -24,28 +25,181 @@ MAX_PATTERN_LENGTH = 500
 # instantly while benign ones finish well inside the timeout.
 _CANARY_INPUT = "solidity contract function pragma " * 50
 
+# Isolation bounds for LLM-authored regex (issues #30 / #21, F-21 / F-08).
+# A Python ``re`` match cannot be interrupted in-process, and a daemon
+# thread's join(timeout) does not terminate it: the match keeps consuming
+# CPU after the caller has given up. The only reliable bound in-process
+# Python is a separate, killable worker process.
+#
+# These bounds are execution bounds only. They do NOT prove a pattern is
+# safe, and they do NOT replace compilation/canary validation below:
+# a pattern that passes the canary can still time out on adversarial
+# input at runtime, and is then skipped, not reported.
+MAX_REGEX_WORKERS = 4
+_REGEX_WORKER_MAX_MEMORY_BYTES = 512 * 1024 * 1024
+_REGEX_WORKER_SEMAPHORE = threading.BoundedSemaphore(MAX_REGEX_WORKERS)
+
+
+def _apply_worker_limits(timeout):
+    """Best-effort resource limits inside a regex worker (POSIX only).
+
+    RLIMIT_CPU is a backstop for the parent's wall-clock timeout: if the
+    parent dies, the worker is still killed by its CPU budget instead of
+    running forever. RLIMIT_AS bounds memory. On non-POSIX platforms
+    this is a no-op and the wall-clock kill in the parent is the bound.
+    """
+    try:
+        import resource
+
+        cpu_seconds = max(2, int(timeout) + 2)
+        resource.setrlimit(resource.RLIMIT_CPU, (cpu_seconds, cpu_seconds))
+        resource.setrlimit(
+            resource.RLIMIT_AS,
+            (_REGEX_WORKER_MAX_MEMORY_BYTES, _REGEX_WORKER_MAX_MEMORY_BYTES),
+        )
+    except Exception:
+        pass
+
+
+def _regex_worker(conn, pattern, text, mode, class_key, timeout):
+    """Run one regex operation in a worker process. Never logs, never
+    touches shared state: it only compiles, matches, and sends a result.
+
+    The parent must never trust a late or partial result from this
+    worker: on timeout the parent kills it and discards everything.
+    """
+    try:
+        _apply_worker_limits(timeout)
+        rx = re.compile(pattern, re.IGNORECASE)
+        if mode == "search":
+            rx.search(text)
+            conn.send(("ok", True))
+        elif mode == "scan":
+            matches = []
+            lines = text.split("\n")
+            for i, line in enumerate(lines):
+                if rx.search(line):
+                    matches.append({
+                        "line": i + 1,
+                        "content": line.strip(),
+                        "pattern": pattern,
+                        "class": class_key,
+                    })
+            # multi-line fallback (deduped against per-line hits), exactly
+            # as the old in-process scan: no DOTALL flag is added here.
+            for m in rx.finditer(text):
+                if "\n" in m.group():
+                    line_no = text[:m.start()].count("\n") + 1
+                    if not any(
+                        x["line"] == line_no and x["pattern"] == pattern
+                        for x in matches
+                    ):
+                        matches.append({
+                            "line": line_no,
+                            "content": m.group()[:80].replace("\n", "\\n"),
+                            "pattern": pattern,
+                            "class": class_key,
+                        })
+            conn.send(("ok", matches))
+        else:
+            conn.send(("error", "unknown mode"))
+    except re.error:
+        try:
+            conn.send(("error", "invalid pattern"))
+        except Exception:
+            pass
+    except Exception as exc:  # e.g. MemoryError under the worker limit
+        try:
+            conn.send(("error", str(exc)[:200]))
+        except Exception:
+            pass
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def _run_regex_isolated(pattern, text, mode, class_key="", timeout=1.0):
+    """Run a regex in a killable worker process.
+
+    Returns (status, payload) with status in "ok", "timeout" or "error".
+    On timeout the worker is terminated (SIGTERM, then SIGKILL) and
+    joined, so no worker is left running, and no partial result is
+    returned: a timed-out scan contributes nothing. If the global
+    worker budget is exhausted, this returns "timeout" without spawning
+    a worker at all. The semaphore is per-process, not per-machine: it
+    bounds concurrent workers in this Python process only.
+    """
+    if not _REGEX_WORKER_SEMAPHORE.acquire(blocking=False):
+        return ("timeout", None)
+    proc = None
+    parent_conn = None
+    try:
+        try:
+            ctx = multiprocessing.get_context("fork")
+        except ValueError:
+            ctx = multiprocessing.get_context()
+        parent_conn, child_conn = ctx.Pipe(duplex=False)
+        proc = ctx.Process(
+            target=_regex_worker,
+            args=(child_conn, pattern, text, mode, class_key, timeout),
+            daemon=True,
+        )
+        proc.start()
+        child_conn.close()
+        if parent_conn.poll(timeout):
+            try:
+                status, payload = parent_conn.recv()
+            except EOFError:
+                status, payload = "error", None
+            if status not in ("ok", "error"):
+                status, payload = "error", None
+        else:
+            status, payload = "timeout", None
+        if proc.is_alive():
+            proc.terminate()
+            proc.join(1.0)
+            if proc.is_alive():
+                proc.kill()
+                proc.join(1.0)
+        else:
+            proc.join(1.0)
+        return (status, payload)
+    except Exception:
+        return ("error", None)
+    finally:
+        if proc is not None and proc.is_alive():
+            try:
+                proc.kill()
+            except Exception:
+                pass
+            try:
+                proc.join(1.0)
+            except Exception:
+                pass
+        if parent_conn is not None:
+            try:
+                parent_conn.close()
+            except Exception:
+                pass
+        _REGEX_WORKER_SEMAPHORE.release()
+
 
 def _safe_search_with_timeout(regex, sample, timeout=1.0):
     """True when regex.search(sample) finishes within `timeout` seconds.
 
-    Guards against LLM-authored ReDoS: re cannot be interrupted, so the
-    check runs in a throwaway daemon thread and a hang simply fails the
-    candidate pattern.
+    The search runs in a killable subprocess (issues #30 / #21): unlike
+    the old daemon-thread version, a hang is terminated, not abandoned.
+    True means only "completed without error", not "matched": the caller
+    uses this as a safety gate, and a pattern that merely fails to match
+    the canary still passes this gate.
     """
-    outcome = [True]
-
-    def _run():
-        try:
-            regex.search(sample)
-        except Exception:
-            outcome[0] = False
-
-    worker = threading.Thread(target=_run, daemon=True)
-    worker.start()
-    worker.join(timeout)
-    if worker.is_alive():
-        return False
-    return outcome[0]
+    pattern = regex.pattern if hasattr(regex, "pattern") else str(regex)
+    status, _payload = _run_regex_isolated(
+        pattern, sample, "search", timeout=timeout
+    )
+    return status == "ok"
 
 
 def _validate_candidate_pattern(pat) -> bool:
@@ -157,52 +311,30 @@ def get_learned_bug_classes() -> dict:
 def _run_learned(code: str, class_key: str, patterns: list) -> list:
     """Run learned patterns against code (single-line + multi-line check).
 
-    Each pattern runs under a hard timeout (M21 remediation): a pattern
-    that passed ingestion can still backtrack on adversarial input, and
-    re cannot be interrupted once started.
+    Each pattern runs in a killable worker process under a hard 2.0s
+    timeout (issues #30 / #21): a pattern that passed ingestion can
+    still backtrack on adversarial input, and the old daemon-thread
+    version left that match running after the timeout. Here a timeout
+    kills the worker and the pattern contributes nothing -- never a
+    partial match, never a leftover worker. A worker error likewise
+    skips the pattern entirely. This is an execution bound, not proof
+    that the pattern is safe or that a skipped pattern is benign.
     """
     matches = []
-    lines = code.split("\n")
     for pat in patterns:
         try:
-            regex = re.compile(pat, re.IGNORECASE)
+            re.compile(pat, re.IGNORECASE)
         except re.error:
             continue
-        outcome = []
-        done = threading.Event()
-
-        def _scan(rx=regex):
-            try:
-                for i, line in enumerate(lines):
-                    if rx.search(line):
-                        outcome.append({
-                            "line": i + 1,
-                            "content": line.strip(),
-                            "pattern": pat,
-                            "class": class_key,
-                        })
-                # multi-line fallback (deduped against per-line hits)
-                for m in rx.finditer(code):
-                    if "\n" in m.group():
-                        line_no = code[:m.start()].count("\n") + 1
-                        if not any(x["line"] == line_no and x["pattern"] == pat for x in outcome):
-                            outcome.append({
-                                "line": line_no,
-                                "content": m.group()[:80].replace("\n", "\\n"),
-                                "pattern": pat,
-                                "class": class_key,
-                            })
-            except re.error:
-                pass
-            finally:
-                done.set()
-
-        worker = threading.Thread(target=_scan, daemon=True)
-        worker.start()
-        if not done.wait(2.0):
+        status, found = _run_regex_isolated(
+            pat, code, "scan", class_key=class_key, timeout=2.0
+        )
+        if status == "timeout":
             logger.warning("Learned pattern timed out and was skipped: %s", pat[:80])
             continue
-        matches.extend(outcome)
+        if status != "ok" or not found:
+            continue
+        matches.extend(found)
     return matches
 
 
