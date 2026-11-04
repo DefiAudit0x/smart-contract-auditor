@@ -612,14 +612,26 @@ def api_knowledge_ingest():
 @require_api_key
 def api_analyze_project():
     ensure_report_dir()
+    # Cheap shape check only: presence + filename. No ZIP validation,
+    # extraction, or project parsing happens before the quota check.
     if 'project' not in request.files or not request.files['project'].filename:
         return jsonify({"error": "No project ZIP uploaded"}), 400
+    # Issue #19 (F-05): reserve quota BEFORE any expensive work. The
+    # previous order validated/extracted the ZIP and built the combined
+    # source first, so a caller could consume CPU, memory, and temp
+    # storage before the quota check ran. A reservation is a no-op
+    # (None) for logged-in users and non-access-code sessions, and
+    # _release_code_audit_usage(None) is likewise a no-op.
+    reservation, quota_error = _reserve_code_audit_usage()
+    if quota_error:
+        return quota_error
     import tempfile
     import zipfile
     f = request.files['project']
     entry_contract = request.form.get('entry_contract', '')
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
+    tmp = None
     try:
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
         f.save(tmp.name)
         tmp.close()
         sol_files = []
@@ -627,6 +639,7 @@ def api_analyze_project():
             try:
                 members = validate_zip_infos(zf)
             except ValueError as exc:
+                _release_code_audit_usage(reservation)
                 return jsonify({"error": f"Unsafe ZIP archive: {exc}"}), 400
             for info, name in members:
                 if name.lower().endswith(('.sol', '.vy', '.move')):
@@ -634,6 +647,7 @@ def api_analyze_project():
                     code = raw[:8000].decode('utf-8', errors='replace')
                     sol_files.append((name, code))
         if not sol_files:
+            _release_code_audit_usage(reservation)
             return jsonify({"error": "No Solidity/Vyper/Move files found in ZIP"}), 400
         entry_code = ""
         lib_code = ""
@@ -645,9 +659,6 @@ def api_analyze_project():
                 lib_code += "\n\n// File: {}\n{}".format(path, code[:1500])
         combined = entry_code + lib_code
         combined = combined[:8000]
-        reservation, quota_error = _reserve_code_audit_usage()
-        if quota_error:
-            return quota_error
 
         def generate():
             from agents.llm_client import _stream_ollama, _stream_openrouter
@@ -686,13 +697,20 @@ def api_analyze_project():
             'X-Accel-Buffering': 'no', 'Cache-Control': 'no-cache',
         })
     except zipfile.BadZipFile:
+        # Reservation was already taken (see above); release it so a
+        # bad archive does not burn quota. The stream tracker handles
+        # release/completion only once a Response is returned, so
+        # every failure before that point must release here.
+        _release_code_audit_usage(reservation)
         return jsonify({"error": "Invalid ZIP file"}), 400
     except Exception as e:
+        _release_code_audit_usage(reservation)
         logger.exception("Project analysis failed")
         return jsonify({"error": "An internal error occurred"}), 500
     finally:
-        try: os.unlink(tmp.name)
-        except: pass
+        if tmp is not None:
+            try: os.unlink(tmp.name)
+            except: pass
 
 
 @api_bp.route('/analyze/malware', methods=['POST'])
