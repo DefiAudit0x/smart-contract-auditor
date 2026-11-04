@@ -38,8 +38,25 @@ GUARD_MODIFIERS = frozenset({"nonReentrant", "reentrancyGuard"})
 CALLBACK_CAPABLE_CALLS = frozenset({"call", "delegatecall"})
 NON_CALLBACK_CALLS = frozenset({"transfer", "send", "staticcall"})
 
+# Old (pre-0.8) low-level-call syntax: the value/gas options are chained
+# as members *before* the invocation, e.g. ``msg.sender.call.value(x)()``,
+# ``target.call.gas(g).value(x)()`` or ``target.call.value(x).gas(g)()``.
+# The previous pattern required '(' immediately after the member (apart
+# from an optional modern ``{...}`` options block), so it missed every
+# old-syntax call: after ``.call`` comes ``.value``, not '('.  That made
+# textbook DAO-era reentrancy (SB-RE-01) invisible to the evidence
+# rules even though the call-then-write shape is identical to the
+# modern form.  Each chained option takes one argument; the argument
+# pattern allows one level of nested parentheses (e.g. ``foo(bar)``)
+# so ordinary expressions still match, while deeper nesting remains a
+# known limitation.  ``transfer``/``send``/``staticcall`` are still
+# matched here only so ``any_external_calls`` can report them as guard
+# notes; the ``CALLBACK_CAPABLE_CALLS`` filter below still excludes
+# them from confirmed findings, exactly as before.
+_OLD_OPTION = r"(?:\.\s*(?:value|gas)\s*\((?:[^()]|\([^()]*\))*\))"
 _CALL_RE = re.compile(
-    r"\.\s*(call|delegatecall|staticcall|transfer|send)\s*(?:\{[^}]*\})?\s*\("
+    r"\.\s*(call|delegatecall|staticcall|transfer|send)\s*(?:\{[^}]*\})?\s*"
+    rf"(?:{_OLD_OPTION})*\s*\("
 )
 # An external contract method call, e.g. ``token.transfer(...)`` is
 # already covered by the member names above; a bare interface call such
