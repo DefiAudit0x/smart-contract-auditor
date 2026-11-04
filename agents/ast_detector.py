@@ -60,6 +60,9 @@ def _find_external_calls(body: str) -> list:
     calls = []
     patterns = [
         (r"\.call\s*\{value[^}]*\}\s*\([^)]*\)", "low_level_call"),
+        # Pre-0.8 chained options: .call.value(x)(), .call.gas(g)(),
+        # .call.gas(g).value(x)() and .call.value(x).gas(g)().
+        (r"\.call\s*(?:\.\s*(?:value|gas)\s*\((?:[^()]|\([^()]*\))*\))+\s*\(", "low_level_call"),
         (r"\.delegatecall\s*\([^)]*\)", "delegatecall"),
         (r"\.transfer\s*\([^)]*\)", "transfer"),
         (r"\.send\s*\([^)]*\)", "send"),

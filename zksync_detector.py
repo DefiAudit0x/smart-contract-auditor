@@ -218,7 +218,14 @@ def _call_before_write_unguarded(code: str):
         body = fn["body"]
         if "nonReentrant" in fn["signature"]:
             continue
-        call_m = re.search(r"\.call\s*(?:\{[^}]*\})?\s*\(", body)
+        # Same old-syntax gap as analyzers/reentrancy_evidence.py: pre-0.8
+        # calls chain .value(...) / .gas(...) before the invocation, so
+        # ``.call.value(x)()`` must count as a call here too.
+        call_m = re.search(
+            r"\.call\s*(?:\{[^}]*\})?\s*"
+            r"(?:\.\s*(?:value|gas)\s*\((?:[^()]|\([^()]*\))*\))*\s*\(",
+            body,
+        )
         write_m = re.search(r"balances?\s*\[.*\]\s*[-+*]?=", body)
         if not call_m or not write_m:
             continue
