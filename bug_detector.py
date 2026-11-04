@@ -2,6 +2,21 @@
 Bug Detector — 16 DeFi bug classes with detection patterns.
 Adapted from web3-bug-classes SKILL.md.
 Each class has: grep patterns, kill signals, severity hints, and detection rules.
+
+Kill-signal semantics (issues #20):
+  A kill signal is a *checkable disqualifying context*, not a prose excuse.
+  Each class may define machine kill patterns in _KILL_PATTERNS as
+  (reason, regex, scope). Scope "function" means the pattern must appear in
+  the enclosing function block of the match (signature included); scope
+  "file" means it is a contract-level fact (e.g. _disableInitializers in the
+  constructor, a VRF import). A vulnerable-pattern match is suppressed ONLY
+  when a machine kill pattern for the same class matches in scope, and the
+  suppression is recorded (see run_grep_with_suppressions / get_summary),
+  never silently dropped. Prose kill_signals that are not machine-checkable
+  (e.g. "unit tests cover the boundary", "single-transaction atomicity")
+  are deliberately NOT used to suppress anything: without code evidence
+  there is no suppression. Learned classes injected at runtime have no
+  machine kill patterns, so they are never suppressed by this mechanism.
 """
 import logging
 import re
@@ -473,13 +488,134 @@ _BUG_CLASS_ORDER = [
     "fee_on_transfer_token",
 ]
 
+# Machine-checkable kill patterns: (reason, regex, scope).
+# off_by_one has none: its prose kill signals are about tests and intent,
+# which are not in the code, so nothing is suppressed for that class.
+_KILL_PATTERNS = {
+    "accounting_desync": [
+        ("Both totalSupply and totalShares are updated in the same function",
+         r"totalSupply\s*[-+*]=.*totalShares\s*[-+*]=|totalShares\s*[-+*]=.*totalSupply\s*[-+*]=",
+         "function"),
+    ],
+    "access_control": [
+        ("Function is guarded by onlyOwner/onlyRole or a msg.sender require",
+         r"\bonlyOwner\b|\bonlyRole\b|require\s*\(\s*msg\.sender\s*==", "function"),
+    ],
+    "incomplete_path": [
+        ("safeApprove(..., 0) is present before the amount approval",
+         r"safeApprove\s*\([^,]+,\s*0\s*\)", "function"),
+    ],
+    "off_by_one": [],
+    "oracle_manipulation": [
+        ("Price read uses a TWAP or a staleness/validity check",
+         r"\bTWAP\b|updatedAt\s*!=\s*0|require\s*\([^)]*updatedAt", "function"),
+    ],
+    "erc4626_vault": [
+        ("OpenZeppelin ERC4626 with _decimalsOffset()",
+         r"_decimalsOffset\s*\(", "file"),
+    ],
+    "reentrancy": [
+        ("Function carries nonReentrant",
+         r"\bnonReentrant\b", "function"),
+    ],
+    "flash_loan": [
+        ("Price reads use a TWAP",
+         r"\bTWAP\b", "function"),
+    ],
+    "signature_replay": [
+        ("DOMAIN_SEPARATOR is used (chainId-bound domain)",
+         r"DOMAIN_SEPARATOR", "file"),
+        ("A nonce is incremented for signatures",
+         r"nonces\s*\[.*\]\s*\+\+", "function"),
+    ],
+    "proxy_upgrade": [
+        ("Constructor calls _disableInitializers()",
+         r"_disableInitializers\s*\(", "file"),
+    ],
+    "unchecked_return_value": [
+        ("Return value is checked with require(success) or sendValue()",
+         r"require\s*\(\s*success\s*\)|sendValue\s*\(", "function"),
+    ],
+    "msg_value_reuse": [
+        ("msg.value is validated against the expected total before the loop",
+         r"require\s*\(\s*msg\.value\s*==", "function"),
+    ],
+    "tx_origin_auth": [
+        ("Function also checks msg.sender alongside tx.origin",
+         r"msg\.sender\s*==", "function"),
+    ],
+    "bad_randomness": [
+        ("Randomness comes from Chainlink VRF",
+         r"requestRandomWords|VRFConsumerBase", "file"),
+    ],
+    "arbitrary_call": [
+        ("Call targets are restricted to a whitelist",
+         r"whitelist\s*\[|\bonlyWhitelisted\b|allowedTargets\s*\[", "function"),
+    ],
+    "fee_on_transfer_token": [
+        ("Actual received amount is tracked with balanceBefore/balanceAfter",
+         r"balanceBefore|balanceAfter", "function"),
+    ],
+}
 
-def _run_grep(code: str, bug_class: str) -> List[Dict]:
-    """Run grep patterns for a bug class against code. Returns matching locations."""
+
+def _enclosing_function_block(code: str, line_no: int) -> str:
+    """Return the function block containing line_no (signature included).
+
+    Brace-matching on source lines, the same approach used by the
+    reentrancy evidence module. Falls back to the whole code when no
+    enclosing function is found.
+    """
+    lines = code.split("\n")
+    if line_no < 1 or line_no > len(lines):
+        return code
+    start = line_no - 1
+    while start >= 0 and "function " not in lines[start] and "constructor" not in lines[start] and "modifier " not in lines[start]:
+        start -= 1
+    if start < 0:
+        return code
+    depth = 0
+    started = False
+    for i in range(start, len(lines)):
+        depth += lines[i].count("{") - lines[i].count("}")
+        if "{" in lines[i]:
+            started = True
+        if started and depth <= 0:
+            return "\n".join(lines[start:i + 1])
+    return "\n".join(lines[start:])
+
+
+def _kill_reason(code: str, bug_class: str, line_no: int):
+    """Return (reason, pattern) if a machine kill pattern matches in scope."""
+    block = _enclosing_function_block(code, line_no)
+    for reason, pat, scope in _KILL_PATTERNS.get(bug_class, []):
+        haystack = code if scope == "file" else block
+        try:
+            # Case-sensitive on purpose: Solidity identifiers are
+            # case-sensitive, so a mis-cased modifier name is not a guard.
+            # (Vulnerable-pattern matching itself stays IGNORECASE, as before.)
+            if re.search(pat, haystack, re.DOTALL):
+                return (reason, pat)
+        except re.error:
+            continue
+    return None
+
+
+def get_kill_patterns(cls: str) -> List[Dict]:
+    """Machine-checkable kill patterns for a class (reason, pattern, scope)."""
+    return [
+        {"reason": reason, "pattern": pat, "scope": scope}
+        for reason, pat, scope in _KILL_PATTERNS.get(cls, [])
+    ]
+
+
+
+def _run_grep_impl(code: str, bug_class: str):
+    """Collect matches and kill-signal suppressions for a bug class."""
     info = _BUG_CLASSES.get(bug_class)
     if not info:
         return []
-    matches = []
+    raw_matches = []
     patterns = info.get("vulnerable_patterns", [])
     lines = code.split("\n")
     for i, line in enumerate(lines):
@@ -487,7 +623,7 @@ def _run_grep(code: str, bug_class: str) -> List[Dict]:
             try:
                 m = re.search(pat, line, re.IGNORECASE)
                 if m:
-                    matches.append({
+                    raw_matches.append({
                         "line": i + 1,
                         "content": line.strip(),
                         "pattern": pat,
@@ -506,10 +642,10 @@ def _run_grep(code: str, bug_class: str) -> List[Dict]:
                 # avoid duplicates: check if same line+pattern already reported
                 dup = any(
                     x["line"] == line_no and x["pattern"] == pat and x["class"] == bug_class
-                    for x in matches
+                    for x in raw_matches
                 )
                 if not dup:
-                    matches.append({
+                    raw_matches.append({
                         "line": line_no,
                         "content": match_text[:80].replace("\n", "\\n"),
                         "pattern": pat,
@@ -523,7 +659,7 @@ def _run_grep(code: str, bug_class: str) -> List[Dict]:
         try:
             for m in re.finditer(pat, code, re.IGNORECASE | re.DOTALL):
                 line_no = code[:m.start()].count("\n") + 1
-                matches.append({
+                raw_matches.append({
                     "line": line_no,
                     "content": m.group()[:80].replace("\n", "\\n"),
                     "pattern": pat,
@@ -531,7 +667,38 @@ def _run_grep(code: str, bug_class: str) -> List[Dict]:
                 })
         except re.error:
             pass
+    matches = []
+    suppressions = []
+    for match in raw_matches:
+        reason = _kill_reason(code, bug_class, match["line"])
+        if reason:
+            suppressions.append({
+                **match,
+                "kill_reason": reason[0],
+                "kill_pattern": reason[1],
+                "status": "suppressed_by_kill_signal",
+            })
+        else:
+            matches.append(match)
+    return matches, suppressions
+
+
+def _run_grep(code: str, bug_class: str) -> List[Dict]:
+    """Run grep patterns for a bug class, with kill-signal suppression applied.
+
+    Returns only unsuppressed matches. Use _run_grep_with_suppressions
+    when the suppression reasons themselves are needed.
+    """
+    matches, _suppressions = _run_grep_with_suppressions(code, bug_class)
     return matches
+
+
+def _run_grep_with_suppressions(code: str, bug_class: str):
+    """Run grep patterns and return (matches, suppressions) for a class."""
+    info = _BUG_CLASSES.get(bug_class)
+    if not info:
+        return [], []
+    return _run_grep_impl(code, bug_class)
 
 
 def detect_all(code: str) -> Dict[str, List[Dict]]:
@@ -545,10 +712,17 @@ def detect_all(code: str) -> Dict[str, List[Dict]]:
 
 
 def get_summary(code: str) -> List[Dict]:
-    """Get a flat list of all potential issues found across all bug classes."""
-    all_matches = detect_all(code)
+    """Get a flat list of all potential issues found across all bug classes.
+
+    Suppressed matches are not in "matches" but are recorded in
+    "suppressions" with their kill reason, so a suppression is auditable
+    and never a silent drop.
+    """
     summary = []
-    for cls, matches in all_matches.items():
+    for cls in _BUG_CLASS_ORDER:
+        matches, suppressions = _run_grep_with_suppressions(code, cls)
+        if not matches and not suppressions:
+            continue
         info = _BUG_CLASSES.get(cls, {})
         summary.append({
             "class": cls,
@@ -557,6 +731,8 @@ def get_summary(code: str) -> List[Dict]:
             "frequency": info.get("frequency", ""),
             "match_count": len(matches),
             "matches": matches,
+            "suppressed_count": len(suppressions),
+            "suppressions": suppressions,
         })
     return summary
 

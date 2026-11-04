@@ -89,64 +89,160 @@ def detect_ai_generated(code: str) -> Dict:
     }
 
 
-def check_ai_vulnerabilities(code: str) -> List[Dict]:
-    """Check for the specific vulnerability classes AI-generated code misses."""
-    findings = []
-    
-    # Get all state variables that two+ functions write
+
+def _function_ranges(code: str):
+    """Parse function blocks: name, start/end lines, signature, body text.
+
+    Brace-matching on source lines. Guards live on the function signature,
+    not on the write line, so guard evidence must come from here.
+    """
     lines = code.split("\n")
-    state_vars = set()
-    for line in lines:
-        s = line.strip()
-        if re.match(r"^\s*(uint|int|bool|address|mapping|bytes)\b", s) and ";" in s:
-            var_name = s.split()[1] if len(s.split()) > 1 else ""
-            var_name = var_name.split("(")[0].split("[")[0].rstrip(";")
-            if var_name:
-                state_vars.add(var_name)
-    
-    # Find functions that write to each state var
-    var_writers = {v: [] for v in state_vars}
-    for i, line in enumerate(lines):
-        for var in state_vars:
-            if f"{var} " in line and any(op in line for op in ["=", "+=", "-=", "*="]):
-                var_writers[var].append({"line": i + 1, "content": line.strip()})
-    
-    # Flag vars written by multiple functions without consistent guards
-    for var, writers in var_writers.items():
-        if len(writers) >= 2:
-            writer_lines = [w["line"] for w in writers]
-            # Check if all writers have same guard patterns
-            guard_counts = {}
-            for w in writers:
-                line = lines[w["line"] - 1] if w["line"] <= len(lines) else ""
-                has_nr = "nonReentrant" in line
-                has_only = "only" in line or "onlyRole" in line
-                guard_key = f"nr={has_nr},only={has_only}"
-                guard_counts[guard_key] = guard_counts.get(guard_key, 0) + 1
-            if len(guard_counts) > 1:
-                findings.append({
-                    "name": f"Inconsistent guards on shared state `{var}`",
-                    "severity": "High",
-                    "description": f"Variable written by {len(writers)} functions with different guard patterns",
-                    "writers": writer_lines,
-                })
-    
-    # Check for roles defined but never granted
-    roles_defined = set()
-    roles_granted = set()
-    for line in lines:
-        m = re.search(r"bytes32\s+(\w+_ROLE)\s*=", line)
-        if m:
-            roles_defined.add(m.group(1))
-        if "grantRole(" in line or "_grantRole(" in line or "_setupRole(" in line:
-            roles_granted.add(line.strip())
-    if roles_defined and len(roles_granted) == 0:
-        findings.append({
-            "name": f"Roles defined ({len(roles_defined)}) but never granted",
-            "severity": "High",
-            "description": f"Roles: {', '.join(roles_defined)} — may be permanently locked",
+    ranges = []
+    i = 0
+    while i < len(lines):
+        m = re.search(r"\bfunction\s+(\w+)\s*\(", lines[i])
+        if not m:
+            i += 1
+            continue
+        start = i
+        depth = 0
+        started = False
+        end = len(lines) - 1
+        for j in range(start, len(lines)):
+            depth += lines[j].count("{") - lines[j].count("}")
+            if "{" in lines[j]:
+                started = True
+            if started and depth <= 0:
+                end = j
+                break
+        sig_end = start
+        while sig_end <= end and "{" not in lines[sig_end]:
+            sig_end += 1
+        signature = "\n".join(lines[start:min(sig_end + 1, end + 1)])
+        ranges.append({
+            "name": m.group(1),
+            "start_line": start + 1,
+            "end_line": end + 1,
+            "signature": signature,
+            "body": "\n".join(lines[start:end + 1]),
         })
-    
+        i = end + 1
+    return ranges
+
+
+def _guard_key(signature: str):
+    """Guard set of a function, from its signature only."""
+    return {
+        "nonReentrant": "nonReentrant" in signature,
+        "only": bool(re.search(r"\bonly\w+\b", signature)),
+    }
+
+
+def _state_vars(code: str):
+    """State variable names, including mappings (old code misparsed those)."""
+    vars_ = set()
+    for line in code.split("\n"):
+        st = line.strip()
+        m = re.match(r"^(?:uint\d*|int\d*|bool|address|bytes\d*)\s+(?:public\s+|private\s+|internal\s+)?(\w+)\s*(?:;|=|\[)", st)
+        if m:
+            vars_.add(m.group(1))
+            continue
+        m = re.match(r"^mapping\s*\([^)]*\)\s+(?:public\s+|private\s+|internal\s+)?(\w+)\s*;", st)
+        if m:
+            vars_.add(m.group(1))
+    return vars_
+
+
+def check_ai_vulnerabilities(code: str) -> List[Dict]:
+    """Check for the specific vulnerability classes AI-generated code misses.
+
+    Evidence rules (issue #23):
+      * Inconsistent guards: reported as CONFIRMED only when two or more
+        functions write the same state variable with DIFFERENT guard sets
+        taken from their signatures. Uniformly guarded (all nonReentrant,
+        all onlyOwner) and uniformly unguarded writer sets are NOT reported
+        as inconsistent — uniform unguarded is a separate reentrancy
+        question, not an inconsistency, and uniform guarded is the safe
+        variant. Every finding carries exact evidence spans, a status and
+        a confidence field; heuristic suspicion alone is never a finding.
+      * Roles: reported per role that is defined but never granted, with
+        the definition line as evidence. A grant for one role no longer
+        silences a missing grant for another role.
+    """
+    findings = []
+    lines = code.split("\n")
+    funcs = _function_ranges(code)
+    state_vars = _state_vars(code)
+
+    # Writers per variable, per function (writes inside the function body,
+    # not the declaration line, and not a bare read).
+    var_writers = {v: {} for v in state_vars}  # var -> func name -> [evidence]
+    for fn in funcs:
+        body_lines = lines[fn["start_line"] - 1:fn["end_line"]]
+        for idx, line in enumerate(body_lines):
+            line_no = fn["start_line"] + idx
+            if idx == 0:
+                # Single-line functions put the write on the signature line,
+                # after the opening brace; only that part is body.
+                line = line[line.find("{") + 1:] if "{" in line else ""
+            for var in state_vars:
+                if re.search(rf"\b{re.escape(var)}\b\s*(?:\+=|-=|\*=|/=|=)(?!=)", line):
+                    var_writers[var].setdefault(fn["name"], []).append({
+                        "function": fn["name"],
+                        "line": line_no,
+                        "content": line.strip(),
+                        "guard": _guard_key(fn["signature"]),
+                    })
+    for var, by_func in var_writers.items():
+        if len(by_func) < 2:
+            continue
+        guard_keys = {tuple(sorted(g.items())) for evs in by_func.values() for g in [evs[0]["guard"]]}
+        if len(guard_keys) <= 1:
+            continue  # uniform guards (guarded or unguarded) = not inconsistent
+        evidence = [ev for evs in by_func.values() for ev in evs]
+        findings.append({
+            "name": f"Inconsistent guards on shared state `{var}`",
+            "severity": "High",
+            "status": "confirmed",
+            "confidence": "high",
+            "description": (
+                f"Variable written by {len(by_func)} functions with different "
+                f"guard patterns (guard sets taken from function signatures)"
+            ),
+            "writers": sorted({ev["line"] for ev in evidence}),
+            "evidence": evidence,
+        })
+
+    # Roles defined but never granted, per role (not per file).
+    roles_defined = {}
+    for i, line in enumerate(lines):
+        m = re.search(r"bytes32\s+(?:public\s+|constant\s+|internal\s+|private\s+)*(\w+_ROLE)\s*=", line)
+        if m:
+            roles_defined.setdefault(m.group(1), i + 1)
+    ungranted = []
+    for role, def_line in roles_defined.items():
+        granted = any(
+            re.search(rf"(?:grantRole|_grantRole|_setupRole)\s*\(\s*{re.escape(role)}\b", line)
+            for line in lines
+        )
+        if not granted:
+            ungranted.append((role, def_line))
+    if ungranted:
+        findings.append({
+            "name": "Roles defined but never granted",
+            "severity": "High",
+            "status": "confirmed",
+            "confidence": "high",
+            "description": (
+                f"Roles never granted: {', '.join(r for r, _ in ungranted)} "
+                f"— may be permanently locked"
+            ),
+            "evidence": [
+                {"role": role, "line": def_line, "content": lines[def_line - 1].strip()}
+                for role, def_line in ungranted
+            ],
+        })
+
     return findings
 
 
@@ -165,7 +261,8 @@ def format_ai_findings(ai_check: Dict, vulns: List[Dict]) -> str:
             lines.append(f"\n- **[{v['severity']}]** {v['name']}")
             lines.append(f"  {v['description']}")
     
-    lines.append("\n**Known AI Code Weaknesses (Slither misses these):**")
+    lines.append("\n**Known AI Code Weaknesses — checklist only, NOT findings**")
+    lines.append("(No code evidence is attached to these; they are checks to run, not detected vulnerabilities.)")
     for v in _AI_MISSED_VULNS:
         lines.append(f"- {v['name']} ({v['severity']}): {v['detect']}")
     
