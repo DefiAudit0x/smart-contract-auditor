@@ -167,38 +167,302 @@ def function_read_write_sets(body: str, state_vars):
     return reads, writes
 
 
+def _skip_string_or_comment(body: str, i: int) -> int:
+    """Index just past a string/comment starting at *i*, or *i* itself."""
+    if body.startswith("//", i):
+        end = body.find("\n", i)
+        return len(body) if end < 0 else end
+    if body.startswith("/*", i):
+        end = body.find("*/", i + 2)
+        return len(body) if end < 0 else end + 2
+    if body[i] in ("\"", "'"):
+        quote = body[i]
+        j = i + 1
+        while j < len(body):
+            if body[j] == "\\":
+                j += 2
+                continue
+            if body[j] == quote:
+                return j + 1
+            j += 1
+        return len(body)
+    return i
+
+
+def _match_balanced(body: str, open_idx: int, open_ch: str, close_ch: str) -> int:
+    """Index just past the balanced closer for the opener at *open_idx*.
+
+    Returns -1 when unbalanced. Strings and comments are skipped, so a
+    brace or parenthesis inside them never opens or closes a block.
+    """
+    depth = 0
+    i = open_idx
+    while i < len(body):
+        skipped = _skip_string_or_comment(body, i)
+        if skipped != i:
+            i = skipped
+            continue
+        ch = body[i]
+        if ch == open_ch:
+            depth += 1
+        elif ch == close_ch:
+            depth -= 1
+            if depth == 0:
+                return i + 1
+        i += 1
+    return -1
+
+
+def _parse_branch_blocks(body: str, start: int, end: int, counter):
+    """Parse *body[start:end]* into a branch tree.
+
+    Nodes are tuples: ``("text", start, end)`` or ``("if", node_id,
+    then_nodes, else_nodes_or_None, if_start, if_end)``. Bare ``{...}`` blocks are spliced
+    into the enclosing sequence (they add no branch), and ``else if``
+    chains become an if node nested inside the else branch. Any shape
+    the parser cannot establish (unbalanced braces, a missing body) is
+    left as plain text, which is the conservative choice: an unknown
+    shape never downgrades a finding, it simply is not proven exclusive.
+    """
+    nodes = []
+    text_start = start
+    i = start
+    while i < end:
+        skipped = _skip_string_or_comment(body, i)
+        if skipped != i:
+            i = skipped
+            continue
+        if body[i] == "{":
+            close = _match_balanced(body, i, "{", "}")
+            if close < 0 or close > end:
+                i += 1
+                continue
+            if text_start < i:
+                nodes.append(("text", text_start, i))
+            nodes.extend(_parse_branch_blocks(body, i + 1, close - 1, counter))
+            i = close
+            text_start = i
+            continue
+        if (
+            re.match(r"if\b", body[i:]) is not None
+            and (i == 0 or not (body[i - 1].isalnum() or body[i - 1] == "_"))
+            and (i + 2 >= len(body) or not (body[i + 2].isalnum() or body[i + 2] == "_"))
+        ):
+            # Skip the "if" keyword, then the balanced condition.
+            j = i + 2
+            while j < end and body[j].isspace():
+                j += 1
+            if j >= end or body[j] != "(":
+                i += 1
+                continue
+            cond_end = _match_balanced(body, j, "(", ")")
+            if cond_end < 0 or cond_end > end:
+                i += 1
+                continue
+            k = cond_end
+            while k < end and body[k].isspace():
+                k += 1
+            if k < end and body[k] == "{":
+                then_close = _match_balanced(body, k, "{", "}")
+                if then_close < 0 or then_close > end:
+                    i += 1
+                    continue
+                then_nodes = _parse_branch_blocks(body, k + 1, then_close - 1, counter)
+                after = then_close
+            else:
+                # Single-statement then branch: up to the next ';' at
+                # top level (parentheses/braces inside it are balanced).
+                semi = k
+                paren = brace = 0
+                while semi < end:
+                    s2 = _skip_string_or_comment(body, semi)
+                    if s2 != semi:
+                        semi = s2
+                        continue
+                    if body[semi] == "(":
+                        paren += 1
+                    elif body[semi] == ")":
+                        paren -= 1
+                    elif body[semi] == "{":
+                        brace += 1
+                    elif body[semi] == "}":
+                        brace -= 1
+                    elif body[semi] == ";" and paren == 0 and brace == 0:
+                        semi += 1
+                        break
+                    semi += 1
+                then_nodes = [("text", k, semi)]
+                after = semi
+            # Optional else branch.
+            m = after
+            while m < end and body[m].isspace():
+                m += 1
+            else_nodes = None
+            if re.match(r"else\b", body[m:]) is not None and (
+                m + 4 >= len(body)
+                or not (body[m + 4].isalnum() or body[m + 4] == "_")
+            ):
+                m2 = m + 4
+                while m2 < end and body[m2].isspace():
+                    m2 += 1
+                if m2 < end and body[m2] == "{":
+                    else_close = _match_balanced(body, m2, "{", "}")
+                    if else_close >= 0 and else_close <= end:
+                        else_nodes = _parse_branch_blocks(
+                            body, m2 + 1, else_close - 1, counter
+                        )
+                        after = else_close
+                elif m2 < end and re.match(r"if\b", body[m2:]) is not None:
+                    # else-if: do NOT claim an else branch here. The
+                    # inner if is left to be parsed as its own node
+                    # in the enclosing sequence, so a write after the
+                    # else-if chain can never be misread as sitting
+                    # inside the else branch (which would wrongly
+                    # downgrade a write that executes after either
+                    # branch). The cost is conservative: a write
+                    # inside an else-if else branch is not proven
+                    # exclusive and stays Confirmed, as before.
+                    after = m2
+                else:
+                    semi = m2
+                    paren = brace = 0
+                    while semi < end:
+                        s2 = _skip_string_or_comment(body, semi)
+                        if s2 != semi:
+                            semi = s2
+                            continue
+                        if body[semi] == "(":
+                            paren += 1
+                        elif body[semi] == ")":
+                            paren -= 1
+                        elif body[semi] == "{":
+                            brace += 1
+                        elif body[semi] == "}":
+                            brace -= 1
+                        elif body[semi] == ";" and paren == 0 and brace == 0:
+                            semi += 1
+                            break
+                        semi += 1
+                    else_nodes = [("text", m2, semi)]
+                    after = semi
+            if text_start < i:
+                nodes.append(("text", text_start, i))
+            counter[0] += 1
+            nodes.append(("if", counter[0], then_nodes, else_nodes, i, after))
+            i = after
+            text_start = i
+            continue
+        i += 1
+    if text_start < end:
+        nodes.append(("text", text_start, end))
+    return nodes
+
+
+def _branch_path(nodes, pos):
+    """Branch ancestry of *pos* as [(if_node_id, 'then'/'else'), ...].
+
+    Returns None when *pos* is not covered by *nodes* (an unparsed
+    shape), which callers treat as "not proven exclusive".
+    """
+    for node in nodes:
+        if node[0] == "text":
+            if node[1] <= pos < node[2]:
+                return []
+        elif node[0] == "if":
+            _, node_id, then_nodes, else_nodes, if_start, if_end = node
+            if not (if_start <= pos < if_end):
+                continue
+            sub = _branch_path(then_nodes, pos) if then_nodes else None
+            if sub is not None:
+                return [(node_id, "then")] + sub
+            if else_nodes:
+                sub = _branch_path(else_nodes, pos)
+                if sub is not None:
+                    return [(node_id, "else")] + sub
+            # Inside this if node but in neither branch: the condition
+            # (e.g. Parity's ``if (!_to.call.value(...)(...))``), a
+            # keyword, or whitespace between branches. Such a position
+            # executes when the enclosing block executes, before the
+            # branch is taken, so it carries no branch side of its own.
+            return []
+    return None
+
+
+def _mutually_exclusive_branches(body: str, call_pos: int, write_pos: int) -> bool:
+    """True only when call and write are in opposite if/else branches.
+
+    Two positions are mutually exclusive exactly when their branch
+    paths share a prefix and first differ at the same if node with
+    opposite sides. A call inside an if block followed by a write after
+    that if (the classic ``if (!call) throw; write;`` shape) is NOT
+    exclusive: the write's path is a prefix of the call's path, so the
+    write executes after either branch. Any unparsed shape returns
+    False, so the check can only downgrade a finding it positively
+    establishes as cross-branch, never one it merely fails to parse.
+    """
+    try:
+        nodes = _parse_branch_blocks(body or "", 0, len(body or ""), [0])
+        path_call = _branch_path(nodes, call_pos)
+        path_write = _branch_path(nodes, write_pos)
+    except Exception:
+        return False
+    if path_call is None or path_write is None:
+        return False
+    for (id_call, side_call), (id_write, side_write) in zip(path_call, path_write):
+        if id_call != id_write:
+            return False
+        if side_call != side_write:
+            return True
+    return False
+
+
 def call_before_write_evidence(body: str, state_vars):
     """Return (call_pos, call_member, write_var, write_pos) or None.
 
     Evidence requires, in order: a callback-capable external call, then
-    a write to a declared state variable.  A write that appears only
-    before the call, or no state write at all, is not evidence.
+    a write to a declared state variable on a path that can actually
+    follow the call.  A write that appears only before the call, or no
+    state write at all, is not evidence.  A write in the opposite
+    branch of an if/else from the call (e.g. Parity execute(): the call
+    in the ``if`` branch, the write in the ``else`` branch) is likewise
+    not evidence: the two can never execute in one pass, so the pair
+    is downgraded to a guard note by classify_function instead of
+    being reported as Confirmed. Later writes on a following path are
+    still considered, so a same-path write after a cross-branch one
+    still counts.
     """
     body = body or ""
     calls = callback_capable_calls(body)
     if not calls:
         return None
-    first_call_pos, first_call_member = calls[0]
     reads, writes = function_read_write_sets(body, state_vars)
     if not writes:
         return None
-    # Find the earliest write *after* the first callback-capable call.
-    for var in state_vars:
-        if not var:
-            continue
-        pat = _var_ref_pattern(var)
-        for m in re.finditer(pat, body):
-            if m.start() <= first_call_pos:
+    for call_pos, call_member in calls:
+        # All writes after this call, earliest first (the old code
+        # iterated state variables in list order, not position order).
+        candidates = []
+        for var in state_vars:
+            if not var:
                 continue
-            tail = body[m.end():m.end() + 4].lstrip()
-            prefix = body[max(0, m.start() - 8):m.start()]
-            is_write = (
-                re.search(r"\bdelete\s*$", prefix) is not None
-                or tail.startswith(("++", "--"))
-                or _is_assignment_tail(tail)
-            )
-            if is_write:
-                return (first_call_pos, first_call_member, var, m.start())
+            pat = _var_ref_pattern(var)
+            for m in re.finditer(pat, body):
+                if m.start() <= call_pos:
+                    continue
+                tail = body[m.end():m.end() + 4].lstrip()
+                prefix = body[max(0, m.start() - 8):m.start()]
+                is_write = (
+                    re.search(r"\bdelete\s*$", prefix) is not None
+                    or tail.startswith(("++", "--"))
+                    or _is_assignment_tail(tail)
+                )
+                if is_write:
+                    candidates.append((m.start(), var))
+        candidates.sort()
+        for write_pos, var in candidates:
+            if _mutually_exclusive_branches(body, call_pos, write_pos):
+                continue
+            return (call_pos, call_member, var, write_pos)
     return None
 
 
