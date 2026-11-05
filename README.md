@@ -15,7 +15,7 @@ A multi-language smart contract security auditor combining a multi-pass LLM pipe
 - VS Code Extension
 - Telegram Bot integration
 - Dark mode web UI with Chart.js severity charts
-- Pattern learner for continuous improvement
+- Pattern learner: LLM-mined regex candidates stay inactive until PoC-confirmed (see "Pattern learning" below)
 - Cross-session knowledge base with confidence-aware retrieval
 
 ## Quick Start (Docker)
@@ -132,6 +132,53 @@ PYTHONPATH=. python benchmarks/real_world/run_negative_controls.py
 PYTHONPATH=. python benchmarks/run_track_baseline.py --llm-report /path/to/evaluation_run.json --json-out track-baseline.json
 ```
 
+## Corpus regression gate (Mini-Review)
+
+Mini-Review's auto (reentrancy-evidence) path is pinned against a
+local 52-case corpus by `scripts/check_corpus_regression.py`, run in
+CI by `.github/workflows/corpus-regression.yml`. Bucket definitions
+(Fix 2): **Confirmed findings** are code-evidence + Critical items
+only; **guard notes** (Medium, appendix only) and **unverified LLM
+hypotheses** are explicitly not findings and are never counted as
+such. On the auto path there are no LLM findings, so hypotheses are 0.
+
+Pinned counts, measured with Fix 3 code on the local corpus (same
+files and commits as the corpus manifest): total **143**, Critical
+**19**, Medium **124**, Confirmed findings **19**, guard notes (not
+findings) **124**, hypotheses **0**, other **0**. Confirmed split:
+**17** in reentrancy-labelled cases + **2** Parity `confirm()` items
+(SB-AC-02, NS-AC-02) — those two are code-evidence items, not
+verified exploits, since the labelled Parity flaw is elsewhere in
+those files. Per-case pins include LAB-RE-01 = 1 Confirmed, SB-RE-01
+= 1 Confirmed, SF-RE-01 = 5 Confirmed + 13 guard notes, SB-RE-07 = 0
+items (known miss), NS-RE-03 = 0 Confirmed, and REAL-01 (Mandate),
+REAL-02, REAL-03, REAL-04 = 0 items each. The gate fails if Critical
+drops (lost detection) or rises (new false Critical), or if any
+per-case pin moves.
+
+Fix 2's bucketing does not change these auto-path counts: before Fix
+2 the same run reported total 143 / Critical 19 / Medium 124, and
+after Fix 2 those 19 Critical items are exactly the Confirmed bucket
+and the 124 Medium items are exactly the guard-notes bucket, so the
+before/after comparison is like-for-like. Fix 3 (contract-level-only
+`_state_variables`) leaves all 52 per-case counts unchanged, while
+the state-variable lists themselves changed in 33 of 52 cases —
+locals (e.g. `i`, `to`, `value`, `sig` in the Parity files) removed
+and genuine custom-type/constant variables (e.g. `m_owners`,
+`MAX_UINT256`, `token`) added — so the narrowing removed
+false-evidence surface without moving any corpus verdict.
+
+The corpus is deliberately NOT vendored into this repo: it mixes
+public benchmark code under its own licences with real teams'
+outreach contracts, and the local corpus is local-only. The workflow
+therefore runs only on `workflow_dispatch` where the corpus is
+present, and the script exits non-zero — never a silent pass — when
+the corpus directory is absent. Run it locally with:
+
+```bash
+CORPUS_DIR=/path/to/auditor-test-corpus python3 scripts/check_corpus_regression.py
+```
+
 ## Reproducible Build and Security
 
 Python dependencies are pinned with hashes in [`requirements.lock`](requirements.lock). Docker uses the pinned Python 3.10.14 Bookworm image tag, installs with `--require-hashes`, runs as a non-root user, and includes a healthcheck. CI runs the full test suite, Python compilation, a strict Foundry benchmark, and a pinned targeted lint gate.
@@ -139,6 +186,38 @@ Python dependencies are pinned with hashes in [`requirements.lock`](requirements
 Archive uploads use traversal, symlink, executable-file, member-count, and expansion-size controls. GitHub repository loading accepts only canonical HTTPS `github.com/owner/repository` URLs. PoC execution refuses an unisolated fallback and applies Docker network, capability, filesystem, process, memory, and CPU restrictions when Docker mode is used.
 
 Read [`THREAT_MODEL.md`](THREAT_MODEL.md) for assets, trust boundaries, threats, and residual risks.
+
+## Pattern learning
+
+The pattern learner mines regex candidates from audit reports
+(`agents/pattern_learner.py`, via the pipeline audit path only —
+Mini-Review does not mine patterns). A candidate is **inactive** by
+default: it appears in no scan and no report until it is confirmed,
+and confirmation requires PoC-style evidence, not a text note:
+
+- every regex in the candidate must fire on a supplied vulnerable
+  sample, and
+- no regex in the candidate may fire on a supplied fixed sample.
+
+Confirm via the admin API (same admin auth as the KB confirm route):
+
+- `GET /api/admin/patterns/learned` — list candidates
+- `POST /api/admin/patterns/learned/confirm` with `name`,
+  `vulnerable_code`, `fixed_code`, and optional `evidence`
+
+A confirmed pattern is stored persistently — `/data/learned_patterns.json`
+when the `/data` volume exists, otherwise `instance/learned_patterns.json`
+(override with `LEARNED_PATTERNS_PATH`); a legacy repo-root
+`learned_patterns.json` is migrated once to the new location and left
+intact. The next pre-scan picks up a newly confirmed pattern without a
+process restart. Removing a confirmed pattern from the file does not
+deregister it from a running process; restart to apply a removal.
+
+Limitation, stated plainly: the knowledge-base confirm route
+(`/api/admin/patterns/confirm`) is a different store and still accepts
+text evidence only. KB patterns are RAG context for confirmed patterns
+only — they are never executed as detectors — so that route does not
+prove a regex, and must not be presented as PoC confirmation.
 
 ## Limitations
 
