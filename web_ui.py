@@ -936,6 +936,51 @@ def api_admin_confirm_pattern():
     return jsonify({"success": True, "pattern": confidence})
 
 
+@app.route('/api/admin/patterns/learned', methods=['GET'])
+def api_admin_learned_candidates():
+    """List pattern_learner candidates (a different store from the KB
+    patterns confirmed above: these are LLM-mined regex candidates,
+    inactive until PoC-confirmed). Admin-only."""
+    if 'admin_authenticated' not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+    from agents.pattern_learner import list_candidates
+    candidates = [{
+        "name": c.get("name"),
+        "severity": c.get("severity"),
+        "description": c.get("description"),
+        "patterns": c.get("patterns", []),
+    } for c in list_candidates()]
+    return jsonify({"candidates": candidates})
+
+
+@app.route('/api/admin/patterns/learned/confirm', methods=['POST'])
+def api_admin_confirm_learned_pattern():
+    """Confirm a pattern_learner candidate ONLY on PoC evidence:
+    every regex must fire on `vulnerable_code` and none may fire on
+    `fixed_code`. Text evidence alone is rejected, exactly as in
+    agents.pattern_learner.confirm_pattern_poc. Admin-only, same
+    auth/CSRF treatment as the KB confirm route above."""
+    if 'admin_authenticated' not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json() or {}
+    name = str(data.get("name", "")).strip()
+    if not name:
+        return jsonify({"error": "name is required"}), 400
+    vulnerable_code = data.get("vulnerable_code", "")
+    fixed_code = data.get("fixed_code", "")
+    if not vulnerable_code or not fixed_code:
+        return jsonify({"error": "vulnerable_code and fixed_code are both required"}), 400
+    from agents.pattern_learner import confirm_pattern_poc
+    ok, reason = confirm_pattern_poc(
+        name, vulnerable_code, fixed_code,
+        str(data.get("evidence", "")),
+    )
+    if not ok:
+        return jsonify({"error": reason}), 409
+    log_admin_event(f"confirm_learned_pattern:{name}", True)
+    return jsonify({"success": True, "name": name, "verification_method": "poc_regex"})
+
+
 
 
 @app.route('/api/admin/codes', methods=['GET', 'POST'])
