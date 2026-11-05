@@ -9,7 +9,7 @@ from agents.llm_client import (
     _validate_text_input, _call_groq,
 )
 from agents.pre_scan import (
-    run_pre_scan,
+    run_pre_scan, run_pre_scan_with_failures, format_pre_scan_failures,
     _has_detector, _has_mcp, _has_ai_tools, _has_zksync, _has_gate, _has_external, _has_sbom,
     _detector, _mcp, _ai_tools, _zksync, _gate,
 )
@@ -18,4 +18,8 @@ from agents.pipeline import (
     analyze_code, audit, chunked_audit,
     truncate_code, _split_functions, _run_chunk,
     generate_hackerone_report, KBManager, _kb_manager,
+)
+from agents.truncation import (
+    truncation_notice, scope_notices_section, append_scope_notices,
+    skipped_tools_section, append_skipped_tools,
 )

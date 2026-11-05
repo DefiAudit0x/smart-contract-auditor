@@ -12,7 +12,7 @@ from config import FREE_MODELS, REPORT_DIR, PROGRESS_FILE
 from agents import call_model_with_fallback, truncate_code
 from static_analysis import analyze_opcodes, analyze_storage_single, analyze_inheritance
 from hierarchical_base import HierarchicalAuditor
-from external_analyzers import run_external_analyzers, findings_to_text, tool_available
+from external_analyzers import external_analysis_text, tool_available
 
 logger = logging.getLogger(__name__)
 
@@ -181,15 +181,12 @@ def hierarchical_audit(code: str, protocol_name: str = "Protocol", repo_url: str
         code = _extract_contract(code, focus)
 
     # Layer 0: External tools — availability re-checked at call time (L-30)
+    # P3: external_analysis_text carries the SKIPPED entries for tools
+    # that did not run, so the returned report (attachments below) no
+    # longer reads as if missing tools had cleared the contract.
     available = [t for t in ("slither", "mythril") if tool_available(t)]
-    if available:
-        logger.info(f"Layer 0: running {', '.join(available)}...")
-        ext_findings = run_external_analyzers(code)
-        ext_text = findings_to_text(ext_findings, max_per_tool=15)
-        logger.info(f"Layer 0: {len(ext_findings)} findings from external tools")
-    else:
-        ext_text = ""
-        logger.info("Layer 0: no external tools available (Slither/Mythril not installed)")
+    logger.info(f"Layer 0: available external tools: {available or 'none'}")
+    ext_text = external_analysis_text(code)
 
     # Static analysis
     opcode_report = analyze_opcodes(code)
@@ -213,6 +210,8 @@ def hierarchical_audit(code: str, protocol_name: str = "Protocol", repo_url: str
     layer1, layer2, final = auditor.run(code, extra_context=extra_ctx)
 
     final += "\n\n---\n\n## Attachments\n\n"
+    if ext_text:
+        final += ext_text + "\n"
     final += opcode_report + "\n"
     final += storage_report + "\n"
     final += inheritance_report + "\n"

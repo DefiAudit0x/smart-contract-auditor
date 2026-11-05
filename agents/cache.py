@@ -68,6 +68,42 @@ def _cache_cleanup(max_age_days: int = 30, batch_size: int = 1000):
         logger.debug(f"Cache cleanup error: {e}")
 
 
+# Cache-key model versioning.
+#
+# The old key was (model_id, prompt_hash) only. A model id does not
+# change when a provider updates the weights behind the same tag (an
+# Ollama re-pull, a refreshed OpenRouter snapshot), so a stale response
+# could be served for a model that is no longer the one that produced
+# it. The version is therefore folded into the model_id component of
+# the key (see _effective_model_id): no schema migration is needed,
+# and entries stored before versioning keep working under their
+# original unversioned key. The version comes from an explicit caller
+# argument or, failing that, the AUDITOR_MODEL_VERSION environment
+# variable, which operators bump when the model behind a fixed name
+# changes. The "@" separator is unambiguous here: neither Ollama model
+# names nor the OpenRouter ids in config.FREE_MODELS contain "@".
+MODEL_VERSION_ENV_VAR = "AUDITOR_MODEL_VERSION"
+
+
+def _resolve_model_version(model_version=None) -> str:
+    """Return the cache-key model version: explicit arg, else env, else ''.
+
+    '' is the legacy unversioned bucket, kept so pre-existing entries
+    keep hitting for callers that do not supply a version.
+    """
+    if model_version is not None:
+        return str(model_version).strip()
+    return os.environ.get(MODEL_VERSION_ENV_VAR, "").strip()
+
+
+def _effective_model_id(model_id: str, model_version=None) -> str:
+    """Model-id component of the cache key, namespaced by model version."""
+    version = _resolve_model_version(model_version)
+    if not version:
+        return model_id
+    return f"{model_id}@{version}"
+
+
 def _init_cache():
     if not CACHE_ENABLED:
         return
@@ -86,16 +122,17 @@ def _init_cache():
         logger.warning(f"Cache init failed: {e}")
 
 
-def _cache_get(model_id: str, prompt: str) -> Optional[str]:
+def _cache_get(model_id: str, prompt: str, model_version=None) -> Optional[str]:
     if not CACHE_ENABLED:
         return None
+    key_id = _effective_model_id(model_id, model_version)
     h = hashlib.sha256(prompt.encode()).hexdigest()
     try:
         rc = _get_redis()
         if rc:
-            val = rc.get(f"cache:{model_id}:{h}")
+            val = rc.get(f"cache:{key_id}:{h}")
             if val is not None:
-                console.log(f"[dim]Redis Cache: {model_id} — hit[/]")
+                console.log(f"[dim]Redis Cache: {key_id} — hit[/]")
                 return val
     except Exception:
         pass
@@ -103,33 +140,34 @@ def _cache_get(model_id: str, prompt: str) -> Optional[str]:
         conn = _get_conn()
         row = conn.execute(
             "SELECT response FROM responses WHERE model_id=? AND prompt_hash=?",
-            (model_id, h)
+            (key_id, h)
         ).fetchone()
         if row:
-            conn.execute("UPDATE responses SET hits=hits+1 WHERE model_id=? AND prompt_hash=?", (model_id, h))
+            conn.execute("UPDATE responses SET hits=hits+1 WHERE model_id=? AND prompt_hash=?", (key_id, h))
             conn.commit()
-            console.log(f"[dim]Cache: {model_id} — from cache[/]")
+            console.log(f"[dim]Cache: {key_id} — from cache[/]")
             return row[0]
     except Exception as e:
         logger.debug(f"Cache get error: {e}")
     return None
 
 
-def _cache_set(model_id: str, prompt: str, response: str):
+def _cache_set(model_id: str, prompt: str, response: str, model_version=None):
     if not CACHE_ENABLED:
         return
+    key_id = _effective_model_id(model_id, model_version)
     h = hashlib.sha256(prompt.encode()).hexdigest()
     try:
         rc = _get_redis()
         if rc:
-            rc.setex(f"cache:{model_id}:{h}", 86400, response)
+            rc.setex(f"cache:{key_id}:{h}", 86400, response)
     except Exception:
         pass
     try:
         conn = _get_conn()
         conn.execute(
             "INSERT OR REPLACE INTO responses (model_id, prompt_hash, response, created_at) VALUES (?, ?, ?, ?)",
-            (model_id, h, response, time.time())
+            (key_id, h, response, time.time())
         )
         conn.commit()
     except Exception as e:

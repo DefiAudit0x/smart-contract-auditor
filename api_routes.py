@@ -22,7 +22,9 @@ from config import OLLAMA_MODEL, GITHUB_TOKEN, SECRET_KEY, API_PROVIDER, ACTIVE_
 from agents.pipeline import truncate_code
 from agents.llm_client import _stream_ollama, _stream_openrouter
 from agents.prompts import SYSTEM_PROMPT
-from agents.pre_scan import run_pre_scan
+from agents.pre_scan import (
+    run_pre_scan, run_pre_scan_with_failures, format_pre_scan_failures,
+)
 from werkzeug.utils import secure_filename
 from orchestrator import dispatch_analysis
 from security_utils import validate_zip_infos
@@ -213,12 +215,13 @@ def api_analyze_stream():
 
     def generate():
         pre_scan = ""
+        pre_scan_failures = []
         try:
             # Step 1: Pre-scan
             yield f"data: {json.dumps({'type': 'meta', 'message': 'Running pre-scan...'})}\n\n"
             yield f"data: {json.dumps({'type': 'step', 'step': 1, 'status': 'done'})}\n\n"
             try:
-                pre_scan = run_pre_scan(code)
+                pre_scan, pre_scan_failures = run_pre_scan_with_failures(code)
                 if pre_scan:
                     yield f"data: {json.dumps({'type': 'pre_scan', 'text': pre_scan})}\n\n"
             except Exception as e:
@@ -283,10 +286,23 @@ def api_analyze_stream():
                 yield f"data: {json.dumps({'type': 'step', 'step': 4, 'status': 'active'})}\n\n"
                 yield f"data: {json.dumps({'type': 'meta', 'message': 'Computing CVSS scores...'})}\n\n"
                 try:
-                    from cvss_scorer import score_report as _score_cvss
+                    from cvss_scorer import (
+                        score_report as _score_cvss,
+                        format_finding_score as _fmt_finding,
+                        format_overall_score as _fmt_overall,
+                    )
                     cvss_result = _score_cvss(full_report)
-                    if cvss_result:
-                        full_report += f"\n\n---\n## CVSS Score\n{cvss_result}\n"
+                    if cvss_result and cvss_result.get("findings"):
+                        # Formatted lines, not a raw dict dump: a
+                        # fallback must read as an estimate and a
+                        # not-assessed overall must not read as 0.0.
+                        cvss_lines = ["\n\n---\n## CVSS Score"]
+                        for _f in cvss_result["findings"]:
+                            cvss_lines.append(
+                                f"- **{_f['name']}**: {_fmt_finding(_f)}")
+                        cvss_lines.append(
+                            f"\n**Overall Max CVSS**: {_fmt_overall(cvss_result)}")
+                        full_report += "\n".join(cvss_lines) + "\n"
                 except Exception as e:
                     logger.debug(f"CVSS in stream skipped: {e}")
                 yield f"data: {json.dumps({'type': 'step', 'step': 4, 'status': 'done'})}\n\n"
@@ -297,6 +313,12 @@ def api_analyze_stream():
                 learn_from_audit(code, full_report, pre_scan)
             except Exception as e:
                 logger.debug(f"KB learning skipped: {e}")
+
+            # Pre-scan completeness belongs in the final report itself,
+            # not only in the pre_scan event or a log line.
+            _pre_section = format_pre_scan_failures(pre_scan_failures)
+            if _pre_section:
+                full_report += f"\n\n{_pre_section}"
 
             _complete_code_audit_usage(reservation)
             # Step 5: Done
@@ -445,8 +467,12 @@ def api_github_stream():
         from agents.prompts import SYSTEM_PROMPT
         from config import API_PROVIDER, ACTIVE_MODEL, FREE_MODELS, OLLAMA_MODEL
         yield 'data: {}\n\n'.format(json.dumps({'type': 'progress', 'step': 'pre-scan', 'text': 'Running static analysis (grep, MCP, AST)...'}))
-        pre = run_pre_scan(combined)
-        msg = 'GitHub repo: {} files found, pre-scan complete'.format(len(contracts))
+        pre, _pre_failures = run_pre_scan_with_failures(combined)
+        if _pre_failures:
+            msg = ('GitHub repo: {} files found, pre-scan INCOMPLETE '
+                   '({} task(s) failed)'.format(len(contracts), len(_pre_failures)))
+        else:
+            msg = 'GitHub repo: {} files found, pre-scan complete'.format(len(contracts))
         yield 'data: {}\n\n'.format(json.dumps({'type': 'progress', 'step': 'pre-scan', 'text': msg}))
         prompt = "{}\n\nPre-scan findings:\n{}\n\nGitHub repo ({}) code:\n{}\n\nProvide a comprehensive security audit.".format(
             SYSTEM_PROMPT, pre, url.rsplit('/', 1)[-1], combined)
@@ -472,6 +498,9 @@ def api_github_stream():
         if not full or len(full.strip()) < 20:
             yield 'data: {}\n\n'.format(json.dumps({'type': 'error', 'message': 'The AI model returned an empty response. Please try again.'}))
             return
+        _pre_section = format_pre_scan_failures(_pre_failures)
+        if _pre_section:
+            full += '\n\n' + _pre_section
         yield 'data: {}\n\n'.format(json.dumps({'type': 'final', 'report': full}))
 
     return Response(stream_with_context(_track_code_audit_stream(gen(), reservation)), mimetype='text/event-stream', headers={
@@ -664,10 +693,14 @@ def api_analyze_project():
             from agents.llm_client import _stream_ollama, _stream_openrouter
             from agents.prompts import SYSTEM_PROMPT
             from config import API_PROVIDER, ACTIVE_MODEL, FREE_MODELS, OLLAMA_MODEL
-            pre = run_pre_scan(combined)
+            pre, _pre_failures = run_pre_scan_with_failures(combined)
             prompt = "{}\n\nPre-scan findings:\n{}\n\nProject files ({}):\n{}\n\nProvide a comprehensive security audit of this project. Focus on the entry contract.".format(
                 SYSTEM_PROMPT, pre, len(sol_files), combined)
-            msg = 'Pre-scan complete: {} files found'.format(len(sol_files))
+            if _pre_failures:
+                msg = ('Pre-scan INCOMPLETE ({} task(s) failed): '
+                       '{} files found'.format(len(_pre_failures), len(sol_files)))
+            else:
+                msg = 'Pre-scan complete: {} files found'.format(len(sol_files))
             yield 'data: {}\n\n'.format(json.dumps({'type': 'progress', 'step': 'pre-scan', 'text': msg}))
             yield 'data: {}\n\n'.format(json.dumps({'type': 'progress', 'step': 'ai', 'text': 'Running AI analysis across project...'}))
             full = ""
@@ -691,6 +724,9 @@ def api_analyze_project():
             if not full or len(full.strip()) < 20:
                 yield 'data: {}\n\n'.format(json.dumps({'type': 'error', 'message': 'The AI model returned an empty response. Please try again.'}))
                 return
+            _pre_section = format_pre_scan_failures(_pre_failures)
+            if _pre_section:
+                full += '\n\n' + _pre_section
             yield 'data: {}\n\n'.format(json.dumps({'type': 'final', 'report': full}))
 
         return Response(stream_with_context(_track_code_audit_stream(generate(), reservation)), mimetype='text/event-stream', headers={

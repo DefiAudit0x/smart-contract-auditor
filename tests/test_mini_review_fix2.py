@@ -40,11 +40,17 @@ COMMIT = "a6ad6111f33761f01b591c8e9c96ae6b8e900d11"
 
 # Non-reentrancy finding whose Q1b check passes (names withdraw(),
 # which is public, unguarded, and writes state) but which has no PoC.
+# P1 full-audit gate hardening: Q1b now requires a tied artefact, not
+# just a named function plus any write in its body — so this fixture
+# names the state variable actually written in withdraw()'s body
+# ("balances").  Without that word the fixture would be a weak-evidence
+# finding and Q1b would (correctly) fail; the assertions below are
+# about Q1b-passing findings, so the fixture must genuinely pass Q1b.
 ACCESS_Q1B_ONLY = {
     "name": "Access Control",
     "severity": "High",
     "description": (
-        "Access control in withdraw(): attacker drains funds, "
+        "Access control in withdraw(): attacker drains balances, "
         "first call withdraw then drain"
     ),
 }

@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, List, Optional, Tuple
@@ -181,6 +182,15 @@ def analyze_contract(code: str, contract_path: str = "", analyzers: Optional[Lis
     # parallel (slither + aderyn used to run sequentially) and merge in a
     # deterministic order.
     ext_jobs = [t for t in ("slither", "aderyn") if t in analyzers and contract_path]
+    skipped_tools = []
+    # P3: a missing tool used to return [] exactly like "ran, nothing
+    # found".  Report it as SKIPPED instead (shutil.which is the
+    # detection to mock in tests; never assert real installation).
+    skipped_tools = [
+        {"tool": t, "status": "SKIPPED", "reason": "not installed"}
+        for t in ext_jobs
+        if shutil.which(t) is None
+    ]
     if ext_jobs:
         futures = {
             "slither": lambda: _run_slither(contract_path),
@@ -206,6 +216,7 @@ def analyze_contract(code: str, contract_path: str = "", analyzers: Optional[Lis
     
     return {
         "findings": deduped,
+        "skipped_tools": skipped_tools,
         "total": len(deduped),
         "summary": {
             "critical": sum(1 for f in deduped if f.get("severity") == "Critical"),
