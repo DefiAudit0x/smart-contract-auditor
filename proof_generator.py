@@ -162,25 +162,103 @@ def _parse_forge_summary(output: str) -> Optional[tuple]:
     )
 
 
+def _forge_std_checkout_candidates():
+    """Ordered places a usable forge-std checkout may already exist.
+
+    Each candidate is a directory whose ``src/Test.sol`` is the library
+    entry point. ``FORGE_STD_PATH`` wins: it lets a caller point at a
+    checkout without touching the repository. The repo's own
+    ``lib/forge-std`` (if a maintainer vendored or installed it there)
+    is next, then a ``~/.forge-std`` checkout.
+    """
+    candidates = []
+    env = os.environ.get("FORGE_STD_PATH", "").strip()
+    if env:
+        candidates.append(Path(env))
+    candidates.append(Path(__file__).resolve().parent / "lib" / "forge-std")
+    candidates.append(Path.home() / ".forge-std")
+    return candidates
+
+
+def _provide_forge_std(proj: Path) -> Optional[str]:
+    """Copy a forge-std checkout into ``proj/lib/forge-std``.
+
+    Returns None on success, or an error string on failure. Failure is
+    never papered over with a stub: a stub ``Test.sol`` cannot provide
+    the cheatcode interface a real PoC imports, so a run without a real
+    forge-std must be INCONCLUSIVE, not a fake compile. Resolution
+    order: ``FORGE_STD_PATH``, repo ``lib/forge-std``, ``~/.forge-std``,
+    then ``forge install foundry-rs/forge-std`` when ``forge`` is on
+    PATH (host-side, before any Docker run, because the Docker run
+    itself uses ``--network none`` and a read-only mount and therefore
+    cannot install anything inside the container).
+    """
+    lib_dir = proj / "lib" / "forge-std"
+    for candidate in _forge_std_checkout_candidates():
+        src = candidate / "src" / "Test.sol"
+        if candidate.is_dir() and src.is_file():
+            shutil.copytree(candidate, lib_dir, dirs_exist_ok=True)
+            if (lib_dir / "src" / "Test.sol").is_file():
+                return None
+        # A bare src directory (a checkout's src/ itself) is also
+        # accepted, so FORGE_STD_PATH may point at either level.
+        if candidate.is_dir() and (candidate / "Test.sol").is_file():
+            shutil.copytree(candidate, lib_dir / "src", dirs_exist_ok=True)
+            if (lib_dir / "src" / "Test.sol").is_file():
+                return None
+    if shutil.which("forge"):
+        try:
+            proc = subprocess.run(
+                ["forge", "install", "foundry-rs/forge-std", "--no-commit"],
+                cwd=str(proj), capture_output=True, text=True, timeout=180,
+            )
+        except Exception as exc:  # network/git failure is not a pass
+            return (
+                "forge-std install failed "
+                f"({type(exc).__name__}: {exc}); PoC run is INCONCLUSIVE"
+            )
+        if (lib_dir / "src" / "Test.sol").is_file():
+            return None
+        return (
+            "forge install ran but lib/forge-std/src/Test.sol is still "
+            "missing; PoC run is INCONCLUSIVE"
+        )
+    return (
+        "forge-std not available: no FORGE_STD_PATH checkout, no repo "
+        "lib/forge-std, no ~/.forge-std, and forge is not installed to "
+        "run 'forge install foundry-rs/forge-std'; PoC run is "
+        "INCONCLUSIVE"
+    )
+
+
 def _build_poc_project(poc_path: str, victim_code: str) -> Path:
     """Assemble a real temporary Foundry project for one PoC run.
 
     The generated PoC imports `forge-std/Test.sol` and `../src/Victim.sol`;
     neither exists next to the bare proof file, so running forge directly in
     PROOFS_DIR can only fail to compile — which the old evaluator then read
-    as "vulnerability disproved". Each run now gets its own project.
+    as "vulnerability disproved". Each run now gets its own project, and
+    forge-std is provided into ``lib/forge-std`` before any run: without
+    it every PoC fails to compile, which is INCONCLUSIVE, not DISPROVED.
+
+    Raises RuntimeError when no forge-std source is available; callers
+    must map that to INCONCLUSIVE, never to a pass or a disproof.
     """
     proj = Path(tempfile.mkdtemp(prefix="poc_run_"))
     (proj / "src").mkdir()
     (proj / "test").mkdir()
     (proj / "foundry.toml").write_text(
-        "[profile.default]\nsrc = 'src'\nout = 'out'\nlibs = ['lib']\nsolc_version = '0.8.25'\n\n[profile.default.fuzz]\nruns = 32\n",
+        "[profile.default]\nsrc = 'src'\nout = 'out'\nlibs = ['lib']\nsolc_version = '0.8.25'\nremappings = ['forge-std/=lib/forge-std/src/']\n\n[profile.default.fuzz]\nruns = 32\n",
         encoding="utf-8",
     )
     if victim_code:
         (proj / "src" / "Victim.sol").write_text(victim_code, encoding="utf-8")
     poc_source = Path(poc_path).read_text(encoding="utf-8")
     (proj / "test" / "PoC.t.sol").write_text(poc_source, encoding="utf-8")
+    forge_std_error = _provide_forge_std(proj)
+    if forge_std_error is not None:
+        shutil.rmtree(proj, ignore_errors=True)
+        raise RuntimeError(forge_std_error)
     return proj
 
 
@@ -200,7 +278,13 @@ def run_foundry_test(poc_path: str, project_dir: str = ".", use_docker: bool = T
         result["error"] = "forge not installed. Install Foundry: https://book.getfoundry.sh/getting-started/installation"
         return result
 
-    proj = _build_poc_project(poc_path, victim_code)
+    try:
+        proj = _build_poc_project(poc_path, victim_code)
+    except RuntimeError as exc:
+        # No forge-std source: the run cannot compile, which is
+        # INCONCLUSIVE, never a pass and never a disproof.
+        result["error"] = str(exc)
+        return result
     try:
         if use_docker:
             command = [
