@@ -41,9 +41,19 @@ def test_candidate_requires_evidence_before_confirmation(monkeypatch, tmp_path):
     assert pl.confirm_pattern("Novel state sync", "too short") is False
     assert pl.get_learned_bug_classes() == {}
 
+    # Fix 1: text evidence alone is no longer sufficient, however long.
     assert pl.confirm_pattern(
         "Novel state sync",
         "Independent reproduction confirms the finding in a Foundry test",
+    ) is False
+    assert pl.get_learned_bug_classes() == {}
+
+    # PoC evidence: fires on vulnerable, not on fixed.
+    assert pl.confirm_pattern(
+        "Novel state sync",
+        "Independent reproduction confirms the finding in a Foundry test",
+        vulnerable_code="contract X { function f() external { state sync; } }",
+        fixed_code="contract X { function f() external { state updated; } }",
     ) is True
 
     classes = pl.get_learned_bug_classes()
