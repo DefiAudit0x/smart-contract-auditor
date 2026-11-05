@@ -433,9 +433,26 @@ def score_report(report: str) -> Dict:
 
     numeric_scores = [s["cvss_score"] for s in scored
                       if isinstance(s.get("cvss_score"), (int, float))]
-    overall_score = max(numeric_scores) if numeric_scores else 0.0
-    overall_severity = severity_from_score(overall_score)
-    if all(s.get("status") == "not_assessed" for s in scored) and scored:
+    if numeric_scores:
+        overall_score = max(numeric_scores)
+        overall_severity = severity_from_score(overall_score)
+        # Basis of the max: an assessed finding at the max makes the
+        # overall an assessment; otherwise the max is only an estimate.
+        # Renderers must use this, never present a fallback max as a
+        # computed score.
+        at_max = [s for s in scored if s.get("cvss_score") == overall_score]
+        if any(s.get("status") == "assessed" for s in at_max):
+            overall_basis = "assessed"
+        else:
+            overall_basis = "estimate"
+    else:
+        # Nothing was scored: no numeric overall. A 0.0 here would read
+        # as "safe" (severity None), so the overall is explicitly None
+        # and renderers must show "Not assessed — no score" instead.
+        overall_score = None
+        overall_severity = "Not Assessed"
+        overall_basis = "not_assessed"
+    if not scored or all(s.get("status") == "not_assessed" for s in scored):
         overall_status = "not_assessed"
     elif any(s.get("status") == "not_assessed" for s in scored):
         overall_status = "partially_assessed"
@@ -447,8 +464,72 @@ def score_report(report: str) -> Dict:
         "overall_score": overall_score,
         "overall_severity": overall_severity,
         "overall_status": overall_status,
+        "overall_basis": overall_basis,
         "total_findings": len(scored),
     }
+
+
+def format_finding_score(finding: dict) -> str:
+    """One-line client-facing rendering of a single scored finding.
+
+    A fallback estimate is always labelled "estimate" in plain words
+    (never a bare "X/10" with only a method/provenance code beside it,
+    which reads as official when method is "official"), and a
+    not-assessed finding carries no numeric score at all.
+    """
+    status = finding.get("status", "not_assessed")
+    score = finding.get("cvss_score")
+    severity = finding.get("cvss_severity", "")
+    vector = finding.get("cvss_vector")
+    provenance = finding.get("provenance", "")
+    method = finding.get("method", "")
+    if status == "not_assessed" or score is None:
+        text = "Not assessed — no score"
+        note = finding.get("note", "")
+        if note:
+            text += f" ({note})"
+        return text
+    if status == "fallback_estimate":
+        text = (f"{score}/10 ({severity}) — estimate "
+                "(not an attribute assessment")
+        if method == "official":
+            text += "; scored with the official formula, still an estimate"
+        if provenance:
+            text += f"; provenance: {provenance}"
+        text += ")"
+        if vector:
+            text += f" — `{vector}`"
+        return text
+    # Assessed from explicit attributes/vector.
+    text = f"{score}/10 ({severity}) — assessed"
+    if method == "internal_estimate":
+        text += (" (internal estimate — not an official FIRST "
+                 "CVSS 4.0 publication")
+    elif method:
+        text += f" (method: {method}"
+    if provenance:
+        text += f", provenance: {provenance}"
+    text += ")"
+    if vector:
+        text += f" — `{vector}`"
+    return text
+
+
+def format_overall_score(cvss_result: dict) -> str:
+    """One-line client-facing rendering of a score_report overall.
+
+    Not-assessed (or empty) results render as "Not assessed — no
+    score" with no number; an estimate-only max is labelled estimate.
+    """
+    if cvss_result.get("overall_score") is None:
+        return "Not assessed — no score"
+    score = cvss_result["overall_score"]
+    severity = cvss_result.get("overall_severity", "")
+    if cvss_result.get("overall_basis") == "estimate":
+        return (f"{score}/10 ({severity}) — estimate "
+                "(overall max comes from fallback estimates only, "
+                "not from explicit CVSS attributes)")
+    return f"{score}/10 ({severity})"
 
 
 def _first_letter(value, metric: str) -> str:
@@ -523,9 +604,17 @@ def compute_cvss(attack_vector: str = "N", complexity: str = "L",
     return detailed["cvss_score"], detailed["cvss_severity"], detailed["cvss_vector"]
 
 
-def cvss_explanation(score: float, severity: str, vector: str) -> str:
-    """Generate a human-readable explanation of the CVSS score."""
-    metrics = parse_vector(vector)
+def cvss_explanation(score, severity: str, vector: str) -> str:
+    """Generate a human-readable explanation of the CVSS score.
+
+    A None score (not assessed) renders as "Not assessed — no score"
+    with no numeric score and no metric breakdown built from an
+    unrelated vector.
+    """
+    if score is None:
+        return ("**CVSS 4.0 Score**: Not assessed — no score\n\n"
+                "No CVSS vector was assessed for this report.")
+    metrics = parse_vector(vector or "")
     parts = [
         f"**CVSS 4.0 Score**: {score}/10 ({severity})",
         f"**Vector**: `{vector}`",

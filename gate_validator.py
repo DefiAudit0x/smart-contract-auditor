@@ -204,6 +204,154 @@ def _finding_words(finding: Dict) -> List[str]:
     return re.findall(r"[A-Za-z_][A-Za-z0-9_]*", text)
 
 
+# --- Full-audit gate hardening (remaining Priority 1) ---
+#
+# Two weaknesses in the pre-hardening gate are closed here:
+# (1) The hallucination check was waived whenever the finding named ANY
+#     real function, so a finding could name one real function and one
+#     invented function and still pass.  A hallucinated location is now
+#     a hard reject regardless of what else the finding names.
+# (2) _has_code_evidence used to pass on "named function + ANY
+#     assignment/call in its body" (or a variable written ANYWHERE in
+#     the code).  That is wording-adjacent, not proof: a body can
+#     contain an unrelated write while the finding claims something
+#     else entirely.  It now additionally requires a concrete artefact
+#     TIED to the finding and present in the named function's body (see
+#     _finding_body_artefacts).  Naming only a function is no longer
+#     enough for Critical/High.
+#
+# What this gate still cannot enforce (documented, not silently
+# assumed): bare English mentions of a variable/function with no code
+# syntax (no "foo()", backticks, or assignment/indexing); ordering or
+# timing claims (call-before-write across branches or contracts, see
+# the branch-parser caveats elsewhere); cross-contract call graphs
+# beyond a direct call from a public function; and exploitability
+# itself (a code artefact proves the code shape exists, not that an
+# attacker can profitably reach it).  Those remain human-review items.
+
+# Global builtins that are never user-defined functions: naming them is
+# not naming a hallucinated location.
+_BUILTIN_IDENTIFIERS = {"require", "revert", "emit", "assert"}
+
+# External-call verbs: only meaningful as a method (x.call(...)); a
+# bare "call()" is not a user function, and a method call is not a
+# claim about a user-defined function at all.
+_CALL_VERBS = ("call", "delegatecall", "staticcall", "transfer", "send")
+
+
+def _finding_text(finding: Dict) -> str:
+    return " ".join(
+        str(finding.get(k, "")) for k in ("name", "description", "poc")
+    )
+
+
+def _explicit_called_names(finding: Dict) -> List[str]:
+    """Identifiers the finding presents as code calls, e.g. ``foo()``.
+
+    Method calls (``msg.sender.call(``, ``token.transfer(``) are
+    excluded: the identifier after a ``.`` is a method/builtin, not a
+    claim that a user-defined function of that name exists.  Global
+    builtins (require/revert/emit/assert) are likewise excluded.
+    Everything else written as ``name(`` — optionally with a
+    ``{...}`` value block, as in ``call{value: x}(`` — is treated as a
+    claim that a function of that name exists in the supplied source.
+    So is ``function name``: a finding that says "calls function
+    claimReward" claims that function exists just as surely as one
+    that writes "claimReward()".
+    """
+    text = _finding_text(finding)
+    names: List[str] = []
+    for m in re.finditer(r"\bfunction\s+([A-Za-z_][A-Za-z0-9_]*)", text):
+        name = m.group(1)
+        if name not in _KEYWORDS and name not in _BUILTIN_IDENTIFIERS and name not in names:
+            names.append(name)
+    for m in re.finditer(
+        r"\b([A-Za-z_][A-Za-z0-9_]*)\s*(?:\{[^}]*\})?\s*\(", text
+    ):
+        # Walk back over whitespace: a '.' immediately before the
+        # identifier means this is a method call, not a function claim.
+        i = m.start(1) - 1
+        while i >= 0 and text[i] in " \t":
+            i -= 1
+        if i >= 0 and text[i] == ".":
+            continue
+        name = m.group(1)
+        if name in _KEYWORDS or name in _BUILTIN_IDENTIFIERS:
+            continue
+        if name not in names:
+            names.append(name)
+    return names
+
+
+def _claimed_code_identifiers(finding: Dict) -> List[str]:
+    """Identifiers the finding claims in unambiguous code syntax.
+
+    Only two shapes count, deliberately: backtick-quoted identifiers
+    (`` `balances` ``) and identifiers used as an assignment/index
+    target (``balances[msg.sender] -= amount``, ``x = y``).  Bare
+    English words are NOT claimed identifiers — treating every word
+    as a code claim would reject ordinary prose ("attacker", "funds").
+    This is the narrow, enforceable form of "the claimed variable
+    must exist in the source" used by Q1b for Medium/Low (task b);
+    anything vaguer is documented as unenforceable, not guessed at.
+    """
+    text = _finding_text(finding)
+    claimed: List[str] = []
+    for name in re.findall(r"`([A-Za-z_][A-Za-z0-9_]*)`", text):
+        if name not in _KEYWORDS and name not in claimed:
+            claimed.append(name)
+    for m in re.finditer(
+        r"\b([A-Za-z_][A-Za-z0-9_]*)\s*(?:\[[^\]]*\]\s*)?"
+        r"(?:\+=|-=|\*=|/=|%=|=(?!=))",
+        text,
+    ):
+        name = m.group(1)
+        if name not in _KEYWORDS and name not in claimed:
+            claimed.append(name)
+    return claimed
+
+
+def _finding_body_artefacts(
+    finding: Dict, body: str, functions: Dict, written: set, named_fn: str
+) -> List[str]:
+    """Concrete artefacts tied to the finding and present in ``body``.
+
+    At least one is required (in addition to reachability and a state
+    transition) for Critical/High code evidence.  An artefact is:
+    - a state variable named by the finding that is written somewhere
+      in the code AND appears in this function's body; or
+    - an external-call verb named by the finding (``.call(``,
+      ``.transfer(``, ...) that also appears in this body; or
+    - another defined function named by the finding that this body
+      actually calls.
+    A write/call that the finding never mentions is not an artefact:
+    it does not tie the finding to the code, it only proves the body
+    is non-trivial.
+    """
+    words = set(_finding_words(finding))
+    finding_text = _finding_text(finding)
+    artefacts: List[str] = []
+    for var in words:
+        if var != named_fn and var in written and re.search(
+            rf"\b{re.escape(var)}\b", body
+        ):
+            artefacts.append(f"state variable '{var}'")
+    for verb in _CALL_VERBS:
+        if re.search(
+            rf"\.{verb}\s*(?:\{{[^}}]*\}})?\s*\(", finding_text
+        ) or re.search(rf"\b{verb}\s*(?:\{{[^}}]*\}})?\s*\(", finding_text):
+            if re.search(rf"\.{verb}\s*(?:\{{[^}}]*\}})?\s*\(", body):
+                artefacts.append(f"call pattern '.{verb}('")
+    for other in words:
+        if (
+            other != named_fn
+            and other in functions
+            and re.search(rf"\b{re.escape(other)}\s*\(", body)
+        ):
+            artefacts.append(f"called function '{other}()'")
+    return artefacts
+
+
 def _state_vars_written_in_code(code: str) -> set:
     written = set()
     # Indexed writes (balances[msg.sender] -= amount) have brackets
@@ -222,28 +370,34 @@ def _state_vars_written_in_code(code: str) -> set:
 
 
 def _has_code_evidence(finding: Dict, code: str) -> Tuple[bool, str]:
-    """Return (True, '') only when the code itself supports the finding."""
+    """Return (True, '') only when the code itself supports the finding.
+
+    Hardened (remaining Priority 1): a finding passes only when
+    (1) it names no hallucinated function — the old waiver that cleared
+    a hallucinated name merely because some other real function was
+    also named is REMOVED, so one real + one invented location still
+    fails; (2) a named function is reachable by an unprivileged caller;
+    (3) that function's body contains a state transition; AND (4) the
+    body contains at least one concrete artefact the finding actually
+    claims (a named state variable, a named call pattern, or a named
+    called function — see _finding_body_artefacts).  Rule (4) is what
+    stops "named function + any unrelated write/call in its body"
+    from passing: the artefact must be both claimed and present.
+    """
     functions = _parse_code_functions(code)
     if not functions:
         return False, "No code evidence: no functions could be parsed from the analyzed code"
     words = _finding_words(finding)
     named = [w for w in words if w in functions]
-    # A finding that explicitly names a function (foo() / foo.call) that
-    # does not exist in the code is naming a hallucinated location.
-    explicit = set(re.findall(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\(", " ".join(
-        str(finding.get(k, "")) for k in ("name", "description", "poc")
-    )))
-    hallucinated = [
-        w for w in explicit
-        if w not in functions and w not in _KEYWORDS and w not in {"require", "revert", "emit"}
-    ]
-    # Only treat a name as hallucinated when the finding presents it as a
-    # code location (e.g. "in withdraw()" / "withdraw() is vulnerable"),
-    # not when it is an ordinary English verb that happens to end in "()".
-    if hallucinated and named:
-        # named already proves a real location exists; a stray extra
-        # identifier is not, on its own, a hallucination.
-        hallucinated = []
+    # A finding that explicitly names a function (foo()) that does not
+    # exist in the code is naming a hallucinated location.  This is a
+    # hard reject even when the finding also names a real function:
+    # naming one real location does not launder an invented one.
+    # Method calls (x.call() / token.transfer()) and global builtins
+    # are excluded by _explicit_called_names — they are not claims
+    # about user-defined functions.
+    explicit = _explicit_called_names(finding)
+    hallucinated = [w for w in explicit if w not in functions]
     if hallucinated:
         return False, (
             "No code evidence: finding names function(s) not present in the "
@@ -255,6 +409,7 @@ def _has_code_evidence(finding: Dict, code: str) -> Tuple[bool, str]:
             "finding is present in the analyzed code"
         )
     written = _state_vars_written_in_code(code)
+    reachable_any = False
     for name in named:
         fn = functions[name]
         # Reachability: directly callable by an unprivileged caller, or
@@ -277,13 +432,16 @@ def _has_code_evidence(finding: Dict, code: str) -> Tuple[bool, str]:
                     break
         if not reachable:
             continue
-        # State transition: a write / external call / transfer in this
-        # function's body, or a state variable named by the finding that
-        # is written somewhere in the code.
+        reachable_any = True
+        # State transition in THIS function's body (not merely
+        # somewhere in the file): a write / external call / transfer.
         body = fn["body"]
         # .call{value: amount}("") is the standard value-transfer form:
         # allow an optional {…} block between the call name and "(".
         # Indexed writes (balances[x] -= amount) are handled likewise.
+        # (The "=="-as-write quirk in this regex is pre-existing and
+        # out of scope here; the new tied-artefact rule below is what
+        # stops an unrelated body write from satisfying a finding.)
         has_transition = bool(
             re.search(
                 r"\.(?:call|delegatecall|transfer|send)\s*(?:\{[^}]*\})?\s*\(", body
@@ -295,10 +453,19 @@ def _has_code_evidence(finding: Dict, code: str) -> Tuple[bool, str]:
             )
         )
         if not has_transition:
-            named_vars = {w for w in words if w in written}
-            has_transition = bool(named_vars)
-        if has_transition:
+            continue
+        # Tied artefact: the finding must claim something concrete
+        # that is actually in this body.  A transition the finding
+        # never mentions does not tie the finding to the code.
+        artefacts = _finding_body_artefacts(finding, body, functions, written, name)
+        if artefacts:
             return True, ""
+    if reachable_any:
+        return False, (
+            "No code evidence: no named, reachable function has both a "
+            "state transition and a claimed artefact (state variable, "
+            "call pattern, or called function) actually present in its body"
+        )
     return False, (
         "No code evidence: no named function is both reachable by an "
         "unprivileged caller and tied to a state transition in the code"
@@ -384,8 +551,26 @@ def _gate_q1b_code_evidence(finding: Dict, code: str) -> Tuple[bool, str]:
     For Critical/High, a finding must pass _has_code_evidence; a
     convincing exploit description with no code path is rejected, not
     passed or silently downgraded.  For Medium/Low the text path is
-    still allowed, but a finding that names a function that does not
-    exist in the code is rejected at any severity.
+    still allowed, but two hard rejects apply at ANY severity:
+    (1) a hallucinated location — a function named as ``foo()`` that
+    does not exist in the supplied source (now unwaivable: naming a
+    real function alongside it no longer clears it); and
+    (2) a claimed code identifier that does not exist in the source —
+    a backtick-quoted identifier or an assignment/index target named
+    by the finding (see _claimed_code_identifiers) that appears
+    nowhere in the code.  A claimed function is covered by (1); a
+    claimed variable is covered by (2) — but only in those two
+    unambiguous code syntaxes, so ordinary prose words are never
+    mistaken for code claims.
+
+    What Q1b still cannot enforce (documented limits): a variable or
+    function mentioned only in bare English with no code syntax; a
+    claim about a variable's value, role, or timing rather than its
+    existence; ordering claims (which line runs first, which branch
+    is taken); cross-contract or inherited code not present in the
+    supplied source; and whether the claimed artefact is actually
+    exploitable.  Those remain human-review items — the gate rejects
+    provably invented locations, it does not certify the rest.
     """
     sev = finding.get("severity", "Medium")
     ok, reason = _has_code_evidence(finding, code)
@@ -393,11 +578,26 @@ def _gate_q1b_code_evidence(finding: Dict, code: str) -> Tuple[bool, str]:
         return True, ""
     if sev in ("Critical", "High"):
         return False, reason
-    # Medium/Low: only the hallucinated-location case is a hard reject;
-    # other missing-evidence cases are triage, not proof, and are left
-    # to the existing downgrade logic.
+    # Medium/Low: hallucinated-location and claimed-identifier cases
+    # are hard rejects; other missing-evidence cases are triage, not
+    # proof, and are left to the existing downgrade logic.
     if "not present in the analyzed code" in reason:
         return False, reason
+    # Second hard check, enforced directly (not via the _has_code_evidence
+    # reason string, which conflates several failure modes): a claimed
+    # variable in code syntax that exists nowhere in the source.
+    code_words = set(re.findall(r"[A-Za-z_][A-Za-z0-9_]*", code or ""))
+    functions = _parse_code_functions(code)
+    missing_vars = [
+        name
+        for name in _claimed_code_identifiers(finding)
+        if name not in code_words and name not in functions
+    ]
+    if missing_vars:
+        return False, (
+            "No code evidence: finding claims code identifier(s) not "
+            f"present in the analyzed code: {', '.join(sorted(missing_vars))}"
+        )
     return True, ""
 
 
