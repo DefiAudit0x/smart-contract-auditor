@@ -14,8 +14,16 @@ from cli_display import console
 from agents.prompts import SYSTEM_PROMPT, CHUNK_PROMPT
 from agents.cache import _cache_get
 from agents.llm_client import call_model_with_fallback, _call_ollama, call_model
-from agents.pre_scan import run_pre_scan, _has_gate, _gate
+from agents.pre_scan import (
+    run_pre_scan, run_pre_scan_with_failures, format_pre_scan_failures,
+    _has_gate, _gate,
+)
 from agents.validation import validate_report, cvss_score_report, _has_cvss, _cvss
+from agents.truncation import (
+    append_scope_notices,
+    scope_notices_section,
+    truncation_notice,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -225,7 +233,14 @@ def _split_functions(code: str) -> List[Dict[str, str]]:
         })
 
     if not chunks:
-        chunks.append({"name": "full", "state_vars": [], "code": code[:5000]})
+        # P3: the 5000-char fallback cap used to be silent.  Record the
+        # pre-cap length on the chunk so chunked_audit can surface it;
+        # _run_chunk only reads name/code/state_vars, so the extra key
+        # changes no analysis behaviour.
+        chunks.append({
+            "name": "full", "state_vars": [], "code": code[:5000],
+            "original_len": len(code),
+        })
 
     return chunks
 
@@ -276,6 +291,19 @@ def chunked_audit(code: str) -> str:
         logger.info("chunked_audit: only one function — using normal analysis")
         return analyze_code(code)
 
+    # P3: _run_chunk analyses only the first 4000 chars of each chunk
+    # (and the fallback "full" chunk is already capped at 5000 by
+    # _split_functions).  That used to be silent; surface it in the
+    # header so the returned report states exactly what was cut.
+    chunk_notices = []
+    for chunk in chunks:
+        original_len = chunk.get("original_len", len(chunk["code"]))
+        notice = truncation_notice(
+            f"chunked audit chunk '{chunk['name']}'", original_len, 4000
+        )
+        if notice:
+            chunk_notices.append(notice)
+
     console.log(f"[bold]chunked_audit:[/] splitting code into [cyan]{len(chunks)}[/] functions — parallel analysis")
 
     results = []
@@ -294,6 +322,7 @@ def chunked_audit(code: str) -> str:
 
     results.sort(key=lambda x: [c["name"] for c in chunks].index(x[0]))
     header = f"# Chunked Analysis — {len(chunks)} functions (parallel)\n\n"
+    header += scope_notices_section(chunk_notices)
     body = "\n---\n".join(f"### {name}\n{text}" for name, text in results)
     return header + body
 
@@ -320,8 +349,49 @@ def _mark_unverified(report: str, reason: str) -> str:
     ) + report
 
 
+def _analysed_len_after_truncate(truncated: str) -> int:
+    """Length of the code actually sent to the LLM, excluding the
+    footer truncate_code appends (the footer itself states this same
+    number, so the report notice and the prompt footer agree)."""
+    for marker in ("\n\n// Proportional truncation:", "\n\n// Truncated:"):
+        idx = truncated.rfind(marker)
+        if idx != -1:
+            return idx
+    return len(truncated)
+
+
 def analyze_code(code: str, model_key: str = "") -> str:
-    code = truncate_code(code, model_key)
+    # P3: truncate_code's footer reaches the LLM prompt only; the
+    # returned report used to say nothing about the cut.  Track it
+    # here and append it to every non-empty return below.
+    original_len = len(code)
+    truncated = truncate_code(code, model_key)
+    scope_notices = []
+    notice = truncation_notice(
+        "pipeline truncate_code", original_len,
+        _analysed_len_after_truncate(truncated),
+    )
+    if notice:
+        scope_notices.append(notice)
+    code = truncated
+
+    def _finish(text: str, include_validator_notice: bool = True) -> str:
+        """Append scope notices to a non-empty report, once."""
+        if not text:
+            return text
+        notices = list(scope_notices)
+        if include_validator_notice:
+            # validate_report (agents/validation.py) only ever sees
+            # the first 3000 chars of the (already truncated) code.
+            # It ran on every path that reaches _finish with this flag
+            # set; the validator-failure paths pass False because a
+            # failed validator saw nothing and is already bannered.
+            validator_notice = truncation_notice(
+                "second-pass validator", len(code), 3000
+            )
+            if validator_notice:
+                notices.append(validator_notice)
+        return append_scope_notices(text, notices)
 
     rag_context = ""
     if KB_RAG_ENABLED:
@@ -335,7 +405,14 @@ def analyze_code(code: str, model_key: str = "") -> str:
     # just the closing one.
     safe_code = _strip_untrusted_fences(code)
 
-    pre_scan_context = run_pre_scan(code)
+    pre_scan_context, pre_scan_failures = run_pre_scan_with_failures(code)
+    # Visible in the final report, not only in a log line and not
+    # relying on the LLM echoing the prompt's pre-scan section: a
+    # failed task fails the report's completeness claim.
+    pre_scan_section = format_pre_scan_failures(pre_scan_failures)
+    pre_scan_report_suffix = (
+        f"\n\n{pre_scan_section}" if pre_scan_section else ""
+    )
 
     prompt: str = (
         f"{SYSTEM_PROMPT}\n\n"
@@ -369,12 +446,15 @@ def analyze_code(code: str, model_key: str = "") -> str:
             # so the gate step, CVSS scoring and KB learning cannot strip
             # the UNVERIFIED banner or learn unvalidated findings.
             logger.warning(f"Validation failed, marking report UNVERIFIED: {e}")
-            return _mark_unverified(result, f"second-pass validation error: {e}")
+            return _finish(
+                _mark_unverified(result, f"second-pass validation error: {e}"),
+                include_validator_notice=False,
+            ) + pre_scan_report_suffix
         # The second-pass validator itself returns an UNVERIFIED banner
         # on failure (see agents/validation.py); do not let the gate
         # step rebuild a cleaned report from it and drop that banner.
         if result.startswith("### Validation Warning"):
-            return result
+            return _finish(result, include_validator_notice=False) + pre_scan_report_suffix
 
     if result and _has_gate:
         try:
@@ -390,29 +470,19 @@ def analyze_code(code: str, model_key: str = "") -> str:
                 logger.info("Third-pass (7-Question Gate) validation applied")
         except Exception as e:
             logger.warning(f"7-Question Gate validation failed, marking report UNVERIFIED: {e}")
-            return _mark_unverified(result, f"gate validation error: {e}")
+            return _finish(_mark_unverified(result, f"gate validation error: {e}")) + pre_scan_report_suffix
 
     cvss_data = cvss_score_report(result)
     if cvss_data.get("findings"):
+        # Rendering must never present a fallback as a computed score
+        # (a bare "X/10 [official | ..._estimate]" reads as official)
+        # and must never render not-assessed as 0.0 "safe": the shared
+        # cvss_scorer formatters label estimates and drop the number
+        # for not-assessed findings and overalls.
         cvss_note = "\n\n### CVSS 4.0 Assessment\n"
         for f in cvss_data["findings"]:
-            # Provenance must reach the client-facing report (issue #29):
-            # an estimate or a not-assessed finding must never read as
-            # an official attribute assessment.
-            if f.get("cvss_score") is None:
-                score_text = "Not assessed"
-                vector_text = f.get("note", "Not assessed")
-            else:
-                score_text = f"{f['cvss_score']}/10 ({f['cvss_severity']})"
-                vector_text = f"`{f['cvss_vector']}`"
-            provenance = f.get("provenance", "")
-            method = f.get("method", "")
-            provenance_text = f" [{method} | {provenance}]" if provenance else ""
-            cvss_note += (
-                f"- **{f['name']}**: {score_text} "
-                f"{vector_text}{provenance_text}\n"
-            )
-        cvss_note += f"\n**Overall Max CVSS**: {cvss_data['overall_score']}/10 ({cvss_data['overall_severity']})"
+            cvss_note += f"- **{f['name']}**: {_cvss.format_finding_score(f)}\n"
+        cvss_note += f"\n**Overall Max CVSS**: {_cvss.format_overall_score(cvss_data)}"
         result += cvss_note
         logger.info("CVSS 4.0 scoring added to report")
 
@@ -422,8 +492,9 @@ def analyze_code(code: str, model_key: str = "") -> str:
     if KB_AUTO_LEARN and result:
         learn_from_audit(code, result, pre_scan_context)
 
-
-    return result
+    # Scope notices appended last by _finish, then the pre-scan
+    # completeness section, so neither can be stripped by a later step.
+    return _finish(result) + pre_scan_report_suffix
 
 
 def learn_from_audit(code: str, report: str, pre_scan_context: str = "") -> int:
