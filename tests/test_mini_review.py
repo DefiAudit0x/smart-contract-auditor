@@ -207,6 +207,12 @@ class TestScopeAndCommit:
         assert "- **Location**: Vault.sol:4" in report
 
     def test_summary_counts_by_severity_and_evidence(self):
+        # Fix 2: only the Critical Confirmed finding counts in the
+        # summary findings count. The Medium item names withdraw(),
+        # which is code-confirmed reentrancy, so triage marks it
+        # Confirmed but its severity is not Critical: it lands in
+        # "Other items (not Confirmed findings)", not in Confirmed
+        # findings and not in the guard-note appendix.
         report = mr.generate_mini_review(
             VULN_SOURCE, file_path="Vault.sol", commit=COMMIT,
             findings=[
@@ -215,8 +221,11 @@ class TestScopeAndCommit:
                          "External call in withdraw() with no recognized guard"),
             ],
         )
+        assert "- **Confirmed findings**: 1" in report
         assert "- **Critical**: 1" in report
-        assert "- **Medium**: 1" in report
+        assert "- **Other items (not Confirmed findings)**: 1" in report
+        confirmed = report.split("## Confirmed findings")[1].split("## Other items")[0]
+        assert "External Call Without Recognized Guard" not in confirmed
 
     def test_from_file_reads_file_and_commit(self, tmp_path):
         path = tmp_path / "Vault.sol"
