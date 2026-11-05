@@ -176,14 +176,16 @@ def test_mutually_exclusive_helper():
 
 
 def test_fixed_variants_are_guard_notes_not_confirmed():
+    # Fix 2: guard notes are counted in the appendix, not as findings;
+    # the summary findings count is the 1 Critical Confirmed finding.
     report = mr.generate_mini_review(
         NS_RE_01_SOURCE, file_path="Reentrance.sol", commit="test"
     )
-    assert "- **Total findings**: 3" in report
+    assert "- **Confirmed findings**: 1" in report
     assert "- **Critical**: 1" in report
-    assert "- **Medium**: 2" in report
     assert "- **Confirmed by code evidence**: 1" in report
     assert "- **Guard note only**: 2" in report
+    assert "- **Guard notes (not findings)**: 2" in report
     triaged = mr.triage_findings(
         [
             {
@@ -225,7 +227,11 @@ def test_summary_counts_only_critical_as_confirmed():
     report = mr.generate_mini_review(
         NS_RE_01_SOURCE, file_path="Reentrance.sol", findings=findings
     )
-    assert "- **Total findings**: 3" in report
+    # Fix 2: only the Critical item is a Confirmed finding; the two
+    # Medium code-supported reentrancy items are "other items", not
+    # Confirmed findings and not guard notes.
+    assert "- **Confirmed findings**: 1" in report
     assert "- **Critical**: 1" in report
     assert "- **Confirmed by code evidence**: 1" in report
     assert "- **Confirmed by code evidence**: 3" not in report
+    assert "- **Other items (not Confirmed findings)**: 2" in report
