@@ -274,10 +274,26 @@ def test_concurrent_confirms_do_not_lose_updates(monkeypatch, tmp_path):
     barrier = threading.Barrier(len(names))
     outcomes = []
 
+    # This test targets the load-modify-save lock, not the PoC regex
+    # subprocess path (whose 4-worker semaphore would throttle 8
+    # concurrent confirmations). Patch the PoC checks to direct
+    # matches here; the real subprocess PoC path is covered in
+    # test_pattern_learner_poc_confirmation.py.
+    import re as _re
+    monkeypatch.setattr(pl, "_validate_candidate_pattern", lambda pat: True)
+    monkeypatch.setattr(
+        pl, "_pattern_fires",
+        lambda pat, code: _re.search(pat, code, _re.IGNORECASE) is not None,
+    )
+
     def _confirm(name):
         barrier.wait(timeout=10)
         outcomes.append(
-            pl.confirm_pattern(name, "Independent reproduction confirms it")
+            pl.confirm_pattern(
+                name, "Independent reproduction confirms it",
+                vulnerable_code="test case code",
+                fixed_code="clean code here",
+            )
         )
 
     threads = [threading.Thread(target=_confirm, args=(name,)) for name in names]

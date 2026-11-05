@@ -17,7 +17,33 @@ from agents.llm_client import call_model_with_fallback
 
 logger = logging.getLogger(__name__)
 
-LEARNED_PATTERNS_PATH = os.path.join(os.path.dirname(__file__), "..", "learned_patterns.json")
+# Persistent storage for learned patterns (Fix 1, 2026-11-05).
+#
+# The old default was learned_patterns.json in the repo root: not
+# gitignored, not committed, and wiped by a redeploy, so confirmed
+# patterns silently vanished. The new default follows the KB's own
+# rule (config.py): the persistent /data volume when it exists
+# (Render / Docker), otherwise instance/ next to the KB, which is
+# gitignored and bind-mounted in docker-compose. Override with the
+# LEARNED_PATTERNS_PATH environment variable. Tests keep overriding
+# the module global directly, exactly as before.
+_LEGACY_LEARNED_PATTERNS_PATH = os.path.join(
+    os.path.dirname(__file__), "..", "learned_patterns.json"
+)
+
+
+def _default_learned_patterns_path() -> str:
+    env_path = os.getenv("LEARNED_PATTERNS_PATH", "").strip()
+    if env_path:
+        return env_path
+    if os.path.isdir("/data"):
+        return "/data/learned_patterns.json"
+    return os.path.join(
+        os.path.dirname(__file__), "..", "instance", "learned_patterns.json"
+    )
+
+
+LEARNED_PATTERNS_PATH = _default_learned_patterns_path()
 
 # Storage bound (M21 remediation): unbounded LLM-mined growth slowed every
 # subsequent scan with unaudited patterns.
@@ -277,7 +303,43 @@ def _learned_lock():
                 _LEARNED_LOCK_STATE["fd"] = None
 
 
+def _migrate_legacy_if_needed() -> None:
+    """One-time, explicit migration from the old repo-root file.
+
+    Runs only when the active path is the computed default (an env
+    override is an explicit location choice, and a test monkeypatch is
+    not a deployment to migrate), the new file does not exist yet,
+    and the legacy file does. The legacy file is left intact on disk
+    so nothing is lost if the copy is inspected or rolled back; a
+    corrupt legacy file is not copied, it is logged and ignored.
+    """
+    try:
+        resolved = os.path.abspath(os.fspath(LEARNED_PATTERNS_PATH))
+        legacy = os.path.abspath(os.fspath(_LEGACY_LEARNED_PATTERNS_PATH))
+        default = os.path.abspath(_default_learned_patterns_path())
+        if resolved == legacy or resolved != default:
+            return
+        if os.path.isfile(resolved) or not os.path.isfile(legacy):
+            return
+        with open(legacy, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, list):
+            return
+    except Exception as exc:
+        logger.warning("Legacy learned-patterns migration skipped: %s", exc)
+        return
+    try:
+        _save_learned(data)
+        logger.info(
+            "Migrated %d learned pattern(s) from legacy %s to %s",
+            len(data), legacy, resolved,
+        )
+    except Exception as exc:
+        logger.warning("Legacy learned-patterns migration failed: %s", exc)
+
+
 def _load_learned() -> list:
+    _migrate_legacy_if_needed()
     if not os.path.isfile(LEARNED_PATTERNS_PATH):
         return []
     try:
@@ -326,6 +388,10 @@ def _save_learned(patterns: list):
     data = json.dumps(patterns, indent=2, ensure_ascii=False)
     dest = os.fspath(LEARNED_PATTERNS_PATH)
     directory = os.path.dirname(os.path.abspath(dest))
+    # The persistent directory may not exist yet (fresh instance/ or a
+    # new /data mount); without this the first save fails instead of
+    # persisting, which was part of the old storage failure mode.
+    os.makedirs(directory, exist_ok=True)
     with _learned_lock():
         fd, tmp_path = tempfile.mkstemp(
             dir=directory, prefix=".learned_patterns.", suffix=".tmp"
@@ -385,23 +451,92 @@ def list_candidates() -> list:
             and p.get("verification_status", "candidate") == "candidate"]
 
 
-def confirm_pattern(name: str, evidence: str) -> bool:
-    """Promote one regex-learning candidate only with explicit evidence."""
-    evidence = (evidence or "").strip()
-    if len(evidence) < 10:
+def _pattern_fires(pattern: str, code: str) -> bool:
+    """True only when the regex actually matches `code`.
+
+    Uses the isolated scan worker (killable on timeout), not the
+    search worker: the search worker reports completion, not a match,
+    so it cannot answer "does this fire". A timeout or worker error
+    counts as "does not fire", never as a confirmation.
+    """
+    if not code:
         return False
-    # Load-modify-save under one lock, so two concurrent confirmations
-    # of different candidates cannot overwrite each other (issue #22).
+    try:
+        re.compile(pattern, re.IGNORECASE)
+    except re.error:
+        return False
+    status, found = _run_regex_isolated(
+        pattern, code, "scan", timeout=2.0
+    )
+    return status == "ok" and bool(found)
+
+
+def confirm_pattern_poc(name: str, vulnerable_code: str, fixed_code: str,
+                        evidence: str = "") -> tuple:
+    """Confirm a candidate ONLY on PoC-style evidence.
+
+    Returns (True, reason) only when EVERY regex in the candidate
+    fires on the vulnerable sample and NO regex fires on the fixed
+    sample. Anything else — text evidence alone, a pattern that
+    misses the vulnerable sample, or one that also matches the fixed
+    sample — returns (False, reason) and leaves the candidate
+    inactive. This replaces the old rule, under which any >=10-char
+    string confirmed a pattern with no proof at all.
+    """
+    if not vulnerable_code or not fixed_code:
+        return False, "vulnerable_code and fixed_code are both required"
+    # PoC checks run OUTSIDE the write lock (they spawn subprocesses
+    # and can take seconds); only the final load-modify-save is locked
+    # (issue #22), and it re-checks that the candidate is still a
+    # candidate with the same patterns before promoting it.
+    snapshot = [p for p in _load_learned()
+                if p.get("name") == name
+                and p.get("verification_status", "candidate") == "candidate"]
+    if not snapshot:
+        return False, "candidate not found"
+    pats = snapshot[0].get("patterns") or []
+    if not pats:
+        return False, "candidate has no patterns to verify"
+    for pat in pats:
+        if not _validate_candidate_pattern(pat):
+            return False, f"pattern failed safety validation: {pat[:80]}"
+        if not _pattern_fires(pat, vulnerable_code):
+            return False, f"pattern did not fire on vulnerable sample: {pat[:80]}"
+        if _pattern_fires(pat, fixed_code):
+            return False, f"pattern also fired on fixed sample: {pat[:80]}"
+    note = (evidence or "").strip() or (
+        "PoC check: pattern fires on vulnerable sample "
+        "and does not fire on fixed sample"
+    )
     with _learned_lock():
         patterns = _load_learned()
         for p in patterns:
-            if p.get("name") == name and p.get("verification_status", "candidate") == "candidate":
+            if (p.get("name") == name
+                    and p.get("verification_status", "candidate") == "candidate"
+                    and p.get("patterns") == pats):
                 p["verification_status"] = "confirmed"
-                p["verification_evidence"] = evidence[:2000]
+                p["verification_method"] = "poc_regex"
+                p["verification_evidence"] = note[:2000]
                 p["verified_at"] = time.time()
                 _save_learned(patterns)
-                return True
-    return False
+                return True, "confirmed"
+    return False, "candidate changed or was already confirmed"
+
+
+def confirm_pattern(name: str, evidence: str = "", vulnerable_code=None,
+                    fixed_code=None) -> bool:
+    """Promote one regex-learning candidate only with PoC evidence.
+
+    Text evidence alone is NOT sufficient: `vulnerable_code` and
+    `fixed_code` are required, and confirmation succeeds only when
+    the candidate's regex fires on the former and not on the latter
+    (see confirm_pattern_poc). Older callers passing only a text
+    string now get False instead of a silent, unproven confirmation.
+    """
+    ok, _reason = confirm_pattern_poc(
+        name, vulnerable_code, fixed_code, evidence
+    )
+    return ok
 
 
 def reject_pattern(name: str, evidence: str) -> bool:

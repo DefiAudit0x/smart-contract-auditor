@@ -1,0 +1,75 @@
+name: Corpus regression (Mini-Review)
+
+# Fix 3: measured performance in CI for Mini-Review on the local
+# 52-case corpus. This workflow is intentionally NOT triggered by
+# push/pull_request, and that is a deliberate choice, not an omission:
+#
+# - The corpus is NOT vendored into this repo. It mixes public
+#   benchmark contracts (smartbugs-curated Apache-2.0, Trail of Bits
+#   not-so-smart-contracts Apache-2.0, SolidiFI-benchmark files that
+#   retain their original Etherscan licences) with real teams'
+#   outreach contracts (Mandate, StableSettle, Stream Vaults,
+#   Seikine), and the local corpus is deliberately local-only -- it
+#   must not be redistributed into a public repo by vendoring.
+# - A push-triggered job could therefore never see the corpus in a
+#   fresh checkout. It would either fail every run (blocking CI for
+#   a missing fixture) or skip and report green (a false pass).
+#   Neither is acceptable for a regression gate.
+#
+# So this workflow runs only on workflow_dispatch, where the corpus
+# is present: a maintainer supplies the corpus directory (a private
+# checkout, or a runner with the corpus mounted) via the input or
+# $CORPUS_DIR. If the corpus is absent, the script exits non-zero
+# with an explicit "CORPUS NOT PRESENT" message -- it never passes
+# silently without the corpus. To run it locally (the normal case):
+#
+#   CORPUS_DIR=/path/to/auditor-test-corpus python3 \
+#       scripts/check_corpus_regression.py
+#
+# Pins (measured with Fix 3 code; bucket definitions are in the
+# script header and the README section "Corpus regression gate"):
+#   total 143, Critical 19, Medium 124, Confirmed findings 19,
+#   guard notes (not findings) 124, hypotheses 0, other 0.
+#   Confirmed split: 17 reentrancy-labelled + 2 Parity confirm()
+#   (SB-AC-02, NS-AC-02 -- code-evidence items, NOT verified exploits).
+# The job fails if Critical drops (lost detection, e.g. SB-RE-01) or
+# rises (new false Critical, e.g. Mandate / REAL-01 returning
+# findings), and on any per-case pin violation in the script.
+#
+# The corpus manifest itself is untouched by this workflow; the
+# script reads manifest.json only for the advisory confirmed-split
+# check, and the totals/per-case pins are the gate.
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      corpus_dir:
+        description: "Corpus root containing corpus/<case>/contract.sol (leave empty to use $CORPUS_DIR)"
+        required: false
+        default: ""
+        type: string
+
+env:
+  PYTHON_VERSION: "3.10.14"
+
+jobs:
+  corpus-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      # No pip install: Mini-Review's evidence path (mini_review.py,
+      # gate_validator.py, cvss_scorer.py, analyzers/reentrancy_evidence.py)
+      # is stdlib only, so the gate needs no dependency step.
+      - name: Run Mini-Review corpus regression gate
+        env:
+          CORPUS_DIR: ${{ inputs.corpus_dir }}
+        run: python3 scripts/check_corpus_regression.py

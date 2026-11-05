@@ -68,6 +68,7 @@ except ImportError:
 
 _has_pattern_learner = False
 _learned_classes = None
+_learned_signature = None
 try:
     from agents.pattern_learner import get_learned_bug_classes, _safe_search_with_timeout, patterns_text as _learned_text
     _has_pattern_learner = True
@@ -185,15 +186,57 @@ def _run_pragma_warning(code: str) -> str:
     return "### ⚠️ Pragma Warning\n" + "\n".join(warnings)
 
 
+def _learned_classes_signature(classes: dict):
+    """Content fingerprint of the confirmed learned classes.
+
+    A signature, not a mtime: confirmation changes the confirmed set
+    itself, and the file may be rewritten by another process. Comparing
+    content catches every confirmation regardless of which path or
+    process wrote it.
+    """
+    try:
+        return tuple(sorted(
+            (key, tuple(cls.get("vulnerable_patterns", [])))
+            for key, cls in classes.items()
+        ))
+    except Exception:
+        return None
+
+
+def reset_learned_registration():
+    """Reset the registration cache (tests / explicit re-scan only).
+
+    Does not remove keys already injected into bug_detector: a
+    confirmed pattern stays active in a running process until restart,
+    which is the safe direction — removal is not silently applied.
+    """
+    global _learned_classes, _learned_signature
+    with _learned_lock:
+        _learned_classes = None
+        _learned_signature = None
+
+
 def _register_learned_classes():
-    """Inject learned patterns into bug_detector's _BUG_CLASSES at runtime."""
+    """Inject learned patterns into bug_detector's _BUG_CLASSES at runtime.
+
+    Fix 1 (2026-11-05): the old code cached _learned_classes once,
+    and an empty first result ({}, not None) made every later call
+    return immediately — so a pattern confirmed after the first
+    pre-scan never entered bug_detector until a process restart.
+    Now every pre-scan re-reads the confirmed set and registers any
+    key that is new since the last registration; unchanged keys are
+    skipped, so the canary gate is not re-run for them.
+    """
     if not _has_detector or not _has_pattern_learner:
         return
-    global _learned_classes
+    global _learned_classes, _learned_signature
     with _learned_lock:
-        if _learned_classes is not None:
-            return  # already registered (single check under the lock)
-        _learned_classes = get_learned_bug_classes()
+        fresh = get_learned_bug_classes()
+        signature = _learned_classes_signature(fresh)
+        if _learned_classes is not None and signature == _learned_signature:
+            return
+        _learned_classes = fresh
+        _learned_signature = signature
         if not _learned_classes:
             return
         canary = "solidity contract function pragma " * 50
