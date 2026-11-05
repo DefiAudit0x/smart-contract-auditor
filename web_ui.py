@@ -618,9 +618,19 @@ def cvss_page():
             vc = request.form.get('vc', 'H')
             vi = request.form.get('vi', 'H')
             va = request.form.get('va', 'H')
-            score, sev, vector = compute_cvss(av, ac, pr, ui, vc, vi, va)
-            result = {"score": score, "severity": sev, "vector": vector,
-                       "explanation": cvss_explanation(score, sev, vector)}
+            # compute_cvss_detailed keeps provenance: without the
+            # official 'cvss' package the score is an internal
+            # estimate, and the page must say so instead of showing
+            # a bare number that reads as official.
+            from cvss_scorer import compute_cvss_detailed as _detailed
+            detailed = _detailed(av, ac, pr, ui, vc, vi, va)
+            result = {"score": detailed["cvss_score"],
+                      "severity": detailed["cvss_severity"],
+                      "vector": detailed["cvss_vector"],
+                      "method": detailed["method"],
+                      "explanation": cvss_explanation(
+                          detailed["cvss_score"], detailed["cvss_severity"],
+                          detailed["cvss_vector"])}
         elif action == 'report':
             report_text = request.form.get('report', '')
             if report_text and _has_cvss:
@@ -908,7 +918,17 @@ csrf.exempt(api_admin_check)
 
 @app.route('/api/admin/patterns/confirm', methods=['POST'])
 def api_admin_confirm_pattern():
-    """Confirm a vulnerability pattern after authorized admin verification."""
+    """Confirm a knowledge-base (KB) pattern after authorized admin verification.
+
+    RAG CONTEXT ONLY — deliberately NOT PoC confirmation: this route
+    accepts text evidence (>=10 chars) and only raises the KB
+    pattern's confidence for retrieval. KB patterns are never
+    executed as detectors, and confirming one here proves nothing
+    about a regex. For a detector, use the learned-pattern PoC
+    confirm route below, which requires vulnerable/fixed samples.
+    The admin panel labels this route the same way; do not present
+    it as PoC confirmation.
+    """
     if 'admin_authenticated' not in session:
         return jsonify({"error": "Unauthorized"}), 401
     data = request.get_json() or {}
@@ -959,7 +979,15 @@ def api_admin_confirm_learned_pattern():
     every regex must fire on `vulnerable_code` and none may fire on
     `fixed_code`. Text evidence alone is rejected, exactly as in
     agents.pattern_learner.confirm_pattern_poc. Admin-only, same
-    auth/CSRF treatment as the KB confirm route above."""
+    auth/CSRF treatment as the KB confirm route above.
+
+    Concurrency limit (fail-closed): PoC checks run through the
+    isolated-regex worker pool (4 workers, non-blocking). Under
+    contention a check can time out and this route returns 409
+    with no confirmation — a timeout is never treated as a pass.
+    Retry the confirmation; do not weaken the gate to make a
+    contended confirmation succeed.
+    """
     if 'admin_authenticated' not in session:
         return jsonify({"error": "Unauthorized"}), 401
     data = request.get_json() or {}
