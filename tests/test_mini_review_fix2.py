@@ -9,8 +9,10 @@
 - A supplied structured poc_result is recorded verbatim, and only a
   passed result upgrades a Q1b-passing non-reentrancy finding to
   Confirmed. Automatic PoC execution is NOT claimed: attempt_poc()
-  returns could-not-run when the toolchain is absent (this VM has
-  neither docker nor forge).
+  returns could-not-run when the toolchain is absent. The
+  could-not-run tests simulate an absent toolchain with monkeypatch:
+  CI runners have docker and Foundry installed, so these tests must
+  never depend on the real environment's toolchain.
 """
 import sys
 from pathlib import Path
@@ -206,12 +208,15 @@ def test_reentrancy_critical_without_poc_still_confirmed():
     assert "- **PoC result**: not attempted" in report
 
 
-def test_attempt_poc_without_toolchain_is_could_not_run_not_a_pass(tmp_path):
+def test_attempt_poc_without_toolchain_is_could_not_run_not_a_pass(tmp_path, monkeypatch):
     poc = tmp_path / "PoC.t.sol"
     poc.write_text("// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\n")
+    # Simulate a missing toolchain deterministically: CI runners have
+    # docker and forge, so this test must not depend on the real
+    # environment. A missing toolchain must never be reported as a
+    # pass or a failure of the exploit.
+    monkeypatch.setattr("shutil.which", lambda name: None)
     result = mr.attempt_poc(str(poc), victim_code=VULN_SOURCE, use_docker=True)
-    # This VM has neither docker nor forge; a missing toolchain must
-    # never be reported as a pass or a failure of the exploit.
     assert result["status"] == "could-not-run"
     assert "Docker not found" in result["error"]
     result_local = mr.attempt_poc(
@@ -221,9 +226,12 @@ def test_attempt_poc_without_toolchain_is_could_not_run_not_a_pass(tmp_path):
     assert "forge not installed" in result_local["error"]
 
 
-def test_attempt_poc_via_generate_records_could_not_run(tmp_path):
+def test_attempt_poc_via_generate_records_could_not_run(tmp_path, monkeypatch):
     poc = tmp_path / "PoC.t.sol"
     poc.write_text("// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\n")
+    # Same deterministic simulation as above: do not depend on the
+    # real CI/local toolchain for the could-not-run wording.
+    monkeypatch.setattr("shutil.which", lambda name: None)
     report = mr.generate_mini_review(
         VULN_SOURCE, file_path="Vault.sol", commit=COMMIT,
         findings=[{"name": "Reentrancy", "severity": "Critical",
