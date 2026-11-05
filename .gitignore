@@ -26,5 +26,8 @@ report_*.md
 dist/
 *.egg-info/
 instance/
+# Learned patterns are runtime data, never committed code: the legacy
+# repo-root file must not be committed if it is still produced.
+learned_patterns.json
 cache.db
 usage.db
