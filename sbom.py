@@ -266,11 +266,12 @@ def format_sbom_text(result: SBOMResult) -> str:
         return "\n".join(parts)
 
     parts.append(f"### Dependencies ({len(result.dependencies)})\n")
-    parts.append("| # | Import Path | Known Package |")
-    parts.append("|---|------------|--------------|")
+    parts.append("| # | Import Path | Known Package | Known CVEs |")
+    parts.append("|---|------------|--------------|------------|")
     for i, dep in enumerate(result.dependencies, 1):
         pkg = dep.known_package or "-"
-        parts.append(f"| {i} | `{dep.name}` | {pkg} |")
+        cves = ", ".join(dep.cves) or "-"
+        parts.append(f"| {i} | `{dep.name}` | {pkg} | {cves} |")
     parts.append("")
 
     if result.compiler_cves:
@@ -300,6 +301,8 @@ def generate_sbom_json(result: SBOMResult) -> str:
             "name": d.known_package or d.name,
             "version": "",
             "evidence": {"identity": [{"field": "name", "confidence": 0.5}]},
+            "properties": ([{"name": "security.cves", "value": ", ".join(d.cves)}]
+                           if d.cves else []),
         })
     properties = [
         {"name": "solidity.pragma", "value": result.pragma or ""},

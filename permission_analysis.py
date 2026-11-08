@@ -19,7 +19,6 @@ ROLE_PATTERNS = [
 ]
 
 FUNCTION_VISIBILITIES = [
-    (r"(public|external)\s+function\s+(\w+)", "writable"),
     (r"function\s+(\w+)\s*\([^)]*\)\s*(?:public|external)", "writable"),
     (r"function\s+(\w+)\s*\([^)]*\)\s*(?:internal|private)", "internal"),
     (r"function\s+(\w+)\s*\([^)]*\)\s*(?:public|external)\s*(?:view|pure)", "readable"),
@@ -49,10 +48,27 @@ def analyze_permissions(code: str) -> str:
     seen_fns = set()
     for pat, access in FUNCTION_VISIBILITIES:
         for match in re.finditer(pat, code, re.IGNORECASE):
-            name = match.group(1) if match.lastindex else match.group(1)
+            name = match.group(1)
             if name not in seen_fns:
                 seen_fns.add(name)
-                functions.append({"name": name, "access": access})
+                declaration = re.search(
+                    rf"\bfunction\s+{re.escape(name)}\s*\([^)]*\)\s*([^;{{]*)",
+                    code, re.IGNORECASE,
+                )
+                suffix = declaration.group(1) if declaration else ""
+                if re.search(r"\b(?:view|pure)\b", suffix):
+                    resolved_access = "readable"
+                elif re.search(r"\b(?:internal|private)\b", suffix):
+                    resolved_access = "internal"
+                else:
+                    resolved_access = access
+                modifiers = re.findall(
+                    r"\b(only\w+|hasRole|whenNotPaused|whenPaused)\b", suffix
+                )
+                functions.append({
+                    "name": name, "access": resolved_access,
+                    "modifiers": modifiers,
+                })
 
     # Public state variables
     for m in re.finditer(r"(public|internal|private)\s+(\w+\s+\w+)\s*;", code):

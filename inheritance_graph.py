@@ -61,15 +61,16 @@ def generate_mermaid_graph(contracts: List[Dict]) -> str:
     return "\n".join(lines)
 
 
-def generate_html_graph(contracts: List[Dict]) -> str:
+def generate_html_graph(contracts: List[Dict], nonce: str = "") -> str:
     """Generate HTML with interactive Mermaid diagram."""
     mermaid_code = generate_mermaid_graph(contracts)
+    nonce_attr = f' nonce="{_html.escape(nonce, quote=True)}"' if nonce else ""
     html = f"""<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head><meta charset="UTF-8">
 <title>Inheritance Graph</title>
-<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
-<script>mermaid.initialize({{startOnLoad:true,theme:'dark'}})</script>
+<script{nonce_attr} src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script{nonce_attr}>mermaid.initialize({{startOnLoad:true,theme:'dark'}})</script>
 <style>
 body {{ background:#0d1117; color:#c9d1d9; font-family:sans-serif; padding:2rem; text-align:center; }}
 h1 {{ color:#58a6ff; }}

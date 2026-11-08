@@ -100,6 +100,13 @@ def validate_vector(vector: str):
     errors = []
     if not vector or not vector.startswith("CVSS:4.0/"):
         return ["vector must start with 'CVSS:4.0/'"]
+    seen_metrics = set()
+    for part in vector[len("CVSS:4.0/"):].split("/"):
+        metric, sep, _value = part.partition(":")
+        if sep and metric in seen_metrics:
+            errors.append(f"duplicate metric {metric}")
+        if sep:
+            seen_metrics.add(metric)
     metrics = parse_vector(vector)
     for metric in _BASE_METRICS:
         if metric not in metrics:

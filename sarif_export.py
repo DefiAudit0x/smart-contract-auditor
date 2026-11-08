@@ -120,8 +120,8 @@ def report_to_sarif(report: str, code: str = "", label: str = "Smart Contract") 
 
         locations = []
         lines_arr = code.split("\n") if code else []
-        if lines:
-            for ln in lines:
+        if f.get("lines"):
+            for ln in f["lines"]:
                 # Bound-check the line number (M26 remediation): it comes
                 # from an LLM report or attacker text and may exceed the
                 # file - an IndexError here crashed the whole SARIF path.

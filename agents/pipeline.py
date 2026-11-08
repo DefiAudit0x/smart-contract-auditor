@@ -107,6 +107,7 @@ def truncate_code(code: str, model_key: str = "") -> str:
 
     for c in contracts:
         c_text = "\n".join(c["lines"])
+        c_lines = c["lines"]
         c_size = len(c_text)
         remaining = limit - header_size - allocated
         avail = max(min_per_contract, min(c_size, int(remaining * (c_size / max(total_size, 1)))))
@@ -115,7 +116,6 @@ def truncate_code(code: str, model_key: str = "") -> str:
             result_lines.append(c_text)
             allocated += c_size
         elif avail > 100:
-            c_lines = c["lines"]
             budget = avail - 50
             kept = [c_lines[0]]
             has_functions = any(

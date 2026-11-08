@@ -53,7 +53,7 @@ on:
         type: string
 
 env:
-  PYTHON_VERSION: "3.10.14"
+  PYTHON_VERSION: "3.10"
 
 jobs:
   corpus-regression:

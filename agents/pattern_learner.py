@@ -660,13 +660,20 @@ Rules:
     # it can ever be persisted and replayed against future audits.
     validated = []
     for p in new_patterns:
+        if not isinstance(p, dict):
+            continue
         if not all(k in p for k in ("name", "description", "severity", "patterns")):
+            continue
+        if not all(isinstance(p[k], str) for k in ("name", "description", "severity")):
             continue
         if not isinstance(p["patterns"], list) or not p["patterns"]:
             continue
         if p["severity"] not in ("Critical", "High", "Medium"):
             p["severity"] = "Medium"
-        p["patterns"] = [pat for pat in p["patterns"] if _validate_candidate_pattern(pat)]
+        p["patterns"] = [
+            pat for pat in p["patterns"]
+            if isinstance(pat, str) and _validate_candidate_pattern(pat)
+        ]
         if not p["patterns"]:
             continue
         p["verification_status"] = "candidate"

@@ -186,7 +186,11 @@ def check_ai_vulnerabilities(code: str) -> List[Dict]:
                 # after the opening brace; only that part is body.
                 line = line[line.find("{") + 1:] if "{" in line else ""
             for var in state_vars:
-                if re.search(rf"\b{re.escape(var)}\b\s*(?:\+=|-=|\*=|/=|=)(?!=)", line):
+                if re.search(
+                    rf"\b{re.escape(var)}\b(?:\s*\[[^\]]*\])*\s*"
+                    rf"(?:\+=|-=|\*=|/=|=)(?!=)",
+                    line,
+                ):
                     var_writers[var].setdefault(fn["name"], []).append({
                         "function": fn["name"],
                         "line": line_no,

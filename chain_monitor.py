@@ -94,6 +94,11 @@ class ChainMonitor:
         explorer keys but is written with 0600 permissions (M12 remediation)
         so backups/logs of the project source cannot expose them."""
         fd = os.open(self.state_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        try:
+            os.fchmod(fd, 0o600)
+        except OSError:
+            os.close(fd)
+            raise
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump([c.to_dict(redact=False) for c in self.contracts], f, indent=2)
 

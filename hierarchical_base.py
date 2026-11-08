@@ -96,14 +96,15 @@ class HierarchicalAuditor:
         except (json.JSONDecodeError, IOError):
             return None
 
-    def _progress_key(self, stage: str, code: str) -> str:
+    def _progress_key(self, stage: str, code: str, context: str = "") -> str:
         """Progress key bound to the audited input.
 
         Keying only by protocol name let contract A's saved layers be
         replayed as contract B's report; binding the SHA-256 of the audited
         code makes stale/cross-contract entries unreachable.
         """
-        digest = hashlib.sha256(code.encode("utf-8", errors="replace")).hexdigest()[:16]
+        material = code + "\0" + context
+        digest = hashlib.sha256(material.encode("utf-8", errors="replace")).hexdigest()[:16]
         return f"{self.protocol_name}_{stage}_{digest}"
 
     def _save_intermediate(self, stage: str, content: str) -> str:
@@ -202,7 +203,11 @@ class HierarchicalAuditor:
                    extra_context: str = "") -> Dict[str, str]:
         """Run Layer 2: The Crucible (investigator, skeptic, critic)."""
         console.rule("[bold magenta]Layer 2: The Crucible[/]")
-        key = self._progress_key("layer2", code)
+        context = json.dumps(
+            {"layer1_results": layer1_results, "extra_context": extra_context},
+            sort_keys=True, ensure_ascii=False, default=str,
+        )
+        key = self._progress_key("layer2", code, context)
         saved = self._load_progress(key)
         if saved and len(saved.get("data", {})) == len(self.layer2_agents):
             logger.info("Resuming saved Layer 2 progress")

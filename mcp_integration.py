@@ -18,7 +18,7 @@ _SWC_FINDINGS = {
     "SWC-107": {"name": "Reentrancy", "severity": "Critical", "pattern": r"\.call\{value[^}]*\}.*\(\)(?!\s*;\s*(?:balances?\s*\[|_update))"},
     "SWC-112": {"name": "Delegatecall to untrusted callee", "severity": "Critical", "pattern": r"delegatecall\([^)]*user[^)]*\)"},
     "CUSTOM-017": {"name": "Missing access control on critical function", "severity": "Critical", "pattern": r"function\s+(?:initialize|mint|burn|emergencyWithdraw|upgradeTo)\b[^}]*\b(?:public|external)\b(?!.*(?:only|require|modifier|auth))"},
-    "CUSTOM-018": {"name": "ERC-7702 unprotected initializer", "severity": "Critical", "pattern": r"function initialize\b[^}]*(?!initializer|_disableInitializers)"},
+    "CUSTOM-018": {"name": "ERC-7702 unprotected initializer", "severity": "Critical", "pattern": r"function\s+initialize\b(?:(?!\b(?:initializer|_disableInitializers)\b)[^{}])*\{"},
     "CUSTOM-004": {"name": "Price oracle manipulation / flash loan", "severity": "Critical", "pattern": r"(?:getReserves\(\)|slot0\(\)|latestAnswer\b).*(?:price|collateral|borrow)"},
     "CUSTOM-032": {"name": "ERC-4337 paymaster drain", "severity": "Critical", "pattern": r"validatePaymasterUserOp\b"},
     "SWC-101": {"name": "Integer overflow/underflow", "severity": "High", "pattern": r"unchecked\s*\{[^}]*[-+]{2,}"},

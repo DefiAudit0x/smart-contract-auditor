@@ -50,23 +50,23 @@ def _extract_findings(report: str) -> List[Dict]:
     lines = report.split("\n")
     current: Dict = {}
     for line in lines:
-        s = line.strip()
-        if s.startswith("- **Name**"):
+        s = re.sub(r"^(?:[-*+•]|\d+[.)])\s*", "", line.strip())
+        if s.startswith("**Name**"):
             if current and current.get("name"):
                 findings.append(current)
             current = {"name": s.split(":", 1)[1].strip() if ":" in s else s.replace("**Name**", "").strip()}
-        elif s.startswith("- **Severity**") and current:
+        elif s.startswith("**Severity**") and current:
             sev = s.split(":", 1)[1].strip() if ":" in s else "Medium"
             current["severity"] = sev.rstrip("*")
-        elif s.startswith("- **Description**") and current:
+        elif s.startswith("**Description**") and current:
             current["description"] = s.split(":", 1)[1].strip() if ":" in s else ""
-        elif s.startswith("- **Fix**") and current:
+        elif s.startswith("**Fix**") and current:
             current["fix"] = s.split(":", 1)[1].strip() if ":" in s else ""
-        elif s.startswith("- **PoC**") and current:
+        elif s.startswith("**PoC**") and current:
             current["poc"] = s.split(":", 1)[1].strip() if ":" in s else ""
-        elif s.startswith("- **Impact**") and current:
+        elif s.startswith("**Impact**") and current:
             current["impact"] = s.split(":", 1)[1].strip() if ":" in s else ""
-        elif s.startswith("- **Category**") and current:
+        elif s.startswith("**Category**") and current:
             current["category"] = s.split(":", 1)[1].strip() if ":" in s else ""
     if current and current.get("name"):
         findings.append(current)
@@ -552,6 +552,20 @@ def validate_finding(finding: Dict, code: str, kb_patterns: Optional[List[Dict]]
     return True, None, ""
 
 
+def _looks_like_unparsed_findings(report: str) -> bool:
+    """Detect common finding labels when the structured parser found none."""
+    for raw_line in report.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        candidate = re.sub(r"^(?:[-*+•]|\d+[.)])\s*", "", line)
+        if re.match(r"(?i)(?:finding|vulnerability|issue)\s*[:#-]\s*\S", candidate):
+            return True
+        if re.search(r"(?i)\bseverity\s*[:=]\s*(?:critical|high|medium|low)\b", candidate):
+            return True
+    return False
+
+
 def validate_report(report: str, code: str, kb_patterns: Optional[List[Dict]] = None) -> str:
     """Run 7-Question Gate validation on an entire report. Returns a cleaned report.
 
@@ -565,6 +579,8 @@ def validate_report(report: str, code: str, kb_patterns: Optional[List[Dict]] = 
         logger.warning(f"Gate validation failed: {e}")
         return mark_unverified(report, f"validation error: {e}")
     if not findings:
+        if _looks_like_unparsed_findings(report):
+            return mark_unverified(report, "could not parse findings")
         return report
 
     removed = []

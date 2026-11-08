@@ -141,6 +141,49 @@ Output format:
 ]
 
 
+def _structural_brace_counts(line: str, in_block_comment: bool = False):
+    """Count Solidity braces while ignoring comments and quoted strings."""
+    depth = 0
+    opened = False
+    quote = None
+    escaped = False
+    i = 0
+    while i < len(line):
+        if in_block_comment:
+            if line.startswith("*/", i):
+                in_block_comment = False
+                i += 2
+            else:
+                i += 1
+            continue
+        if quote:
+            ch = line[i]
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == quote:
+                quote = None
+            i += 1
+            continue
+        if line.startswith("//", i):
+            break
+        if line.startswith("/*", i):
+            in_block_comment = True
+            i += 2
+            continue
+        ch = line[i]
+        if ch in ("'", '"'):
+            quote = ch
+        elif ch == "{":
+            depth += 1
+            opened = True
+        elif ch == "}":
+            depth -= 1
+        i += 1
+    return depth, opened, in_block_comment
+
+
 def _extract_contract(code: str, focus_name: str) -> str:
     """Extract a single contract by name from Solidity code."""
     lines = code.split("\n")
@@ -157,10 +200,13 @@ def _extract_contract(code: str, focus_name: str) -> str:
                     cname = decl.split(keyword, 1)[1].strip().split("(")[0].split()[0].strip()
                     break
             start = i; depth = 0; j = i; found_open = False
+            in_block_comment = False
             while j < len(lines):
-                for ch in lines[j]:
-                    if ch == "{": depth += 1; found_open = True
-                    elif ch == "}": depth -= 1
+                delta, opened, in_block_comment = _structural_brace_counts(
+                    lines[j], in_block_comment
+                )
+                depth += delta
+                found_open = found_open or opened
                 if found_open and depth <= 0:
                     break
                 j += 1

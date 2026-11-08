@@ -20,7 +20,7 @@ on:
   workflow_dispatch:
 
 env:
-  PYTHON_VERSION: "3.10.14"
+  PYTHON_VERSION: "3.10"
   FOUNDRY_VERSION: "v1.7.1"
   PIP_AUDIT_VERSION: "2.7.3"
   BANDIT_VERSION: "1.8.0"

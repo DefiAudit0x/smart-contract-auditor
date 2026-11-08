@@ -211,3 +211,17 @@ def test_all_rejected_report_keeps_unverified_banner():
     result = validate_report(report, SAFE_CODE)
     assert "UNVERIFIED" in result
     assert "Reentrancy attack exploit" in result
+
+
+def test_unparseable_finding_format_is_marked_unverified():
+    report = "## Findings\n- Vulnerability: Reentrancy in withdraw\n  Severity: High\n"
+    result = validate_report(report, SAFE_CODE)
+    assert result.startswith("### Validation Warning")
+    assert "UNVERIFIED" in result
+    assert report in result
+
+
+def test_recognized_empty_report_does_not_get_unverified_banner():
+    report = "## Findings\nNo vulnerabilities found.\n"
+    result = validate_report(report, SAFE_CODE)
+    assert result == report

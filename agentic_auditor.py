@@ -44,13 +44,17 @@ class AgenticAuditor:
                     except Exception as e:
                         logger.warning("Could not read %s: %s", path, e)
         self._load_remappings()
+        # Resolve inheritance only after all files' contract names are known.
+        for rel, content in entries:
+            for m in CONTRACT_RE.finditer(content):
+                self.contracts[m.group(2)] = rel
         for rel, content in entries:
             try:
-                self._index_file(rel, content)
+                self._index_file(rel, content, index_contracts=False)
             except Exception as e:
                 logger.warning("Could not index %s: %s", rel, e)
 
-    def _index_file(self, path: str, content: str):
+    def _index_file(self, path: str, content: str, index_contracts: bool = True):
         for m in IMPORT_RE.finditer(content):
             imp = m.group(1)
             resolved = self._resolve_import(path, imp)
@@ -60,8 +64,9 @@ class AgenticAuditor:
         # Index EVERY contract declaration, not just the first (M23
         # remediation): multi-contract files lost inheritance edges and
         # INHERITANCE_RE could bind to a contract that was never indexed.
-        for m in CONTRACT_RE.finditer(content):
-            self.contracts[m.group(2)] = path
+        if index_contracts:
+            for m in CONTRACT_RE.finditer(content):
+                self.contracts[m.group(2)] = path
 
         for inh in INHERITANCE_RE.finditer(content):
             bases = [b.strip() for b in inh.group(1).split(",")]
