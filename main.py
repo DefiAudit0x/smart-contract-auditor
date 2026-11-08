@@ -20,7 +20,7 @@ from config import PROGRESS_FILE, KB_ENABLED, KB_DB_PATH
 from orchestrator import dispatch_analysis
 from bytecode_analyzer import analyze_bytecode, analyze_contract_from_explorer
 from agentic_auditor import analyze_project_agentic
-from webhook_notifier import send_report
+from webhook_notifier import send_report, findings_from_audit_report
 from cli_display import console, banner as show_banner, prompt_input, confirm_action, HAS_RICH
 
 if HAS_RICH:
@@ -592,11 +592,8 @@ def _handle_webhook() -> None:
     webhook_type = "slack" if "slack" in webhook_url.lower() else "discord"
     console.log(f"[bold]Running audit for webhook...[/]")
     report = svc.run_audit(code)
-    from analyzers.base import Finding
-    dummy = [Finding(agent_name="Audit", severity="Info", category="Webhook",
-                     file=f"{name}.sol", line=1,
-                     description="Audit completed via webhook", fix="")]
-    send_report(webhook_url, dummy, webhook_type, project=name)
+    findings = findings_from_audit_report(report, source_file=f"{name}.sol")
+    send_report(webhook_url, findings, webhook_type, project=name)
     console.log(f"[green]Report sent to {webhook_type} webhook[/]")
     prompt_input("Press [dim]Enter[/] to continue")
 
@@ -895,11 +892,10 @@ def cli_mode(args: argparse.Namespace) -> None:
         console.log(f"[green]SARIF saved:[/] {sarif_path}")
 
     if args.webhook and code:
-        from analyzers.base import Finding
-        dummy = [Finding(agent_name="StaticAnalysis", severity="Info", category="Webhook",
-                         file=args.file or "demo.sol", function_name="",
-                         description=f"Analysis report ({analysis_type})", fix="")]
-        send_report(args.webhook, dummy, args.webhook_type, project=label)
+        findings = findings_from_audit_report(
+            report, source_file=args.file or "demo.sol"
+        )
+        send_report(args.webhook, findings, args.webhook_type, project=label)
         console.log(f"[green]Report sent via {args.webhook_type} webhook[/]")
 
     console.log(f"[green]Report saved:[/] {rpath}")

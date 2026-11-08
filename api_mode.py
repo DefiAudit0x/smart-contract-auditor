@@ -30,6 +30,7 @@ app = Flask(__name__)
 # to disk (M3 remediation — matches the 5 MB limit of the main web app).
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
 API_KEY = os.environ.get("AUDITOR_API_KEY", "")
+MAX_BATCH_WORKERS = 16
 UPLOAD_DIR = os.path.join(tempfile.gettempdir(), "smart_audit_uploads")
 # 0o700 keeps the staging directory private to the service user so local
 # users cannot pre-create or read each other's uploads (M3 remediation).
@@ -175,6 +176,8 @@ def api_batch():
     if not root:
         return jsonify({"error": "Path not permitted"}), 400
     workers = data.get("workers", 4)
+    if isinstance(workers, bool) or not isinstance(workers, int) or not 1 <= workers <= MAX_BATCH_WORKERS:
+        return jsonify({"error": f"Field 'workers' must be an integer from 1 to {MAX_BATCH_WORKERS}"}), 400
     result = batch_audit(root, workers)
     return jsonify(result)
 

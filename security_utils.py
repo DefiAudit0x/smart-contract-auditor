@@ -94,10 +94,14 @@ def validate_github_repository_url(value: str) -> tuple[str, str] | None:
     """Accept only canonical HTTPS github.com owner/repository URLs."""
     if not isinstance(value, str) or len(value) > 512:
         return None
-    parsed = urlsplit(value.strip())
+    try:
+        parsed = urlsplit(value.strip())
+        port = parsed.port
+    except ValueError:
+        return None
     if parsed.scheme != "https" or parsed.hostname != "github.com":
         return None
-    if parsed.username or parsed.password or parsed.port or parsed.query or parsed.fragment:
+    if parsed.username or parsed.password or port or parsed.query or parsed.fragment:
         return None
     parts = [part for part in parsed.path.strip("/").split("/") if part]
     if len(parts) != 2:

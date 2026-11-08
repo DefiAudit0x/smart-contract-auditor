@@ -1,4 +1,4 @@
-import os, sys, json, time, logging, threading, re, tempfile, zipfile
+import os, sys, json, time, logging, threading, re, tempfile, zipfile, itertools
 from concurrent.futures import ThreadPoolExecutor
 from difflib import unified_diff
 sys.path.insert(0, os.path.dirname(__file__))

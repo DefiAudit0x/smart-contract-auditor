@@ -111,7 +111,10 @@ class VectorKB:
         if self._ready:
             try:
                 self._client.delete_collection(COLLECTION_NAME)
-                self._collection = self._client.create_collection(COLLECTION_NAME)
+                self._collection = self._client.create_collection(
+                    name=COLLECTION_NAME,
+                    metadata={"hnsw:space": "cosine"},
+                )
                 logger.info("VectorKB reset")
             except Exception as e:
                 logger.warning(f"VectorKB reset failed: {e}")

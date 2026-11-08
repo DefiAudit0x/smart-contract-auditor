@@ -6,6 +6,7 @@ import time
 import hashlib
 import logging
 import threading
+import tempfile
 from typing import Optional, Callable
 
 logger = logging.getLogger(__name__)
@@ -90,12 +91,41 @@ class ChainMonitor:
                 logger.warning(f"Failed to load monitor state: {e}")
 
     def _save(self):
-        """Persist state; caller must hold self._lock. The file keeps the
-        explorer keys but is written with 0600 permissions (M12 remediation)
-        so backups/logs of the project source cannot expose them."""
-        fd = os.open(self.state_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump([c.to_dict(redact=False) for c in self.contracts], f, indent=2)
+        """Persist state atomically; caller must hold self._lock.
+
+        The file keeps explorer keys but uses 0600 permissions (M12
+        remediation). A failed write leaves the previous state intact.
+        """
+        # Resolve symlinks so replacing the destination preserves the
+        # previous open(..., "w") behavior of updating the symlink target.
+        state_path = os.path.realpath(self.state_file)
+        state_dir = os.path.dirname(state_path)
+        fd, temp_path = tempfile.mkstemp(
+            prefix=f".{os.path.basename(state_path)}.", suffix=".tmp", dir=state_dir
+        )
+        try:
+            os.fchmod(fd, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                fd = None
+                json.dump([c.to_dict(redact=False) for c in self.contracts], f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temp_path, state_path)
+            temp_path = None
+        except BaseException:
+            if fd is not None:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+            if temp_path is not None:
+                try:
+                    os.unlink(temp_path)
+                except FileNotFoundError:
+                    pass
+                except OSError as cleanup_error:
+                    logger.warning("Failed to remove temporary monitor state file: %s", cleanup_error)
+            raise
 
     def add(self, address: str, chain: str = "ethereum", interval: int = 3600,
             api_key: str = "", label: str = ""):

@@ -27,8 +27,8 @@ pip install -r requirements.txt
 cp .env.example .env   # fill in your API keys
 ```
 
-For reproducible, hash-verified installs matching CI, use `requirements.lock` with
-`pip install --require-hashes -r requirements.lock` (Python `3.10.14`, Foundry `v1.7.1`).
+For reproducible, hash-verified installs targeting Python 3.10, use `requirements.lock` with
+`pip install --require-hashes -r requirements.lock` (CI selects the latest compatible Python 3.10 patch; Foundry `v1.7.1`).
 
 ## Checks to run before opening a PR
 

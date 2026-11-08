@@ -176,22 +176,39 @@ def require_api_key(f):
         if provided:
             user = _check_user_api_key(provided)
             if user:
-                # Balance check before running, deduction only on success
-                # (M9 remediation — same reserve/complete/release fairness
-                # the access-code path follows).
+                # Fail closed: atomically charge before expensive work, then
+                # refund on validation/error responses. This prevents DB
+                # failures from granting unmetered API-key requests.
                 try:
                     from auth import deduct_credit, reset_credits_if_needed
                     reset_credits_if_needed(user)
                     if not user.is_pro() and user.credits <= 0:
                         return jsonify({"error": "No credits remaining. Upgrade your plan or wait for monthly reset."}), 402
+                    if not deduct_credit(user):
+                        return jsonify({"error": "No credits remaining. Upgrade your plan or wait for monthly reset."}), 402
                 except Exception:
-                    pass
-                response = f(*args, **kwargs)
-                if _metered_status_ok(response):
+                    logger.exception("API-key credit validation/debit failed")
+                    return jsonify({"error": "Unable to validate API-key credits"}), 503
+                try:
+                    response = f(*args, **kwargs)
+                except Exception:
                     try:
-                        deduct_credit(user)
+                        from auth import refund_credit
+                        if not refund_credit(user):
+                            logger.error("Could not refund API-key credit after endpoint error")
+                            return jsonify({"error": "Unable to restore API-key credit"}), 503
                     except Exception:
-                        pass
+                        logger.exception("Could not refund API-key credit after endpoint error")
+                        return jsonify({"error": "Unable to restore API-key credit"}), 503
+                    raise
+                if not _metered_status_ok(response):
+                    try:
+                        from auth import refund_credit
+                        if not refund_credit(user):
+                            return jsonify({"error": "Unable to restore API-key credit"}), 503
+                    except Exception:
+                        logger.exception("API-key credit refund failed")
+                        return jsonify({"error": "Unable to restore API-key credit"}), 503
                 return response
         if not _EXPECTED_API_KEY:
             return jsonify({"error": "Server misconfigured: AUDITOR_API_KEY not set"}), 503

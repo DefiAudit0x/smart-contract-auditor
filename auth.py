@@ -121,6 +121,24 @@ def deduct_credit(user):
     user.credits -= 1
     return True
 
+
+def refund_credit(user):
+    """Restore one pre-charged free credit without exceeding the monthly cap."""
+    if user.plan == "pro":
+        return True
+    conn = _get_conn()
+    cur = conn.execute(
+        "UPDATE users SET credits = CASE WHEN credits < ? THEN credits + 1 ELSE credits END WHERE id = ?",
+        (MONTHLY_FREE_CREDITS, user.id),
+    )
+    conn.commit()
+    if cur.rowcount == 0:
+        return False
+    row = conn.execute("SELECT credits FROM users WHERE id = ?", (user.id,)).fetchone()
+    if row:
+        user.credits = row["credits"]
+    return True
+
 def create_api_key(user_id, name=""):
     """Create an API key. The raw key is returned exactly once; only a
     SHA-256 digest (plus last4 for display) is persisted (M11 remediation)."""

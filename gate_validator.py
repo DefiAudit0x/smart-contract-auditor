@@ -44,29 +44,36 @@ _CENTRALIZATION_SIGNALS = [
     "timelock", "governance", "multisig",
 ]
 
+_FINDING_MARKER_RE = re.compile(r"^(?:[-*+•]|\d+[.)])\s*")
+
+
+def _strip_finding_marker(line: str) -> str:
+    """Remove one supported list marker before parsing a finding field."""
+    return _FINDING_MARKER_RE.sub("", line.strip(), count=1)
+
 
 def _extract_findings(report: str) -> List[Dict]:
     findings = []
     lines = report.split("\n")
     current: Dict = {}
     for line in lines:
-        s = line.strip()
-        if s.startswith("- **Name**"):
+        s = _strip_finding_marker(line)
+        if s.startswith("**Name**"):
             if current and current.get("name"):
                 findings.append(current)
             current = {"name": s.split(":", 1)[1].strip() if ":" in s else s.replace("**Name**", "").strip()}
-        elif s.startswith("- **Severity**") and current:
+        elif s.startswith("**Severity**") and current:
             sev = s.split(":", 1)[1].strip() if ":" in s else "Medium"
             current["severity"] = sev.rstrip("*")
-        elif s.startswith("- **Description**") and current:
+        elif s.startswith("**Description**") and current:
             current["description"] = s.split(":", 1)[1].strip() if ":" in s else ""
-        elif s.startswith("- **Fix**") and current:
+        elif s.startswith("**Fix**") and current:
             current["fix"] = s.split(":", 1)[1].strip() if ":" in s else ""
-        elif s.startswith("- **PoC**") and current:
+        elif s.startswith("**PoC**") and current:
             current["poc"] = s.split(":", 1)[1].strip() if ":" in s else ""
-        elif s.startswith("- **Impact**") and current:
+        elif s.startswith("**Impact**") and current:
             current["impact"] = s.split(":", 1)[1].strip() if ":" in s else ""
-        elif s.startswith("- **Category**") and current:
+        elif s.startswith("**Category**") and current:
             current["category"] = s.split(":", 1)[1].strip() if ":" in s else ""
     if current and current.get("name"):
         findings.append(current)
@@ -552,6 +559,20 @@ def validate_finding(finding: Dict, code: str, kb_patterns: Optional[List[Dict]]
     return True, None, ""
 
 
+def _looks_like_unparsed_findings(report: str) -> bool:
+    """Detect common finding labels when the structured parser found none."""
+    for raw_line in report.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        candidate = _strip_finding_marker(line)
+        if re.match(r"(?i)(?:finding|vulnerability|issue)\s*[:#-]\s*\S", candidate):
+            return True
+        if re.search(r"(?i)\bseverity\s*[:=]\s*(?:critical|high|medium|low)\b", candidate):
+            return True
+    return False
+
+
 def validate_report(report: str, code: str, kb_patterns: Optional[List[Dict]] = None) -> str:
     """Run 7-Question Gate validation on an entire report. Returns a cleaned report.
 
@@ -565,6 +586,8 @@ def validate_report(report: str, code: str, kb_patterns: Optional[List[Dict]] = 
         logger.warning(f"Gate validation failed: {e}")
         return mark_unverified(report, f"validation error: {e}")
     if not findings:
+        if _looks_like_unparsed_findings(report):
+            return mark_unverified(report, "could not parse findings")
         return report
 
     removed = []
@@ -608,8 +631,9 @@ def validate_report(report: str, code: str, kb_patterns: Optional[List[Dict]] = 
 
     for line in report.split("\n"):
         s = line.strip()
-        if s.startswith("- **Name**"):
-            name = s.split(":", 1)[1].strip() if ":" in s else s.replace("**Name**", "").strip()
+        field_line = _strip_finding_marker(line)
+        if field_line.startswith("**Name**"):
+            name = field_line.split(":", 1)[1].strip() if ":" in field_line else field_line.replace("**Name**", "").strip()
             in_vuln_section = name in kept_names
             current_name = name if in_vuln_section else None
             in_gas_section = False
@@ -621,8 +645,18 @@ def validate_report(report: str, code: str, kb_patterns: Optional[List[Dict]] = 
         # remediation): they used to live only in trailing notes while the
         # report text kept showing the stale severity.
         if (in_vuln_section and current_name in severity_by_name
-                and s.startswith("- **Severity**")):
-            line = f"- **Severity**: {severity_by_name[current_name]}"
+                and field_line.startswith("**Severity**")):
+            indent = line[:len(line) - len(line.lstrip())]
+            content = line[len(indent):]
+            marker_match = _FINDING_MARKER_RE.match(content)
+            marker = marker_match.group(0) if marker_match else ""
+            severity_field = content[len(marker):]
+            colon = severity_field.find(":")
+            if colon >= 0:
+                line = (
+                    f"{indent}{marker}{severity_field[:colon + 1]} "
+                    f"{severity_by_name[current_name]}"
+                )
 
         if in_vuln_section or in_gas_section or s.startswith("### Overall") or s.startswith("### Vulnerability") or s.startswith("### Gas"):
             result_lines.append(line)

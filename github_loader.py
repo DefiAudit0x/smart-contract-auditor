@@ -3,6 +3,7 @@ import os
 import re
 import requests
 from typing import List, Dict, Optional, Tuple
+from urllib.parse import quote
 
 from security_utils import validate_github_repository_url
 
@@ -57,7 +58,9 @@ def get_all_sol_files(username: str, repo_name: str, github_token: Optional[str]
         gh_token = (github_token or "").strip() or os.getenv("GITHUB_TOKEN", "").strip()
         dl_headers = {"Authorization": f"Bearer {gh_token}"} if gh_token else {}
         for path in sol_paths:
-            raw_url = f"https://raw.githubusercontent.com/{username}/{repo_name}/{default_branch}/{path}"
+            encoded_branch = quote(default_branch, safe="/")
+            encoded_path = "/".join(quote(part, safe="") for part in path.split("/"))
+            raw_url = f"https://raw.githubusercontent.com/{username}/{repo_name}/{encoded_branch}/{encoded_path}"
             try:
                 with requests.get(raw_url, timeout=15, headers=dl_headers, stream=True) as r:
                     if r.status_code != 200:

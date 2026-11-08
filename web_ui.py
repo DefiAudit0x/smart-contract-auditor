@@ -559,7 +559,9 @@ def inhgraph_page():
         code = request.form.get('code', '')
         if code:
             contracts = extract_inheritance(code)
-            html_graph = generate_html_graph(contracts)
+            html_graph = generate_html_graph(
+                contracts, nonce=getattr(g, "csp_nonce", "")
+            )
             html_path = os.path.join(REPORT_DIR, f"inheritance_{int(time.time())}.html")
             with open(html_path, "w", encoding="utf-8") as f:
                 f.write(html_graph)

@@ -258,3 +258,48 @@ def send_report(
         send_slack_webhook(webhook_url, findings, project, summary)
     else:
         send_discord_webhook(webhook_url, findings, project, summary)
+
+
+def findings_from_audit_report(report: str, source_file: str = "audit report") -> List[Finding]:
+    """Convert report findings into notifier payloads without fabricating success."""
+    text = str(report or "").strip()
+    try:
+        from hackerone_report import _extract_findings
+        parsed = _extract_findings(text)
+    except Exception:
+        logger.exception("Could not parse audit findings for webhook")
+        parsed = []
+
+    if not parsed:
+        excerpt = text[:800] if text else "Audit completed, but no report text was returned."
+        return [Finding(
+            agent_name="Audit Summary", severity="Info", category="Audit Report",
+            file=source_file, function_name="", description=excerpt, line=1, fix="",
+        )]
+
+    severity_map = {
+        "critical": "Critical", "high": "High", "medium": "Medium",
+        "low": "Low", "info": "Info", "informational": "Info",
+    }
+    findings = []
+    for item in parsed:
+        severity = severity_map.get(str(item.get("severity", "Medium")).strip().lower(), "Medium")
+        name = str(item.get("name") or "Finding").strip()
+        detail = str(item.get("description") or item.get("exploit") or item.get("poc") or "See audit report.").strip()
+        fix = str(item.get("fix") or "").strip()
+        description = f"{name}: {detail}"
+        if fix:
+            description += f" Fix: {fix}"
+        try:
+            line_number = int(str(item.get("line", 1)).strip())
+        except (TypeError, ValueError):
+            line_number = 1
+        if line_number < 1:
+            line_number = 1
+        findings.append(Finding(
+            agent_name="Audit", severity=severity,
+            category=str(item.get("category") or "Security Finding"),
+            file=source_file, function_name="", description=description,
+            line=line_number, fix=fix,
+        ))
+    return findings
