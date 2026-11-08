@@ -169,6 +169,7 @@ def test_permission_matrix_keeps_access_control_modifier():
     report = analyze_permissions(
         "contract C { function sweep() external onlyOwner { } }"
     )
+    assert "## Security Recommendations" in report
     assert "onlyOwner" in report
     assert "writable function(s) without role protection" not in report
 
@@ -478,6 +479,159 @@ def test_webhook_findings_are_built_from_real_report():
     assert findings[0].file == "Vault.sol"
     assert "Reentrancy in withdraw" in findings[0].description
     assert "checks-effects-interactions" in findings[0].description
+
+
+@pytest.mark.parametrize("marker", ["-", "*", "+", "•", "1.", ""])
+def test_hackerone_generated_reports_keep_supported_finding_markers(marker):
+    from hackerone_report import generate_h1_report, generate_h1_short
+
+    vector = "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"
+    report = (
+        f"{marker} **Name**: Reentrancy in withdraw\n"
+        f"{marker} **Severity**: Critical\n"
+        f"{marker} **Category**: Reentrancy\n"
+        f"{marker} **Description**: External call permits repeated withdrawal.\n"
+        f"{marker} **CVSS Vector**: {vector}\n"
+        f"{marker} **Fix**: Apply checks-effects-interactions.\n"
+    )
+
+    full = generate_h1_report(report)
+    short = generate_h1_short(report)
+    assert "**Total Findings**: 1" in full
+    assert "## Vulnerability #1: Reentrancy in withdraw" in full
+    assert f"**CVSS Vector**: `{vector}`" in full
+    assert "External call permits repeated withdrawal." in full
+    assert "### 1. Reentrancy in withdraw" in short
+
+
+@pytest.mark.parametrize(
+    ("declaration", "should_report"),
+    [
+        ("function initialize() external /* initializer */ {}", True),
+        ("function initialize() external // _disableInitializers\n {}", True),
+        ("function initialize() external initializer {}", False),
+        ("function initialize() external returns (bool initializer) { return false; }", True),
+    ],
+)
+def test_custom_initializer_detector_ignores_comment_and_return_text(
+    declaration, should_report
+):
+    from mcp_integration import scan_swc_patterns
+
+    findings = scan_swc_patterns(f"contract C {{ {declaration} }}")
+    reported = any(item["id"] == "CUSTOM-018" for item in findings)
+    assert reported is should_report
+
+
+@pytest.mark.parametrize(
+    ("guarded_write", "unguarded_write"),
+    [
+        ("++balances[msg.sender]", "balances[msg.sender]--"),
+        ("--balances[msg.sender]", "balances[msg.sender]++"),
+        ("balances[msg.sender]++", "--balances[msg.sender]"),
+        ("balances[msg.sender]--", "++balances[msg.sender]"),
+    ],
+)
+def test_mapping_increment_and_decrement_writes_are_checked_for_guard_consistency(
+    guarded_write, unguarded_write
+):
+    from ai_tools import check_ai_vulnerabilities
+
+    code = f"""contract C {{
+        mapping(address => uint256) public balances;
+        function guarded() external nonReentrant {{ {guarded_write}; }}
+        function unguarded() external {{ {unguarded_write}; }}
+    }}"""
+    findings = check_ai_vulnerabilities(code)
+    finding = next((
+        item for item in findings
+        if item.get("status") == "confirmed"
+        and item.get("confidence") == "high"
+        and {entry.get("function") for entry in item.get("evidence", [])}
+        >= {"guarded", "unguarded"}
+    ), None)
+    assert finding is not None
+    assert {entry["function"] for entry in finding["evidence"]} >= {
+        "guarded", "unguarded",
+    }
+
+
+@pytest.mark.parametrize(
+    "declarations",
+    [
+        (
+            "function update(uint256 value) external view returns (uint256) { return value; } "
+            "function update(uint256 value, bool commit) external onlyOwner { }"
+        ),
+        (
+            "function update(uint256 value, bool commit) external onlyOwner { } "
+            "function update(uint256 value) external view returns (uint256) { return value; }"
+        ),
+    ],
+)
+def test_permission_matrix_does_not_let_view_overload_hide_writable_overload(
+    declarations,
+):
+    from permission_analysis import analyze_permissions
+
+    report = analyze_permissions(f"contract C {{ {declarations} }}")
+    assert "  - Writable: 1" in report
+    assert "| ✏️ `update` | writable | onlyOwner |" in report
+    assert "✅ All writable functions are role-protected" in report
+
+
+def test_permission_matrix_warns_when_any_writable_overload_is_unprotected():
+    from permission_analysis import analyze_permissions
+
+    report = analyze_permissions(
+        "contract C {"
+        " function update(uint256 value) external onlyOwner { }"
+        " function update(uint256 value, bool commit) external { }"
+        "}"
+    )
+    assert "mixed across overloads (onlyOwner)" in report
+    assert "writable function(s) without role protection" in report
+
+
+@pytest.mark.parametrize(
+    ("line_fields", "expected_lines"),
+    [
+        ("Line: 0\n", []),
+        ("Line: -1\n", []),
+        ("Line: 0\nLine: 2\n", [2]),
+    ],
+)
+def test_report_sarif_omits_nonpositive_parsed_lines(line_fields, expected_lines):
+    from sarif_export import report_to_sarif
+
+    report = f"High: Reentrancy\n{line_fields}"
+    sarif = json.loads(report_to_sarif(report, code="line one\nline two"))
+    result = sarif["runs"][0]["results"][0]
+    regions = [
+        location["physicalLocation"]["region"]["startLine"]
+        for location in result["locations"]
+        if "region" in location["physicalLocation"]
+    ]
+    assert regions == expected_lines
+
+
+def test_object_sarif_omits_negative_line_regions():
+    from sarif_export import generate_sarif
+
+    finding = SimpleNamespace(
+        agent_name="reentrancy",
+        severity="High",
+        category="Reentrancy",
+        file="Vault.sol",
+        description="Invalid negative line test",
+        fix="",
+        line=-1,
+    )
+    sarif = json.loads(generate_sarif([finding]))
+    physical_location = sarif["runs"][0]["results"][0]["locations"][0][
+        "physicalLocation"
+    ]
+    assert "region" not in physical_location
 
 
 def test_hackerone_reentrancy_template_declares_interface_and_local_amount():

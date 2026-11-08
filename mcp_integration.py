@@ -18,7 +18,7 @@ _SWC_FINDINGS = {
     "SWC-107": {"name": "Reentrancy", "severity": "Critical", "pattern": r"\.call\{value[^}]*\}.*\(\)(?!\s*;\s*(?:balances?\s*\[|_update))"},
     "SWC-112": {"name": "Delegatecall to untrusted callee", "severity": "Critical", "pattern": r"delegatecall\([^)]*user[^)]*\)"},
     "CUSTOM-017": {"name": "Missing access control on critical function", "severity": "Critical", "pattern": r"function\s+(?:initialize|mint|burn|emergencyWithdraw|upgradeTo)\b[^}]*\b(?:public|external)\b(?!.*(?:only|require|modifier|auth))"},
-    "CUSTOM-018": {"name": "ERC-7702 unprotected initializer", "severity": "Critical", "pattern": r"function\s+initialize\b(?:(?!\b(?:initializer|_disableInitializers)\b)[^{}])*\{"},
+    "CUSTOM-018": {"name": "ERC-7702 unprotected initializer", "severity": "Critical", "pattern": r"function\s+initialize\b"},
     "CUSTOM-004": {"name": "Price oracle manipulation / flash loan", "severity": "Critical", "pattern": r"(?:getReserves\(\)|slot0\(\)|latestAnswer\b).*(?:price|collateral|borrow)"},
     "CUSTOM-032": {"name": "ERC-4337 paymaster drain", "severity": "Critical", "pattern": r"validatePaymasterUserOp\b"},
     "SWC-101": {"name": "Integer overflow/underflow", "severity": "High", "pattern": r"unchecked\s*\{[^}]*[-+]{2,}"},
@@ -132,12 +132,105 @@ def _run_aderyn(contract_path: str) -> List[Dict]:
     return findings
 
 
+def _mask_solidity_comments_and_strings(code: str) -> str:
+    """Blank comments and strings while preserving newlines and source offsets."""
+    masked = list(code)
+    state = "code"
+    quote = None
+    index = 0
+    while index < len(code):
+        char = code[index]
+        if state == "code":
+            if code.startswith("//", index):
+                masked[index] = masked[index + 1] = " "
+                index += 2
+                state = "line_comment"
+            elif code.startswith("/*", index):
+                masked[index] = masked[index + 1] = " "
+                index += 2
+                state = "block_comment"
+            elif char in ("'", '"'):
+                masked[index] = " "
+                quote = char
+                index += 1
+                state = "string"
+            else:
+                index += 1
+        elif state == "line_comment":
+            if char == "\n":
+                state = "code"
+            else:
+                masked[index] = " "
+            index += 1
+        elif state == "block_comment":
+            if code.startswith("*/", index):
+                masked[index] = masked[index + 1] = " "
+                index += 2
+                state = "code"
+            else:
+                if char != "\n":
+                    masked[index] = " "
+                index += 1
+        else:
+            if char == "\\":
+                masked[index] = " "
+                index += 1
+                if index < len(code):
+                    if code[index] != "\n":
+                        masked[index] = " "
+                    index += 1
+            elif char == quote:
+                masked[index] = " "
+                index += 1
+                quote = None
+                state = "code"
+            else:
+                if char != "\n":
+                    masked[index] = " "
+                index += 1
+    return "".join(masked)
+
+
+def _has_unprotected_initializer(code: str) -> bool:
+    masked = _mask_solidity_comments_and_strings(code)
+    for match in re.finditer(r"\bfunction\s+initialize\s*\(", masked, re.IGNORECASE):
+        open_paren = match.end() - 1
+        depth = 0
+        close_paren = None
+        for index in range(open_paren, len(masked)):
+            if masked[index] == "(":
+                depth += 1
+            elif masked[index] == ")":
+                depth -= 1
+                if depth == 0:
+                    close_paren = index
+                    break
+        if close_paren is None:
+            continue
+
+        body_start = masked.find("{", close_paren + 1)
+        declaration_end = masked.find(";", close_paren + 1)
+        if body_start < 0 or (declaration_end >= 0 and declaration_end < body_start):
+            continue
+
+        header = masked[close_paren + 1:body_start]
+        header = re.split(r"\breturns\b", header, maxsplit=1, flags=re.IGNORECASE)[0]
+        if not re.search(r"\binitializer\b", header, re.IGNORECASE):
+            return True
+    return False
+
+
 def scan_swc_patterns(code: str) -> List[Dict]:
     """Scan code against all 86 SWC patterns. Returns matched findings."""
     findings = []
     for swc_id, info in _SWC_FINDINGS.items():
         try:
-            if re.search(info["pattern"], code, re.IGNORECASE):
+            matched = (
+                _has_unprotected_initializer(code)
+                if swc_id == "CUSTOM-018"
+                else re.search(info["pattern"], code, re.IGNORECASE)
+            )
+            if matched:
                 findings.append({
                     "id": swc_id,
                     "name": info["name"],

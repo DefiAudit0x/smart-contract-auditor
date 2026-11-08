@@ -28,7 +28,7 @@ LEVEL_MAP = {
     "info": 0.0,
 }
 
-LINE_RE = re.compile(r'[Ll]ine\s*:?\s*(\d+)', re.IGNORECASE)
+LINE_RE = re.compile(r'[Ll]ine\s*:?\s*([+-]?\d+)', re.IGNORECASE)
 
 
 def _parse_findings(report: str) -> List[Dict]:
@@ -120,8 +120,13 @@ def report_to_sarif(report: str, code: str = "", label: str = "Smart Contract") 
 
         locations = []
         lines_arr = code.split("\n") if code else []
-        if f.get("lines"):
-            for ln in f["lines"]:
+        parsed_lines = f.get("lines", [])
+        valid_lines = [
+            ln for ln in parsed_lines
+            if isinstance(ln, int) and not isinstance(ln, bool) and ln > 0
+        ]
+        if valid_lines:
+            for ln in valid_lines:
                 # Bound-check the line number (M26 remediation): it comes
                 # from an LLM report or attacker text and may exceed the
                 # file - an IndexError here crashed the whole SARIF path.
@@ -135,11 +140,17 @@ def report_to_sarif(report: str, code: str = "", label: str = "Smart Contract") 
                         },
                     }
                 })
-        else:
+        elif not parsed_lines:
             locations.append({
                 "physicalLocation": {
                     "artifactLocation": {"uri": _artifact_uri(label), "uriBaseId": "SRCROOT"},
                     "region": {"startLine": 1},
+                }
+            })
+        else:
+            locations.append({
+                "physicalLocation": {
+                    "artifactLocation": {"uri": _artifact_uri(label), "uriBaseId": "SRCROOT"},
                 }
             })
 
@@ -184,7 +195,9 @@ def generate_sarif(findings: list, output_path: str = "") -> str:
             # GitHub Security Tab ingestion.
             loc = {"uri": urllib.parse.quote(str(finding.file).replace(os.sep, "/"), safe="-_./")}
             location["physicalLocation"] = {"artifactLocation": loc}
-            if finding.line:
+            if (isinstance(finding.line, int)
+                    and not isinstance(finding.line, bool)
+                    and finding.line > 0):
                 location["physicalLocation"]["region"] = {
                     "startLine": finding.line,
                     "startColumn": 1,

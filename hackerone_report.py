@@ -240,7 +240,7 @@ def _extract_findings(report: str) -> List[Dict]:
     lines = report.split("\n")
     current = {}
     for line in lines:
-        s = re.sub(r"^(?:[-*+•]|\d+[.)])\s*", "", line.strip())
+        s = re.sub(r"^(?:[-+•]|\*(?!\*)|\d+[.)])\s*", "", line.strip())
         if s.startswith("**Name**"):
             if current and current.get("name"):
                 findings.append(current)
@@ -263,6 +263,33 @@ def _extract_findings(report: str) -> List[Dict]:
     return findings
 
 
+_SCORING_FIELD_NAMES = r"(?:Name|Severity|Description|CVSS Attributes|CVSS Vector|Vector)"
+_SCORING_FIELD_MARKER_RE = re.compile(
+    rf"^(?P<indent>\s*)(?:[-*+•]|\d+[.)])\s*"
+    rf"(?=\*\*{_SCORING_FIELD_NAMES}\*\*\s*:)",
+    re.IGNORECASE,
+)
+_SCORING_FIELD_LINE_RE = re.compile(
+    rf"^\*\*{_SCORING_FIELD_NAMES}\*\*\s*:", re.IGNORECASE
+)
+
+
+def _normalize_finding_markers_for_scoring(report: str) -> str:
+    """Normalize supported list markers only on fields consumed by score_report."""
+    normalized = []
+    for line in report.splitlines():
+        match = _SCORING_FIELD_MARKER_RE.match(line)
+        if match:
+            line = f"{match.group('indent')}- {line[match.end():]}"
+        else:
+            unindented = line.lstrip()
+            if _SCORING_FIELD_LINE_RE.match(unindented):
+                indent = line[:len(line) - len(unindented)]
+                line = f"{indent}- {unindented}"
+        normalized.append(line)
+    return "\n".join(normalized)
+
+
 def _extract_rating(report: str) -> str:
     m = re.search(r"### Overall Security Rating:\s*(\S+)", report)
     return m.group(1) if m else "N/A"
@@ -278,7 +305,7 @@ def generate_h1_report(report: str, code: str = "", label: str = "Smart Contract
     findings = _extract_findings(report)
     rating = _extract_rating(report)
     gas = _extract_gas(report)
-    cvss = score_report(report)
+    cvss = score_report(_normalize_finding_markers_for_scoring(report))
 
     lines = [
         f"# Security Audit Report: {label}",
@@ -366,7 +393,7 @@ def generate_h1_short(report: str, label: str = "Smart Contract") -> str:
     """Generate a concise HackerOne report, suitable for copy-paste."""
     findings = _extract_findings(report)
     rating = _extract_rating(report)
-    cvss = score_report(report)
+    cvss = score_report(_normalize_finding_markers_for_scoring(report))
 
     lines = [
         f"## Summary",
