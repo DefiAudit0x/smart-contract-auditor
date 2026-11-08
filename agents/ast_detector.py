@@ -88,7 +88,7 @@ def _find_state_writes(body: str, state_vars: list) -> list:
     writes = []
     var_names = [sv.get("name", "") for sv in state_vars if sv.get("name")]
     for v in var_names:
-        pat = rf"\b{re.escape(v)}\b(?:\s*\[[^\]]*\]|\s*\.\s*[A-Za-z_]\w*)*"
+        pat = rf"\b{re.escape(v)}\b(?:\s*\[[^\]]*\])*(?:\s*\.[A-Za-z_z]\w*)*"
         for m in re.finditer(pat, body):
             tail = body[m.end():m.end() + 4].lstrip()
             prefix = body[max(0, m.start() - 8):m.start()]
