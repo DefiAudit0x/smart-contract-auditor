@@ -206,6 +206,56 @@ def test_valid_report_passes_without_unverified_banner():
     assert "Reentrancy in withdraw" in result
 
 
+def test_alternate_finding_markers_are_preserved_by_validation():
+    report = (
+        "### Vulnerability List\n"
+        "* **Name**: Reentrancy in withdraw\n"
+        "* **Severity**: Critical\n"
+        "* **Description**: Setup: an attacker deposits funds, then calls withdraw() with an amount. "
+        "First the attacker calls withdraw(), then msg.sender.call( permits re-entry before balances changes. "
+        "This causes direct theft and loss of funds: steal, drain, loss.\n"
+        "* **Fix**: Apply checks-effects-interactions.\n"
+        "* **PoC**: First call withdraw(), then re-enter through msg.sender.call(.\n"
+        "* **Impact**: direct theft\n"
+        "1. **Name**: Unauthorized withdrawal in withdraw\n"
+        "1. **Severity**: Critical\n"
+        "1. **Description**: Setup: an attacker deposits funds, then calls withdraw() with an amount. "
+        "First the attacker calls withdraw(), then msg.sender.call( permits re-entry before balances changes. "
+        "This causes direct theft and loss of funds: steal, drain, loss.\n"
+        "1. **Fix**: Apply checks-effects-interactions.\n"
+        "1. **PoC**: First call withdraw(), then re-enter through msg.sender.call(.\n"
+        "1. **Impact**: direct theft\n"
+    )
+
+    result = validate_report(report, VAULT_CODE)
+
+    assert "UNVERIFIED" not in result
+    assert "* **Name**: Reentrancy in withdraw" in result
+    assert "1. **Name**: Unauthorized withdrawal in withdraw" in result
+    for body in (
+        "* **Description**:", "* **Fix**:", "* **PoC**:", "* **Impact**:",
+        "1. **Description**:", "1. **Fix**:", "1. **PoC**:", "1. **Impact**:",
+    ):
+        assert body in result
+
+
+def test_alternate_marker_is_preserved_when_severity_is_downgraded(monkeypatch):
+    report = (
+        "### Vulnerability List\n"
+        "* **Name**: Reentrancy in withdraw\n"
+        "* **Severity**: Critical\n"
+        "* **Description**: Test description.\n"
+    )
+    monkeypatch.setattr(
+        gate_validator, "validate_finding",
+        lambda *_args, **_kwargs: (True, "High", "test downgrade"),
+    )
+
+    result = validate_report(report, VAULT_CODE)
+
+    assert "* **Severity**: High" in result
+
+
 def test_all_rejected_report_keeps_unverified_banner():
     report = _report_text(_prose_only_finding())
     result = validate_report(report, SAFE_CODE)

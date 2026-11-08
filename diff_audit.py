@@ -103,6 +103,9 @@ def run_diff_audit(v1: str, v2: str, lang: str = "english") -> str:
         "added_lines": diff.added_lines[:30],
         "removed_lines": diff.removed_lines[:30],
     }, ensure_ascii=False)
+    # Keep untrusted source text from injecting literal prompt delimiters.
+    # Unicode escapes are valid JSON and json.loads restores the original data.
+    diff_payload = diff_payload.replace("<", "\\u003c").replace(">", "\\u003e")
 
     prompt = f"""You are a smart contract security expert. Compare two versions of a contract and answer two questions:
 

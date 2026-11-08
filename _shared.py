@@ -194,9 +194,12 @@ def require_api_key(f):
                 except Exception:
                     try:
                         from auth import refund_credit
-                        refund_credit(user)
+                        if not refund_credit(user):
+                            logger.error("Could not refund API-key credit after endpoint error")
+                            return jsonify({"error": "Unable to restore API-key credit"}), 503
                     except Exception:
                         logger.exception("Could not refund API-key credit after endpoint error")
+                        return jsonify({"error": "Unable to restore API-key credit"}), 503
                     raise
                 if not _metered_status_ok(response):
                     try:
