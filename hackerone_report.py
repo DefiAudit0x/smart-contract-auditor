@@ -240,7 +240,7 @@ _FINDING_HEADING_RE = re.compile(
     re.IGNORECASE,
 )
 _SEVERITY_LABEL_RE = re.compile(
-    r"\b(Critical|High|Medium|Low|Info(?:rmational)?)\b", re.IGNORECASE
+    r"^\s*(Critical|High|Medium|Low|Info(?:rmational)?)\b", re.IGNORECASE
 )
 _FINDING_FIELD_RE = re.compile(
     r"^\*\*(?P<field>Name|Severity|Category|Description|Exploit Path|Exploit|Fix|PoC|Line):?\*\*\s*:?\s*(?P<value>.*)$",
@@ -249,7 +249,7 @@ _FINDING_FIELD_RE = re.compile(
 
 
 def _normalize_severity_label(value: str) -> str:
-    match = _SEVERITY_LABEL_RE.search(value or "")
+    match = _SEVERITY_LABEL_RE.match(value or "")
     if not match:
         return (value or "").strip()
     label = match.group(1).lower()

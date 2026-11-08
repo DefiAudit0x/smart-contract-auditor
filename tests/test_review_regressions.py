@@ -509,10 +509,38 @@ def test_webhook_findings_parse_heading_style_audit_report():
     findings = findings_from_audit_report(report, "Vault.sol")
     assert len(findings) == 3
     assert [finding.severity for finding in findings] == ["Critical", "High", "Medium"]
+    assert [finding.line for finding in findings] == [12, 8, 1]
     assert "Reentrancy in withdraw()" in findings[0].description
     assert "sends ETH before updating state" in findings[0].description
     assert "checks-effects-interactions" in findings[0].description
     assert all(finding.file == "Vault.sol" for finding in findings)
+
+
+def test_webhook_severity_requires_an_explicit_leading_label():
+    from webhook_notifier import findings_from_audit_report
+
+    report = (
+        "- **Name**: Misleading severity text\n"
+        "- **Severity**: Not Critical; actual priority High\n"
+    )
+
+    findings = findings_from_audit_report(report, "Vault.sol")
+    assert len(findings) == 1
+    assert findings[0].severity == "Medium"
+
+
+@pytest.mark.parametrize("line_value", ["", "0", "-12", "not-an-integer"])
+def test_webhook_invalid_line_numbers_fall_back_to_one(line_value):
+    from webhook_notifier import findings_from_audit_report
+
+    report = (
+        "- **Name**: Invalid line\n"
+        f"- **Line**: {line_value}\n"
+    )
+
+    findings = findings_from_audit_report(report, "Vault.sol")
+    assert len(findings) == 1
+    assert findings[0].line == 1
 
 
 @pytest.mark.parametrize("marker", ["-", "*", "+", "•", "1.", ""])
@@ -589,13 +617,27 @@ def test_mapping_increment_and_decrement_writes_are_checked_for_guard_consistenc
     assert {entry["function"] for entry in finding["evidence"]} >= {
         "guarded", "unguarded",
     }
-    evidence_by_function = {
-        entry["function"]: entry for entry in finding["evidence"]
-    }
-    assert evidence_by_function["unguarded"]["guard"] == {
+    evidence = finding["evidence"]
+    assert len(evidence) == 2
+    assert {entry["function"] for entry in evidence} == {"guarded", "unguarded"}
+    guarded_evidence = next(
+        entry for entry in evidence if entry["function"] == "guarded"
+    )
+    unguarded_evidence = next(
+        entry for entry in evidence if entry["function"] == "unguarded"
+    )
+    assert (
+        guarded_evidence["content"].split(";", 1)[0].strip() == guarded_write
+    )
+    assert (
+        unguarded_evidence["content"].split(";", 1)[0].strip() == unguarded_write
+    )
+    assert guarded_evidence["line"] == 3
+    assert unguarded_evidence["line"] == 4
+    assert unguarded_evidence["guard"] == {
         "nonReentrant": False, "only": False,
     }
-    assert evidence_by_function["guarded"]["guard"] == {
+    assert guarded_evidence["guard"] == {
         "nonReentrant": True, "only": False,
     }
 

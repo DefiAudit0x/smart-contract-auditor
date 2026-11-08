@@ -290,10 +290,16 @@ def findings_from_audit_report(report: str, source_file: str = "audit report") -
         description = f"{name}: {detail}"
         if fix:
             description += f" Fix: {fix}"
+        try:
+            line_number = int(str(item.get("line", 1)).strip())
+        except (TypeError, ValueError):
+            line_number = 1
+        if line_number < 1:
+            line_number = 1
         findings.append(Finding(
             agent_name="Audit", severity=severity,
             category=str(item.get("category") or "Security Finding"),
             file=source_file, function_name="", description=description,
-            line=1, fix=fix,
+            line=line_number, fix=fix,
         ))
     return findings
