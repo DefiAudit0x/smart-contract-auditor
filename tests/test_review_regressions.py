@@ -481,6 +481,40 @@ def test_webhook_findings_are_built_from_real_report():
     assert "checks-effects-interactions" in findings[0].description
 
 
+def test_webhook_findings_parse_heading_style_audit_report():
+    from webhook_notifier import findings_from_audit_report
+
+    report = (
+        "## Security Analysis Report\n\n"
+        "### Summary\n"
+        "1 critical, 1 high, 1 medium finding\n\n"
+        "### Critical: Reentrancy in withdraw()\n"
+        "- **Severity:** Critical (CVSS 9.8)\n"
+        "- **Line:** 12\n"
+        "- **Description:** The withdraw function sends ETH before updating state\n"
+        "- **Exploit Path:** The attacker reenters withdraw\n"
+        "- **Fix:** Apply checks-effects-interactions\n\n"
+        "### High: Unchecked external call\n"
+        "- **Severity:** High (CVSS 7.5)\n"
+        "- **Line:** 8\n"
+        "- **Description:** The call return value is not checked\n"
+        "- **Fix:** Check the boolean return value\n\n"
+        "### Medium: Floating pragma\n"
+        "- **Severity:** Medium (CVSS 5.0)\n"
+        "- **Line:** 1\n"
+        "- **Description:** The pragma accepts multiple compiler versions\n"
+        "- **Fix:** Use an exact pragma version\n"
+    )
+
+    findings = findings_from_audit_report(report, "Vault.sol")
+    assert len(findings) == 3
+    assert [finding.severity for finding in findings] == ["Critical", "High", "Medium"]
+    assert "Reentrancy in withdraw()" in findings[0].description
+    assert "sends ETH before updating state" in findings[0].description
+    assert "checks-effects-interactions" in findings[0].description
+    assert all(finding.file == "Vault.sol" for finding in findings)
+
+
 @pytest.mark.parametrize("marker", ["-", "*", "+", "•", "1.", ""])
 def test_hackerone_generated_reports_keep_supported_finding_markers(marker):
     from hackerone_report import generate_h1_report, generate_h1_short
@@ -510,6 +544,7 @@ def test_hackerone_generated_reports_keep_supported_finding_markers(marker):
         ("function initialize() external /* initializer */ {}", True),
         ("function initialize() external // _disableInitializers\n {}", True),
         ("function initialize() external initializer {}", False),
+        ("function initialize() external onlyOwner reinitializer(2) {}", False),
         ("function initialize() external returns (bool initializer) { return false; }", True),
     ],
 )
@@ -553,6 +588,15 @@ def test_mapping_increment_and_decrement_writes_are_checked_for_guard_consistenc
     assert finding is not None
     assert {entry["function"] for entry in finding["evidence"]} >= {
         "guarded", "unguarded",
+    }
+    evidence_by_function = {
+        entry["function"]: entry for entry in finding["evidence"]
+    }
+    assert evidence_by_function["unguarded"]["guard"] == {
+        "nonReentrant": False, "only": False,
+    }
+    assert evidence_by_function["guarded"]["guard"] == {
+        "nonReentrant": True, "only": False,
     }
 
 

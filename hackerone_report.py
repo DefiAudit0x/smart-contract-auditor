@@ -235,29 +235,66 @@ def _get_poc_template(bug_class: str, target_addr: str = "0x...", fork_block: in
     return template.replace("{target_addr}", target_addr).replace("{fork_block}", str(fork_block))
 
 
+_FINDING_HEADING_RE = re.compile(
+    r"^#{1,6}\s*(?P<severity>Critical|High|Medium|Low|Info(?:rmational)?)\s*:\s*(?P<name>.+?)\s*$",
+    re.IGNORECASE,
+)
+_SEVERITY_LABEL_RE = re.compile(
+    r"\b(Critical|High|Medium|Low|Info(?:rmational)?)\b", re.IGNORECASE
+)
+_FINDING_FIELD_RE = re.compile(
+    r"^\*\*(?P<field>Name|Severity|Category|Description|Exploit Path|Exploit|Fix|PoC|Line):?\*\*\s*:?\s*(?P<value>.*)$",
+    re.IGNORECASE,
+)
+
+
+def _normalize_severity_label(value: str) -> str:
+    match = _SEVERITY_LABEL_RE.search(value or "")
+    if not match:
+        return (value or "").strip()
+    label = match.group(1).lower()
+    return "Info" if label in {"info", "informational"} else label.title()
+
+
 def _extract_findings(report: str) -> List[Dict]:
     findings = []
     lines = report.split("\n")
     current = {}
     for line in lines:
-        s = re.sub(r"^(?:[-+•]|\*(?!\*)|\d+[.)])\s*", "", line.strip())
-        if s.startswith("**Name**"):
+        heading = _FINDING_HEADING_RE.match(line.strip())
+        if heading:
             if current and current.get("name"):
                 findings.append(current)
-            current = {"name": s.split(":", 1)[1].strip() if ":" in s else ""}
-        elif s.startswith("**Severity**") and current:
-            current["severity"] = s.split(":", 1)[1].strip().rstrip("*") if ":" in s else "Medium"
-        elif s.startswith("**Category**") and current:
-            current["category"] = s.split(":", 1)[1].strip() if ":" in s else ""
-        elif s.startswith("**Description**") and current:
-            desc = s.split(":", 1)[1].strip() if ":" in s else ""
-            current["description"] = desc
-        elif s.startswith("**Exploit**") and current:
-            current["exploit"] = s.split(":", 1)[1].strip() if ":" in s else ""
-        elif s.startswith("**Fix**") and current:
-            current["fix"] = s.split(":", 1)[1].strip() if ":" in s else ""
-        elif s.startswith("**PoC**") and current:
-            current["poc"] = s.split(":", 1)[1].strip() if ":" in s else ""
+            current = {
+                "name": heading.group("name").strip(),
+                "severity": _normalize_severity_label(heading.group("severity")),
+            }
+            continue
+        s = re.sub(r"^(?:[-+•]|\*(?!\*)|\d+[.)])\s*", "", line.strip())
+        field_match = _FINDING_FIELD_RE.match(s)
+        if not field_match:
+            continue
+        field = field_match.group("field").lower()
+        value = field_match.group("value").strip()
+        if field == "name":
+            if current and current.get("name"):
+                findings.append(current)
+            current = {"name": value}
+        elif current:
+            if field == "severity":
+                current["severity"] = _normalize_severity_label(value)
+            elif field == "category":
+                current["category"] = value
+            elif field == "description":
+                current["description"] = value
+            elif field in {"exploit", "exploit path"}:
+                current["exploit"] = value
+            elif field == "fix":
+                current["fix"] = value
+            elif field == "poc":
+                current["poc"] = value
+            elif field == "line":
+                current["line"] = value
     if current and current.get("name"):
         findings.append(current)
     return findings

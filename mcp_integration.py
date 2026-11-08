@@ -215,7 +215,7 @@ def _has_unprotected_initializer(code: str) -> bool:
 
         header = masked[close_paren + 1:body_start]
         header = re.split(r"\breturns\b", header, maxsplit=1, flags=re.IGNORECASE)[0]
-        if not re.search(r"\binitializer\b", header, re.IGNORECASE):
+        if not re.search(r"\binitializer\b|\breinitializer\s*\(", header, re.IGNORECASE):
             return True
     return False
 
