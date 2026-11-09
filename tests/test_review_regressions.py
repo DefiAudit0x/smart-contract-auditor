@@ -11,9 +11,12 @@ import pytest
 def test_guarded_initializer_is_not_reported_as_unprotected():
     from mcp_integration import scan_swc_patterns
 
-    findings = scan_swc_patterns(
-        "contract C { function initialize() external initializer {} }"
+    code = (
+        'import {Initializable as OZInit} from "@openzeppelin/contracts-upgradeable/'
+        'proxy/utils/Initializable.sol";\n'
+        "contract C is OZInit { function initialize() external initializer {} }"
     )
+    findings = scan_swc_patterns(code)
     assert not any(item["id"] == "CUSTOM-018" for item in findings)
 
 
@@ -571,8 +574,8 @@ def test_hackerone_generated_reports_keep_supported_finding_markers(marker):
     [
         ("function initialize() external /* initializer */ {}", True),
         ("function initialize() external // _disableInitializers\n {}", True),
-        ("function initialize() external initializer {}", False),
-        ("function initialize() external onlyOwner reinitializer(2) {}", False),
+        ("function initialize() external initializer {}", True),
+        ("function initialize() external onlyOwner reinitializer(2) {}", True),
         ("function initialize() external returns (bool initializer) { return false; }", True),
     ],
 )
@@ -584,6 +587,225 @@ def test_custom_initializer_detector_ignores_comment_and_return_text(
     findings = scan_swc_patterns(f"contract C {{ {declaration} }}")
     reported = any(item["id"] == "CUSTOM-018" for item in findings)
     assert reported is should_report
+
+
+@pytest.mark.parametrize(
+    ("modifier_declaration", "modifier_use"),
+    [
+        ("initializer()", "initializer"),
+        ("reinitializer(uint8 version)", "reinitializer(2)"),
+    ],
+)
+def test_local_noop_initializer_modifiers_are_not_trusted(
+    modifier_declaration, modifier_use
+):
+    from mcp_integration import scan_swc_patterns
+
+    code = f"""contract C {{
+        modifier {modifier_declaration} {{ _; }}
+        function initialize() external {modifier_use} {{}}
+    }}"""
+    findings = scan_swc_patterns(code)
+    assert any(item["id"] == "CUSTOM-018" for item in findings)
+
+
+@pytest.mark.parametrize(
+    ("state_and_modifier", "modifier_use"),
+    [
+        (
+            "bool initialized; modifier initializer() "
+            "{ require(!initialized); initialized = true; _; }",
+            "initializer",
+        ),
+        (
+            "uint8 initializedVersion; "
+            "modifier reinitializer(uint8 version) "
+            "{ require(version > initializedVersion); "
+            "initializedVersion = version; _; }",
+            "reinitializer(2)",
+        ),
+        (
+            "bool initialized; modifier initializer() "
+            "{ if (initialized) revert AlreadyInitialized(); "
+            "initialized = true; _; }",
+            "initializer",
+        ),
+    ],
+)
+def test_guarded_local_custom_initializer_modifiers_are_reported_conservatively(
+    state_and_modifier, modifier_use
+):
+    from mcp_integration import scan_swc_patterns
+
+    code = f"""contract C {{
+        {state_and_modifier}
+        function initialize() external {modifier_use} {{}}
+    }}"""
+    findings = scan_swc_patterns(code)
+    assert any(item["id"] == "CUSTOM-018" for item in findings)
+
+
+def test_unrelated_noop_modifier_does_not_override_openzeppelin_inheritance():
+    from mcp_integration import scan_swc_patterns
+
+    code = """import {Initializable} from
+        "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+        contract Unrelated { modifier initializer() { _; } }
+        contract C is Initializable {
+            function initialize() external initializer {}
+        }
+    """
+    findings = scan_swc_patterns(code)
+    assert not any(item["id"] == "CUSTOM-018" for item in findings)
+
+
+def test_local_override_of_canonical_initializer_is_reported():
+    from mcp_integration import scan_swc_patterns
+
+    code = """import {Initializable} from
+        "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+        contract C is Initializable {
+            modifier initializer() { _; }
+            function initialize() external initializer {}
+        }
+    """
+    findings = scan_swc_patterns(code)
+    assert any(item["id"] == "CUSTOM-018" for item in findings)
+
+
+def test_noncanonical_openzeppelin_like_import_is_not_trusted():
+    from mcp_integration import scan_swc_patterns
+
+    code = '''import {Initializable} from
+        "@attacker/openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+        contract C is Initializable {
+            function initialize() external initializer {}
+        }
+    '''
+    findings = scan_swc_patterns(code)
+    assert any(item["id"] == "CUSTOM-018" for item in findings)
+
+
+def test_direct_canonical_openzeppelin_import_is_trusted():
+    from mcp_integration import scan_swc_patterns
+
+    code = '''import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+        contract C is Initializable {
+            function initialize() external initializer {}
+        }
+    '''
+    findings = scan_swc_patterns(code)
+    assert not any(item["id"] == "CUSTOM-018" for item in findings)
+
+
+def test_openzeppelin_import_with_wrong_filename_case_is_not_trusted():
+    from mcp_integration import scan_swc_patterns
+
+    code = '''import {Initializable} from
+        "@openzeppelin/contracts-upgradeable/proxy/utils/INITIALIZABLE.sol";
+        contract C is Initializable {
+            function initialize() external initializer {}
+        }
+    '''
+    findings = scan_swc_patterns(code)
+    assert any(item["id"] == "CUSTOM-018" for item in findings)
+
+
+def test_direct_custom_function_body_guard_is_not_assumed_safe():
+    from mcp_integration import scan_swc_patterns
+
+    code = """contract C {
+        bool initialized;
+        function initialize() external {
+            require(!initialized);
+            initialized = true;
+        }
+    }"""
+    findings = scan_swc_patterns(code)
+    assert any(item["id"] == "CUSTOM-018" for item in findings)
+
+
+def test_inherited_local_noop_initializer_modifier_is_reported():
+    from mcp_integration import scan_swc_patterns
+
+    code = """contract Base {
+        modifier initializer() { _; }
+    }
+    contract Child is Base {
+        function initialize() external initializer {}
+    }"""
+    findings = scan_swc_patterns(code)
+    assert any(item["id"] == "CUSTOM-018" for item in findings)
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        """contract C {
+            bool initialized; address owner;
+            modifier initializer() {
+                if (msg.sender == owner) {
+                    require(!initialized); initialized = true;
+                }
+                _;
+            }
+            function initialize() external initializer {}
+        }""",
+        """contract C {
+            bool initialized; address owner;
+            modifier initializer() {
+                require(!initialized);
+                if (msg.sender == owner) initialized = true;
+                _;
+            }
+            function initialize() external initializer {}
+        }""",
+        """contract C {
+            bool initialized; bool _initializing;
+            modifier initializer() {
+                require(!initialized || _initializing);
+                initialized = true;
+                _;
+            }
+            function initialize() external initializer {}
+        }""",
+    ],
+)
+def test_conditional_custom_modifier_patterns_remain_reported(code):
+    from mcp_integration import scan_swc_patterns
+
+    findings = scan_swc_patterns(code)
+    assert any(item["id"] == "CUSTOM-018" for item in findings)
+
+
+def test_conditional_function_body_guard_does_not_suppress_custom018():
+    from mcp_integration import scan_swc_patterns
+
+    code = """contract C {
+        bool initialized; address owner;
+        function initialize() external {
+            if (msg.sender == owner) {
+                require(!initialized); initialized = true;
+            }
+        }
+    }"""
+    findings = scan_swc_patterns(code)
+    assert any(item["id"] == "CUSTOM-018" for item in findings)
+
+
+def test_comments_do_not_make_noop_local_initializer_modifier_look_guarded():
+    from mcp_integration import scan_swc_patterns
+
+    code = """contract C {
+        bool initialized;
+        modifier initializer() {
+            /* require(!initialized); initialized = true; */
+            _;
+        }
+        function initialize() external initializer {}
+    }"""
+    findings = scan_swc_patterns(code)
+    assert any(item["id"] == "CUSTOM-018" for item in findings)
 
 
 @pytest.mark.parametrize(
@@ -626,12 +848,8 @@ def test_mapping_increment_and_decrement_writes_are_checked_for_guard_consistenc
     unguarded_evidence = next(
         entry for entry in evidence if entry["function"] == "unguarded"
     )
-    assert (
-        guarded_evidence["content"].split(";", 1)[0].strip() == guarded_write
-    )
-    assert (
-        unguarded_evidence["content"].split(";", 1)[0].strip() == unguarded_write
-    )
+    assert guarded_evidence["content"] == f"{guarded_write}; }}"
+    assert unguarded_evidence["content"] == f"{unguarded_write}; }}"
     assert guarded_evidence["line"] == 3
     assert unguarded_evidence["line"] == 4
     assert unguarded_evidence["guard"] == {

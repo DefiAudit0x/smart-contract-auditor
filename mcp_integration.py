@@ -191,34 +191,182 @@ def _mask_solidity_comments_and_strings(code: str) -> str:
     return "".join(masked)
 
 
+def _matching_delimiter(source: str, opening_index: int, opening: str, closing: str) -> int | None:
+    """Return the matching delimiter index in already-masked Solidity source."""
+    depth = 0
+    for index in range(opening_index, len(source)):
+        if source[index] == opening:
+            depth += 1
+        elif source[index] == closing:
+            depth -= 1
+            if depth == 0:
+                return index
+    return None
+
+
+def _contract_scopes(masked: str) -> list[dict]:
+    """Collect contract ranges and direct base names from masked source."""
+    scopes = []
+    pattern = re.compile(r"\bcontract\s+([A-Za-z_]\w*)([^{};]*)\{", re.IGNORECASE)
+    for match in pattern.finditer(masked):
+        opening_index = match.end() - 1
+        closing_index = _matching_delimiter(masked, opening_index, "{", "}")
+        if closing_index is None:
+            continue
+        base_clause = re.search(r"\bis\s+(.*)$", match.group(2), re.IGNORECASE)
+        bases = []
+        if base_clause:
+            for candidate in base_clause.group(1).split(","):
+                base_match = re.match(
+                    r"\s*([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)", candidate
+                )
+                if base_match:
+                    bases.append(base_match.group(1).split(".")[-1])
+        scopes.append({
+            "name": match.group(1),
+            "start": opening_index + 1,
+            "end": closing_index,
+            "bases": bases,
+        })
+    return scopes
+
+
+_OPENZEPPELIN_INITIALIZABLE_IMPORTS = {
+    "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol",
+    "@openzeppelin/contracts/proxy/utils/Initializable.sol",
+}
+
+
+def _openzeppelin_initializable_names(code: str, masked: str) -> set[str]:
+    """Return symbols imported from the canonical OpenZeppelin Initializable paths."""
+    names = set()
+    for match in re.finditer(r"\bimport\b[^;]*;", masked, re.IGNORECASE):
+        statement = code[match.start():match.end()]
+        path_match = re.search(
+            r"\bfrom\s*['\"]([^'\"]+)['\"]|^\s*import\s*['\"]([^'\"]+)['\"]",
+            statement,
+            re.IGNORECASE | re.DOTALL,
+        )
+        if not path_match:
+            continue
+        path = path_match.group(1) or path_match.group(2)
+        if path not in _OPENZEPPELIN_INITIALIZABLE_IMPORTS:
+            continue
+        symbols = re.search(r"\{([^{}]+)\}", statement, re.DOTALL)
+        if not symbols:
+            names.add("Initializable")
+            continue
+        for symbol in symbols.group(1).split(","):
+            parts = re.split(r"\s+as\s+", symbol.strip(), flags=re.IGNORECASE)
+            if parts[0].strip() == "Initializable":
+                names.add(parts[-1].strip())
+    return names
+
+
+def _scope_for_position(scopes: list[dict], position: int) -> dict | None:
+    return next(
+        (scope for scope in scopes if scope["start"] <= position < scope["end"]),
+        None,
+    )
+
+
+def _declares_local_initializer_modifier(
+    masked: str, scope: dict, modifier_name: str
+) -> bool:
+    segment = masked[scope["start"]:scope["end"]]
+    return bool(re.search(
+        rf"\bmodifier\s+{re.escape(modifier_name)}\b", segment, re.IGNORECASE
+    ))
+
+
+def _initializer_modifier_evidence(
+    masked: str,
+    scope: dict | None,
+    modifier_name: str,
+    scopes_by_name: dict[str, dict],
+    trusted_names: set[str],
+    seen: set[str] | None = None,
+) -> tuple[bool, bool, bool]:
+    """Return (canonical OpenZeppelin found, local override found, unresolved base found)."""
+    if scope is None:
+        return False, False, True
+    seen = set() if seen is None else seen
+    name = scope["name"]
+    if name in seen:
+        return False, False, True
+    if _declares_local_initializer_modifier(masked, scope, modifier_name):
+        return False, True, False
+
+    trusted = False
+    local_override = False
+    unresolved = False
+    next_seen = seen | {name}
+    for base in scope["bases"]:
+        if base in scopes_by_name:
+            base_evidence = _initializer_modifier_evidence(
+                masked, scopes_by_name[base], modifier_name,
+                scopes_by_name, trusted_names, next_seen,
+            )
+            trusted |= base_evidence[0]
+            local_override |= base_evidence[1]
+            unresolved |= base_evidence[2]
+        elif base in trusted_names:
+            trusted = True
+        else:
+            unresolved = True
+    return trusted, local_override, unresolved
+
+
 def _has_unprotected_initializer(code: str) -> bool:
+    """Only suppress CUSTOM-018 for a canonical OZ modifier with no local override."""
     masked = _mask_solidity_comments_and_strings(code)
+    scopes = _contract_scopes(masked)
+    scope_counts = {}
+    for scope in scopes:
+        scope_counts[scope["name"]] = scope_counts.get(scope["name"], 0) + 1
+    ambiguous_names = {name for name, count in scope_counts.items() if count > 1}
+    scopes_by_name = {
+        scope["name"]: scope for scope in scopes
+        if scope["name"] not in ambiguous_names
+    }
+    trusted_names = _openzeppelin_initializable_names(code, masked)
+
     for match in re.finditer(r"\bfunction\s+initialize\s*\(", masked, re.IGNORECASE):
         open_paren = match.end() - 1
-        depth = 0
-        close_paren = None
-        for index in range(open_paren, len(masked)):
-            if masked[index] == "(":
-                depth += 1
-            elif masked[index] == ")":
-                depth -= 1
-                if depth == 0:
-                    close_paren = index
-                    break
+        close_paren = _matching_delimiter(masked, open_paren, "(", ")")
         if close_paren is None:
             continue
-
         body_start = masked.find("{", close_paren + 1)
         declaration_end = masked.find(";", close_paren + 1)
         if body_start < 0 or (declaration_end >= 0 and declaration_end < body_start):
             continue
+        if _matching_delimiter(masked, body_start, "{", "}") is None:
+            continue
 
         header = masked[close_paren + 1:body_start]
         header = re.split(r"\breturns\b", header, maxsplit=1, flags=re.IGNORECASE)[0]
-        if not re.search(r"\binitializer\b|\breinitializer\s*\(", header, re.IGNORECASE):
+        modifier = re.search(
+            r"\b(initializer|reinitializer)\b\s*(?:\([^)]*\))?",
+            header,
+            re.IGNORECASE,
+        )
+        if not modifier:
             return True
-    return False
 
+        scope = _scope_for_position(scopes, match.start())
+        if scope is None or scope["name"] in ambiguous_names:
+            return True
+        evidence = _initializer_modifier_evidence(
+            masked,
+            scope,
+            modifier.group(1).lower(),
+            scopes_by_name,
+            trusted_names,
+        )
+        if evidence[0] and not evidence[1] and not evidence[2]:
+            continue
+        return True
+    return False
 
 def scan_swc_patterns(code: str) -> List[Dict]:
     """Scan code against all 86 SWC patterns. Returns matched findings."""
