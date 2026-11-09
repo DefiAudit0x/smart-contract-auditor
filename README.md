@@ -98,6 +98,22 @@ Copy `.env.example` to `.env` and fill in your values.
 | `POST` | `/api/poc` | Generate an exploit PoC template |
 | `POST` | `/api/hackerone` | Format findings as a HackerOne report |
 
+`POST /api/mcp-scan` requires `code` as a string. It also accepts optional `remappings` (up to 200 strings, each at most 512 characters) and `source_unit_name` (1-512 characters) for Solidity remapping-aware `CUSTOM-018` analysis:
+
+The Flask app enforces an existing 5 MiB request-body limit. This is an app-wide request limit, not a per-field code-size limit.
+
+```json
+{
+  "code": "import {Initializable} from \"oz/proxy/utils/Initializable.sol\"; contract C is Initializable { function initialize() external initializer {} }",
+  "remappings": ["oz/=lib/openzeppelin-contracts-upgradeable/contracts/"],
+  "source_unit_name": "src/Example.sol"
+}
+```
+
+Supply the effective compiler remappings and the exact source-unit name used by Solidity for context-scoped rules. The endpoint does not read `foundry.toml`, `remappings.txt`, environment variables, or project files. Remapping-based suppression is limited to exact allowlisted OpenZeppelin source-unit paths; it is path-identity evidence only and does not verify the target file's contents, dependency origin, or whether a local fork has been modified. Invalid or ambiguous remapping metadata fails closed for this suppression.
+
+The detector only treats recognized named or bare imports as binding evidence; a namespace import does not establish an unqualified `Initializable` symbol. An untrusted bare import or a duplicate local import binding from a non-allowlisted path also prevents suppression, favoring an extra finding over an ambiguous trust decision.
+
 ## Ground-Truth Benchmark
 
 The repository includes a deterministic ten-case benchmark covering reentrancy, delegatecall, selfdestruct, unauthorised public minting, `tx.origin` authentication, flash loans, storage collision, unchecked transfers, unbounded loops, and timestamp-dependent gates. Each case pairs `vulnerable.sol` with `fixed.sol` and includes metadata, a comparator evidence path, a declared invariant, and a Foundry PoC fixture. Supplementary negative controls, attack variants, and adversarial comparator fixtures are maintained separately.

@@ -68,6 +68,94 @@ def test_stream_analysis_requires_an_idempotency_key_for_access_codes(quota_clie
     assert auth.check_quota(code)["used"] == 0
 
 
+def test_mcp_scan_forwards_explicit_remapping_context(quota_client):
+    client, code = quota_client
+    scanner = Mock()
+    scanner.analyze_contract.return_value = {"findings": []}
+    remappings = ["oz/=lib/openzeppelin-contracts-upgradeable/contracts/"]
+    source_unit_name = "src/Example.sol"
+
+    with patch.object(api_routes, "_has_mcp", True), patch.object(
+        api_routes, "_mcp_int", scanner
+    ):
+        response = client.post(
+            "/api/mcp-scan",
+            json={
+                "code": "contract Example {}",
+                "remappings": remappings,
+                "source_unit_name": source_unit_name,
+            },
+        )
+
+    assert response.status_code == 200
+    scanner.analyze_contract.assert_called_once_with(
+        "contract Example {}",
+        remappings=remappings,
+        source_unit_name=source_unit_name,
+    )
+    assert auth.check_quota(code)["used"] == 1
+
+
+def test_mcp_scan_keeps_code_only_call_compatible(quota_client):
+    client, code = quota_client
+    scanner = Mock()
+    scanner.analyze_contract.return_value = {"findings": []}
+
+    with patch.object(api_routes, "_has_mcp", True), patch.object(
+        api_routes, "_mcp_int", scanner
+    ):
+        response = client.post("/api/mcp-scan", json={"code": "contract Example {}"})
+
+    assert response.status_code == 200
+    scanner.analyze_contract.assert_called_once_with("contract Example {}")
+    assert auth.check_quota(code)["used"] == 1
+
+
+@pytest.mark.parametrize("invalid_code", [None, 42, [], {}])
+def test_mcp_scan_rejects_non_string_code_before_quota(invalid_code, quota_client):
+    client, code = quota_client
+    scanner = Mock()
+
+    with patch.object(api_routes, "_has_mcp", True), patch.object(
+        api_routes, "_mcp_int", scanner
+    ):
+        response = client.post("/api/mcp-scan", json={"code": invalid_code})
+
+    assert response.status_code == 400
+    assert response.get_json()["error"] == "Field 'code' must be a string"
+    scanner.analyze_contract.assert_not_called()
+    assert auth.check_quota(code)["used"] == 0
+
+
+@pytest.mark.parametrize(
+    "invalid_fields",
+    [
+        {"remappings": "oz/=lib/openzeppelin-contracts-upgradeable/contracts/"},
+        {"remappings": [123]},
+        {"remappings": ["x" * 513]},
+        {"remappings": ["oz/=lib/" for _ in range(201)]},
+        {"source_unit_name": None},
+        {"source_unit_name": ""},
+        {"source_unit_name": "x" * 513},
+    ],
+)
+def test_mcp_scan_rejects_invalid_remapping_context_before_quota(invalid_fields, quota_client):
+    client, code = quota_client
+    scanner = Mock()
+
+    with patch.object(api_routes, "_has_mcp", True), patch.object(
+        api_routes, "_mcp_int", scanner
+    ):
+        response = client.post(
+            "/api/mcp-scan",
+            json={"code": "contract Example {}", **invalid_fields},
+        )
+
+    assert response.status_code == 400
+    scanner.analyze_contract.assert_not_called()
+    assert auth.check_quota(code)["used"] == 0
+
+
 def test_tool_endpoint_charges_access_code_quota(quota_client):
     client, code = quota_client
     grep_mock = Mock()

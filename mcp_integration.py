@@ -237,30 +237,248 @@ _OPENZEPPELIN_INITIALIZABLE_IMPORTS = {
 }
 
 
-def _openzeppelin_initializable_names(code: str, masked: str) -> set[str]:
-    """Return symbols imported from the canonical OpenZeppelin Initializable paths."""
+_OPENZEPPELIN_INITIALIZABLE_PATHS = _OPENZEPPELIN_INITIALIZABLE_IMPORTS | {
+    "lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/Initializable.sol",
+    "lib/openzeppelin-contracts/contracts/proxy/utils/Initializable.sol",
+    "node_modules/@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol",
+    "node_modules/@openzeppelin/contracts/proxy/utils/Initializable.sol",
+}
+_MAX_REMAPPING_ENTRIES = 200
+_MAX_REMAPPING_VALUE_LENGTH = 512
+
+
+def _has_unsafe_remapping_value(
+    value: str,
+    *,
+    allow_empty: bool = False,
+    allow_absolute: bool = False,
+) -> bool:
+    """Reject ambiguous path syntax without normalizing Solidity source-unit names."""
+    if not isinstance(value, str):
+        return True
+    if not value:
+        return not allow_empty
+    if len(value) > _MAX_REMAPPING_VALUE_LENGTH or "\x00" in value or "\\" in value:
+        return True
+    if value != value.strip() or any(char.isspace() or ord(char) < 32 for char in value):
+        return True
+    if re.match(r"^[A-Za-z][A-Za-z0-9+.-]*:", value):
+        return True
+    if not allow_absolute and value.startswith("/"):
+        return True
+    return any(part in {".", ".."} for part in value.split("/"))
+
+
+def _parse_solidity_remappings(
+    remappings: list[str] | tuple[str, ...], source_unit_name: str | None
+) -> list[tuple[str, str, str]] | None:
+    """Parse caller-supplied remappings; return None for any invalid metadata."""
+    if not isinstance(remappings, list | tuple) or len(remappings) > _MAX_REMAPPING_ENTRIES:
+        return None
+    if source_unit_name is not None and _has_unsafe_remapping_value(
+        source_unit_name, allow_absolute=True
+    ):
+        return None
+
+    parsed = []
+    for entry in remappings:
+        if (
+            not isinstance(entry, str)
+            or not entry
+            or len(entry) > _MAX_REMAPPING_VALUE_LENGTH
+            or entry.count("=") != 1
+        ):
+            return None
+        left, target = entry.split("=", 1)
+        if left.count(":") > 1:
+            return None
+        if ":" in left:
+            context, prefix = left.split(":", 1)
+        else:
+            context, prefix = "", left
+        if not prefix or _has_unsafe_remapping_value(context, allow_empty=True, allow_absolute=True):
+            return None
+        if _has_unsafe_remapping_value(prefix) or _has_unsafe_remapping_value(
+            target, allow_empty=True
+        ):
+            return None
+        parsed.append((context, prefix, target))
+    return parsed
+
+
+def _resolve_solidity_import_path(
+    import_path: str,
+    remappings: list[tuple[str, str, str]] | None,
+    source_unit_name: str | None,
+) -> tuple[str, bool] | None:
+    """Resolve one import with Solidity precedence; fail closed on uncertainty."""
+    if _has_unsafe_remapping_value(import_path):
+        return None
+    if remappings is None:
+        return import_path, False
+
+    matching = []
+    unknown_context = False
+    for context, prefix, target in remappings:
+        if not import_path.startswith(prefix):
+            continue
+        if context:
+            if not source_unit_name:
+                unknown_context = True
+                continue
+            if not source_unit_name.startswith(context):
+                continue
+        matching.append((context, prefix, target))
+
+    # A contextual mapping could outrank every global mapping, so its
+    # applicability cannot be guessed when the source unit name is missing.
+    if unknown_context:
+        return None
+    if not matching:
+        return import_path, False
+
+    longest_context = max(len(item[0]) for item in matching)
+    matching = [item for item in matching if len(item[0]) == longest_context]
+    longest_prefix = max(len(item[1]) for item in matching)
+    matching = [item for item in matching if len(item[1]) == longest_prefix]
+    if len({item[2] for item in matching}) != 1:
+        return None
+
+    context, prefix, target = matching[-1]
+    resolved = target + import_path[len(prefix):]
+    if _has_unsafe_remapping_value(resolved):
+        return None
+    return resolved, True
+
+
+def _solidity_import_path(statement: str, masked_statement: str) -> str | None:
+    """Return an import path only when its `import`/`from` token is not masked."""
+    pattern = re.compile(
+        r"\bfrom\s*['\"]([^'\"]+)['\"]|^\s*import\s*['\"]([^'\"]+)['\"]",
+        re.IGNORECASE | re.DOTALL,
+    )
+    for match in pattern.finditer(statement):
+        if match.group(1) is not None:
+            if masked_statement[match.start():match.start() + 4].lower() != "from":
+                continue
+            return match.group(1)
+
+        import_token = re.search(r"\bimport\b", match.group(0), re.IGNORECASE)
+        if not import_token:
+            continue
+        token_start = match.start() + import_token.start()
+        if masked_statement[token_start:token_start + 6].lower() != "import":
+            continue
+        return match.group(2)
+    return None
+
+
+def _solidity_import_bindings(
+    statement: str, masked_statement: str
+) -> tuple[set[str], set[str], str]:
+    """Return trusted candidates, all local bindings, and import form."""
+    symbols = re.search(r"\{([^{}]+)\}", masked_statement, re.DOTALL)
+    if symbols:
+        candidates = set()
+        local_names = set()
+        for symbol in symbols.group(1).split(","):
+            parts = re.split(
+                r"\s+as\s+", symbol.strip(), maxsplit=1, flags=re.IGNORECASE
+            )
+            original = parts[0].strip()
+            local_name = parts[-1].strip()
+            if not original or not local_name:
+                return set(), set(), "invalid"
+            local_names.add(local_name)
+            if original == "Initializable":
+                candidates.add(local_name)
+        return candidates, local_names, "named"
+
+    if re.search(
+        r"\bimport\s+\*\s+as\s+[A-Za-z_$][\w$]*\s+from\b",
+        masked_statement,
+        re.IGNORECASE,
+    ) or re.search(
+        r"\bimport\s*['\"][^'\"]+['\"]\s+as\s+[A-Za-z_$][\w$]*\s*;",
+        statement,
+        re.IGNORECASE,
+    ):
+        # Namespace imports do not bind Initializable as an unqualified name.
+        return set(), set(), "namespace"
+
+    if re.match(
+        r"^\s*import\s*['\"][^'\"]+['\"]\s*;",
+        statement,
+        re.IGNORECASE | re.DOTALL,
+    ):
+        return {"Initializable"}, {"Initializable"}, "bare"
+    return set(), set(), "invalid"
+
+
+def _openzeppelin_initializable_names(
+    code: str,
+    masked: str,
+    *,
+    remappings: list[str] | tuple[str, ...] | None = None,
+    source_unit_name: str | None = None,
+) -> set[str]:
+    """Return symbols imported through a direct or explicitly resolved OZ path.
+
+    This is path-identity evidence only; it does not authenticate dependency
+    contents or prove that a local checkout is an unmodified OpenZeppelin copy.
+    """
     names = set()
+    untrusted_names = set()
+    untrusted_bare_import = False
+    parsed_remappings = None
+    if remappings is not None:
+        parsed_remappings = _parse_solidity_remappings(remappings, source_unit_name)
+        if parsed_remappings is None:
+            return names
+
     for match in re.finditer(r"\bimport\b[^;]*;", masked, re.IGNORECASE):
         statement = code[match.start():match.end()]
-        path_match = re.search(
-            r"\bfrom\s*['\"]([^'\"]+)['\"]|^\s*import\s*['\"]([^'\"]+)['\"]",
-            statement,
-            re.IGNORECASE | re.DOTALL,
+        masked_statement = masked[match.start():match.end()]
+        path = _solidity_import_path(statement, masked_statement)
+        if path is None:
+            untrusted_bare_import = True
+            continue
+        candidates, local_names, import_kind = _solidity_import_bindings(
+            statement, masked_statement
         )
-        if not path_match:
+        if import_kind == "invalid":
+            untrusted_bare_import = True
             continue
-        path = path_match.group(1) or path_match.group(2)
-        if path not in _OPENZEPPELIN_INITIALIZABLE_IMPORTS:
+        resolved = _resolve_solidity_import_path(
+            path, parsed_remappings, source_unit_name
+        )
+        if resolved is None:
+            if import_kind == "bare":
+                untrusted_bare_import = True
+            else:
+                untrusted_names.update(local_names)
             continue
-        symbols = re.search(r"\{([^{}]+)\}", statement, re.DOTALL)
-        if not symbols:
-            names.add("Initializable")
+        resolved_path, was_remapped = resolved
+        if was_remapped:
+            is_canonical_path = resolved_path in _OPENZEPPELIN_INITIALIZABLE_PATHS
+        elif path not in _OPENZEPPELIN_INITIALIZABLE_IMPORTS:
+            is_canonical_path = False
+        else:
+            is_canonical_path = True
+
+        if not is_canonical_path:
+            if import_kind == "bare":
+                untrusted_bare_import = True
+            else:
+                untrusted_names.update(local_names)
             continue
-        for symbol in symbols.group(1).split(","):
-            parts = re.split(r"\s+as\s+", symbol.strip(), flags=re.IGNORECASE)
-            if parts[0].strip() == "Initializable":
-                names.add(parts[-1].strip())
-    return names
+
+        names.update(candidates)
+        untrusted_names.update(local_names - candidates)
+
+    if untrusted_bare_import:
+        return set()
+    return names - untrusted_names
 
 
 def _scope_for_position(scopes: list[dict], position: int) -> dict | None:
@@ -317,8 +535,13 @@ def _initializer_modifier_evidence(
     return trusted, local_override, unresolved
 
 
-def _has_unprotected_initializer(code: str) -> bool:
-    """Only suppress CUSTOM-018 for a canonical OZ modifier with no local override."""
+def _has_unprotected_initializer(
+    code: str,
+    *,
+    remappings: list[str] | tuple[str, ...] | None = None,
+    source_unit_name: str | None = None,
+) -> bool:
+    """Only suppress CUSTOM-018 for canonical OZ evidence without local override."""
     masked = _mask_solidity_comments_and_strings(code)
     scopes = _contract_scopes(masked)
     scope_counts = {}
@@ -329,7 +552,12 @@ def _has_unprotected_initializer(code: str) -> bool:
         scope["name"]: scope for scope in scopes
         if scope["name"] not in ambiguous_names
     }
-    trusted_names = _openzeppelin_initializable_names(code, masked)
+    trusted_names = _openzeppelin_initializable_names(
+        code,
+        masked,
+        remappings=remappings,
+        source_unit_name=source_unit_name,
+    )
 
     for match in re.finditer(r"\bfunction\s+initialize\s*\(", masked, re.IGNORECASE):
         open_paren = match.end() - 1
@@ -372,13 +600,22 @@ def _has_unprotected_initializer(code: str) -> bool:
         return True
     return False
 
-def scan_swc_patterns(code: str) -> List[Dict]:
+def scan_swc_patterns(
+    code: str,
+    *,
+    remappings: list[str] | tuple[str, ...] | None = None,
+    source_unit_name: str | None = None,
+) -> list[dict]:
     """Scan code against all 86 SWC patterns. Returns matched findings."""
     findings = []
     for swc_id, info in _SWC_FINDINGS.items():
         try:
             matched = (
-                _has_unprotected_initializer(code)
+                _has_unprotected_initializer(
+                    code,
+                    remappings=remappings,
+                    source_unit_name=source_unit_name,
+                )
                 if swc_id == "CUSTOM-018"
                 else re.search(info["pattern"], code, re.IGNORECASE)
             )
@@ -410,7 +647,14 @@ def scan_defi_patterns(code: str) -> List[Dict]:
     return findings
 
 
-def analyze_contract(code: str, contract_path: str = "", analyzers: Optional[List[str]] = None) -> Dict:
+def analyze_contract(
+    code: str,
+    contract_path: str = "",
+    analyzers: list[str] | None = None,
+    *,
+    remappings: list[str] | tuple[str, ...] | None = None,
+    source_unit_name: str | None = None,
+) -> dict:
     """Full pipeline: run specified analyzers, deduplicate, sort by severity."""
     if analyzers is None:
         analyzers = ["swc", "defi"]
@@ -418,7 +662,11 @@ def analyze_contract(code: str, contract_path: str = "", analyzers: Optional[Lis
     all_findings = []
     
     if "swc" in analyzers:
-        all_findings.extend(scan_swc_patterns(code))
+        all_findings.extend(scan_swc_patterns(
+            code,
+            remappings=remappings,
+            source_unit_name=source_unit_name,
+        ))
     if "defi" in analyzers:
         all_findings.extend(scan_defi_patterns(code))
 
