@@ -345,6 +345,10 @@ def _has_unprotected_initializer(code: str) -> bool:
 
         header = masked[close_paren + 1:body_start]
         header = re.split(r"\breturns\b", header, maxsplit=1, flags=re.IGNORECASE)[0]
+        # Compiler-enforced view/pure functions cannot mutate storage. Do not
+        # treat legacy `constant` as proof: old Solidity compilers allowed writes.
+        if re.search(r"\b(?:view|pure)\b", header, re.IGNORECASE):
+            continue
         modifier = re.search(
             r"\b(initializer|reinitializer)\b\s*(?:\([^)]*\))?",
             header,
