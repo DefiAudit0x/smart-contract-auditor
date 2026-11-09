@@ -589,6 +589,29 @@ def test_custom_initializer_detector_ignores_comment_and_return_text(
     assert reported is should_report
 
 
+@pytest.mark.parametrize("mutability", ["view", "pure"])
+def test_read_only_external_initializer_is_not_reported(mutability):
+    from mcp_integration import scan_swc_patterns
+
+    code = (
+        f"contract C {{ function initialize() external {mutability} "
+        "returns (uint256) { return 1; } }"
+    )
+    findings = scan_swc_patterns(code)
+    assert not any(item["id"] == "CUSTOM-018" for item in findings)
+
+
+def test_legacy_constant_initializer_is_not_assumed_read_only():
+    from mcp_integration import scan_swc_patterns
+
+    code = (
+        "pragma solidity 0.4.10; contract C { uint x; "
+        "function initialize() public constant { x = 1; } }"
+    )
+    findings = scan_swc_patterns(code)
+    assert any(item["id"] == "CUSTOM-018" for item in findings)
+
+
 @pytest.mark.parametrize(
     ("modifier_declaration", "modifier_use"),
     [
