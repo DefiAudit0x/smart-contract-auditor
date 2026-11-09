@@ -867,15 +867,36 @@ def api_grep_arsenal():
 @require_api_key
 def api_mcp_scan():
     data = request.get_json()
-    if not data or 'code' not in data:
+    if not isinstance(data, dict) or 'code' not in data:
         return jsonify({"error": "Field 'code' is required"}), 400
+    if not isinstance(data['code'], str):
+        return jsonify({"error": "Field 'code' must be a string"}), 400
+    scan_context = {}
+    if 'remappings' in data:
+        remappings = data['remappings']
+        if (
+            not isinstance(remappings, list)
+            or len(remappings) > 200
+            or any(not isinstance(item, str) or not item or len(item) > 512 for item in remappings)
+        ):
+            return jsonify({
+                "error": "Field 'remappings' must be an array of at most 200 strings, each 1-512 characters"
+            }), 400
+        scan_context['remappings'] = remappings
+    if 'source_unit_name' in data:
+        source_unit_name = data['source_unit_name']
+        if not isinstance(source_unit_name, str) or not source_unit_name or len(source_unit_name) > 512:
+            return jsonify({
+                "error": "Field 'source_unit_name' must be a string of 1-512 characters"
+            }), 400
+        scan_context['source_unit_name'] = source_unit_name
     if not _has_mcp:
         return jsonify({"error": "MCP scanner not available"}), 500
     reservation, quota_error = _reserve_tool_usage()
     if quota_error:
         return quota_error
     try:
-        result = _mcp_int.analyze_contract(data['code'])
+        result = _mcp_int.analyze_contract(data['code'], **scan_context)
         _complete_code_audit_usage(reservation)
         return jsonify(result)
     except Exception:
