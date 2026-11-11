@@ -1,11 +1,11 @@
 # Smart Contract Auditor
 
-A multi-language smart contract security auditor combining a multi-pass LLM pipeline with deterministic static analysis and verification tooling. Combines hierarchical AI analysis, 7 parallel pre-scan modules, and a real-time SSE streaming web UI to detect vulnerabilities in Solidity, Vyper, Move, and Chialisp contracts.
+A multi-language smart contract security auditor combining a multi-pass LLM pipeline with deterministic static analysis and verification tooling. Combines hierarchical AI analysis, 9 pre-scan tasks, and a real-time SSE streaming web UI to detect vulnerabilities in Solidity, Vyper, Move, and Chialisp contracts.
 
 ## Features
 
 - Multi-pass AI analysis (3-pass: AI → Validation → Gate)
-- 7 parallel pre-scan modules (regex, AST, MCP, ZKsync, external tools, SBOM, learned patterns)
+- 9 pre-scan tasks (bug-detector regex, MCP, AI tools, ZKsync, external tools, SBOM, learned patterns, AST, pragma warnings) — see `agents/pre_scan.py` (`_SCAN_TASKS`); they run through a pool of 7 workers, so at most 7 run concurrently; a task failure is reported in the report's Pre-Scan Completeness section, never silently swallowed
 - Real-time streaming results via SSE
 - CVSS 4.0 scoring
 - Gas profiling
@@ -66,7 +66,8 @@ python run_bot.py
 | Variable | Description | Default |
 |---|---|---|
 | `OLLAMA_API_KEY` | API key for Ollama (or OpenRouter/Groq) | — |
-| `OLLAMA_MODEL` | LLM model for analysis | `qwen3-coder:480b` |
+| `OLLAMA_MODEL` | LLM model for analysis | `gpt-oss:120b` |
+| `AUDITOR_MODEL_VERSION` | Optional cache-version tag for the model behind `OLLAMA_MODEL` / the OpenRouter model id (see below) | — (unset) |
 | `OLLAMA_BASE_URL` | Ollama endpoint | `http://localhost:11434` |
 | `AUDITOR_API_KEY` | API key for REST endpoint auth | — |
 | `API_PROVIDER` | LLM provider (`ollama`, `openrouter`, `groq`) | `ollama` |
@@ -77,6 +78,10 @@ python run_bot.py
 | `TELEGRAM_BOT_TOKEN` | Telegram bot token | — |
 | `TELEGRAM_CHAT_ID` | Telegram target chat ID | — |
 | `ETHERSCAN_API_KEY` | Etherscan API key for on-chain fetch | — |
+
+Precedence, stated explicitly (this used to be wrong here): the code default wins when nothing is set. `config.py` defines `OLLAMA_MODEL` as `os.getenv("OLLAMA_MODEL", "gpt-oss:120b")`, so with `OLLAMA_MODEL` unset the model is `gpt-oss:120b`; setting `OLLAMA_MODEL` in the environment or `.env` overrides that default. The `qwen3-coder:480b` value in `.env.example` is only an example for a copied `.env` file — it is not the code default, and an earlier version of this table mistakenly listed it as the default.
+
+Cache versioning: the LLM response cache (`agents/cache.py`) is keyed by model id + prompt hash, and a model id alone does not change when a provider updates the weights behind the same tag. The cache key therefore also carries a model version: callers may pass one explicitly, or operators may set `AUDITOR_MODEL_VERSION` (for example to the Ollama model digest, or to a new tag such as `v2` after re-pulling a model). A cached entry stored under one version is never returned for a different version, and an entry stored with no version is only returned to unversioned lookups, so old entries keep working and a model upgrade cannot silently reuse a stale result. Bump `AUDITOR_MODEL_VERSION` whenever the model behind a fixed name changes.
 
 Copy `.env.example` to `.env` and fill in your values.
 
@@ -201,6 +206,33 @@ Python dependencies are pinned with hashes in [`requirements.lock`](requirements
 
 Archive uploads use traversal, symlink, executable-file, member-count, and expansion-size controls. GitHub repository loading accepts only canonical HTTPS `github.com/owner/repository` URLs. PoC execution refuses an unisolated fallback and applies Docker network, capability, filesystem, process, memory, and CPU restrictions when Docker mode is used.
 
+### Docker PoC runs and forge-std (CI note)
+
+A Docker PoC run (`proof_generator.run_foundry_test(..., use_docker=True)`,
+the path Mini-Review's opt-in `attempt_poc` uses) mounts a pre-built
+project into a container run with `--network none` and a read-only
+mount. Nothing can be installed inside that container, so `forge-std`
+must be provided **host-side, before the mount**, in this order
+(`proof_generator._provide_forge_std`): a `FORGE_STD_PATH` checkout,
+a vendored repo `lib/forge-std`, `~/.forge-std`, or a host-side
+`forge install foundry-rs/forge-std` (which needs network on the
+host step, not inside the container). Having Docker and Foundry on a
+CI runner is therefore **not** sufficient on its own: with none of
+those sources available the run is `INCONCLUSIVE` with the named
+error `forge-std not available: no FORGE_STD_PATH checkout, no repo
+lib/forge-std, no ~/.forge-std, and forge is not installed to run
+'forge install foundry-rs/forge-std'` (or, if a host install ran but
+produced nothing, `forge install ran but lib/forge-std/src/Test.sol
+is still missing`) — never a pass and never a disproof. To make a CI
+Docker PoC run conclusive, set `FORGE_STD_PATH` to a pre-installed
+checkout or run the host-side `forge install` step before the Docker
+step. This change deliberately does **not** vendor `forge-std` into
+the repo, does not vendor the corpus, and does not change any
+workflow trigger. Note also that the legacy unprovisioned helper
+`run_foundry_test_docker` was deleted (it had no callers and no
+documented use); Docker PoC execution goes through
+`run_foundry_test` only.
+
 Read [`THREAT_MODEL.md`](THREAT_MODEL.md) for assets, trust boundaries, threats, and residual risks.
 
 ## Pattern learning
@@ -215,7 +247,9 @@ and confirmation requires PoC-style evidence, not a text note:
   sample, and
 - no regex in the candidate may fire on a supplied fixed sample.
 
-Confirm via the admin API (same admin auth as the KB confirm route):
+Confirm via the admin panel (same admin auth/CSRF treatment as the
+KB confirm route — the panel's "Learned Patterns" card lists
+candidates and posts the PoC samples) or via the admin API:
 
 - `GET /api/admin/patterns/learned` — list candidates
 - `POST /api/admin/patterns/learned/confirm` with `name`,
@@ -226,8 +260,21 @@ when the `/data` volume exists, otherwise `instance/learned_patterns.json`
 (override with `LEARNED_PATTERNS_PATH`); a legacy repo-root
 `learned_patterns.json` is migrated once to the new location and left
 intact. The next pre-scan picks up a newly confirmed pattern without a
-process restart. Removing a confirmed pattern from the file does not
-deregister it from a running process; restart to apply a removal.
+process restart. Removal is live too: deleting a confirmed pattern
+from the file deregisters it from a running process at the next
+pre-scan (the registry is reconciled by pattern content, so the
+survivors keep firing and the deleted one stops) — no restart is
+needed. The admin panel states this where the candidates are shown.
+
+Concurrency limit, stated plainly: PoC checks run through a pool of
+4 isolated regex workers shared with live scans, acquired
+non-blocking. Under contention a check can time out and the
+confirmation fails closed — a timeout is never counted as a pass,
+so it can only delay a confirmation, never falsely create one.
+Retry the confirmation; the gate is deliberately not weakened to
+make a contended confirmation succeed, and no behaviour change
+was made here (raising the pool or queueing would change live
+scan behaviour).
 
 Limitation, stated plainly: the knowledge-base confirm route
 (`/api/admin/patterns/confirm`) is a different store and still accepts

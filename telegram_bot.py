@@ -134,11 +134,25 @@ class TelegramBot:
         }
 
     # ── Sending ─────────────────────────────────────────────────
+    # P3: Telegram caps a message at 4000 chars.  The old text[:4000]
+    # silently dropped the tail of long reports; now the sent text
+    # itself says how much was cut, with the original length.
+    @staticmethod
+    def _display_text(text: str) -> str:
+        if len(text) <= 4000:
+            return text
+        shown = 3900
+        return (
+            text[:shown]
+            + f"\n… [message truncated: {len(text)} chars total, "
+            + f"first {shown} shown]"
+        )
+
     def _send(self, chat_id: int, text: str, keyboard: dict = None, parse_mode: str = ""):
         if not HAS_REQUESTS:
             return
         payload = {
-            "chat_id": chat_id, "text": text[:4000],
+            "chat_id": chat_id, "text": self._display_text(text),
         }
         if parse_mode:
             payload["parse_mode"] = parse_mode
@@ -163,7 +177,7 @@ class TelegramBot:
     def _edit_message(self, chat_id: int, msg_id: int, text: str, keyboard: dict = None, parse_mode: str = ""):
         payload = {
             "chat_id": chat_id, "message_id": msg_id,
-            "text": text[:4000],
+            "text": self._display_text(text),
         }
         if parse_mode:
             payload["parse_mode"] = parse_mode
@@ -281,8 +295,14 @@ class TelegramBot:
                             logger.warning(f"Skipping {name} — {info.file_size} bytes exceeds limit")
                             continue
                         try:
-                            content = z.read(name).decode("utf-8", errors="replace")[:2000]
-                            combined.append(f"// === {name} ===\n{content}")
+                            # P3: per-file 2000-char cap, surfaced in
+                            # the file header that flows into analysis.
+                            full = z.read(name).decode("utf-8", errors="replace")
+                            note = (
+                                f" (truncated: first 2000 of {len(full)} chars)"
+                                if len(full) > 2000 else ""
+                            )
+                            combined.append(f"// === {name} ==={note}\n{full[:2000]}")
                         except Exception:
                             pass
             return "\n\n".join(combined)[:5000]
@@ -456,8 +476,15 @@ class TelegramBot:
                     return
                 self._send(chat_id, f"📦 Extracted {code.count('// ===')} files from `{file_name}`\n🔄 Analyzing...")
             else:
+                # P3: the 5000-char download cap, surfaced in the
+                # receipt message (the later _run_audit notice covers
+                # only the 5000 -> 3000 step, not this one).
                 code = dl.text[:5000]
-                self._send(chat_id, f"📄 Received `{file_name}`\n🔄 Analyzing...")
+                _dl_note = (
+                    f" (truncated: first 5000 of {len(dl.text)} chars)"
+                    if len(dl.text) > 5000 else ""
+                )
+                self._send(chat_id, f"📄 Received `{file_name}`{_dl_note}\n🔄 Analyzing...")
             os.unlink(tmp.name)
             self._dispatch(self._run_audit, chat_id, code)
         except Exception as e:
@@ -477,7 +504,21 @@ class TelegramBot:
             if not files:
                 self._send(chat_id, "❌ No Solidity files found")
                 return
-            all_code = "\n\n".join(f["code"][:2000] for f in files[:5])[:3000]
+            # P3: per-file 2000-char cap and first-5-files cap, surfaced
+            # in headers that flow into analysis (the final 3000-char
+            # cap is then notified by _run_audit itself).
+            _gh_parts = []
+            if len(files) > 5:
+                _gh_parts.append(
+                    f"// Note: only first 5 of {len(files)} files included"
+                )
+            for f in files[:5]:
+                _note = (
+                    f" (truncated: first 2000 of {len(f['code'])} chars)"
+                    if len(f["code"]) > 2000 else ""
+                )
+                _gh_parts.append(f"// === {f['name']} ==={_note}\n{f['code'][:2000]}")
+            all_code = "\n\n".join(_gh_parts)[:3000]
             self._send(chat_id, f"📦 {len(files)} files\n🔄 Analyzing...")
             self._dispatch(self._run_audit, chat_id, all_code)
         except Exception as e:
@@ -542,6 +583,19 @@ class TelegramBot:
         self._send(chat_id, f"✅ Code fetched ({len(code)} chars)\n🔄 Analyzing...")
         self._run_audit(chat_id, code)
 
+    # P3: each analysis entry point below caps its input (audit/gas
+    # 3000, autopoc 4000).  Tell the user before running, with exact
+    # lengths, instead of returning findings for a partial contract
+    # as if they covered the whole thing.
+    def _notify_input_truncation(self, chat_id: int, code: str, cap: int, where: str):
+        if len(code) > cap:
+            self._send(
+                chat_id,
+                f"⚠️ Input truncated at {where}: received {len(code)} chars, "
+                f"analysing first {cap} chars "
+                f"({len(code) - cap} chars were NOT analysed).",
+            )
+
     def _run_audit(self, chat_id: int, code: str):
         try:
             from agents import analyze_code
@@ -561,6 +615,7 @@ class TelegramBot:
         p = threading.Thread(target=progress, daemon=True)
         p.start()
         try:
+            self._notify_input_truncation(chat_id, code, 3000, "Telegram audit")
             result = analyze_code(code[:3000])
             self._send(chat_id, f"*🔍 Audit Result:*\n\n{result[:3500]}")
             self._track(chat_id, "audit")
@@ -582,6 +637,7 @@ class TelegramBot:
         p = threading.Thread(target=progress, daemon=True)
         p.start()
         try:
+            self._notify_input_truncation(chat_id, code, 4000, "Telegram autopoc")
             result = dispatch_analysis(code[:4000], analysis_type="autopoc")
             self._send(chat_id, f"*🔬 Auto-PoC Audit Result:*\n\n{result[:3500]}")
             self._track(chat_id, "autopoc")
@@ -601,6 +657,7 @@ class TelegramBot:
         p.start()
         try:
             self._send_action(chat_id)
+            self._notify_input_truncation(chat_id, code, 3000, "Telegram gas analysis")
             result = analyze_gas(code[:3000])
             self._send(chat_id, f"*⛽ Gas Analysis:*\n\n{result[:3500]}")
             self._track(chat_id, "gas")

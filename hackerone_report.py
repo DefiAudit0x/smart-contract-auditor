@@ -7,7 +7,10 @@ import re
 import time
 from typing import Dict, List, Optional, Tuple
 
-from cvss_scorer import score_report, cvss_explanation
+from cvss_scorer import (
+    score_report, cvss_explanation,
+    format_finding_score, format_overall_score,
+)
 
 # Foundry PoC templates by bug class (adapted from web3-poc-foundry SKILL.md)
 _FOUNDRY_POC_TEMPLATES = {
@@ -349,7 +352,7 @@ def generate_h1_report(report: str, code: str = "", label: str = "Smart Contract
         "",
         f"**Date**: {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}",
         f"**Overall Security Rating**: {rating}",
-        f"**CVSS 4.0 Max Score**: {cvss['overall_score']}/10 ({cvss['overall_severity']})",
+        f"**CVSS 4.0 Max Score**: {format_overall_score(cvss)}",
         f"**Total Findings**: {cvss['total_findings']}",
         "",
         "---",
@@ -363,8 +366,8 @@ def generate_h1_report(report: str, code: str = "", label: str = "Smart Contract
             f"## Vulnerability #{i}: {finding['name']}",
             "",
             f"**Severity**: {finding['severity']}",
-            f"**CVSS 4.0 Score**: {'Not assessed' if finding['cvss_score'] is None else str(finding['cvss_score']) + '/10 (' + finding['cvss_severity'] + ')'} [{finding.get('method', '')} | {finding.get('provenance', '')}]",
-            f"**CVSS Vector**: `{finding['cvss_vector']}`",
+            f"**CVSS 4.0 Score**: {format_finding_score(finding)}",
+            f"**CVSS Vector**: {('`' + finding['cvss_vector'] + '`') if finding.get('cvss_vector') else 'Not assessed — no vector'}",
             "",
             f"### Description",
             orig.get("description", "No description provided."),
@@ -411,12 +414,18 @@ def generate_h1_report(report: str, code: str = "", label: str = "Smart Contract
             "",
         ])
 
-    # CVSS appendix
+    # CVSS appendix: never build a breakdown from a hardcoded vector
+    # when nothing was assessed — that would fabricate a score.
+    if cvss["overall_score"] is None:
+        cvss_breakdown = cvss_explanation(None, "Not Assessed", "")
+    else:
+        cvss_breakdown = cvss_explanation(
+            cvss["overall_score"], cvss["overall_severity"],
+            "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N")
     lines.extend([
         "## CVSS 4.0 Breakdown",
         "",
-        cvss_explanation(cvss["overall_score"], cvss["overall_severity"],
-                         f"CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"),
+        cvss_breakdown,
         "",
         "---",
         "",
@@ -435,7 +444,7 @@ def generate_h1_short(report: str, label: str = "Smart Contract") -> str:
     lines = [
         f"## Summary",
         f"- **Asset**: {label}",
-        f"- **Severity**: {cvss['overall_severity']} (CVSS 4.0: {cvss['overall_score']}/10)",
+        f"- **Severity**: {cvss['overall_severity']} (CVSS 4.0: {format_overall_score(cvss)})",
         f"- **Rating**: {rating}",
         "",
         f"## Vulnerability Details",
@@ -444,8 +453,7 @@ def generate_h1_short(report: str, label: str = "Smart Contract") -> str:
 
     for i, finding in enumerate(cvss["findings"], 1):
         lines.append(f"### {i}. {finding['name']}")
-        score_txt = 'Not assessed' if finding['cvss_score'] is None else f"{finding['cvss_score']}/10"
-        lines.append(f"**CVSS**: {score_txt} [{finding.get('method', '')} | {finding.get('provenance', '')}] | **Severity**: {finding['severity']}")
+        lines.append(f"**CVSS**: {format_finding_score(finding)} | **Severity**: {finding['severity']}")
         lines.append("")
 
     lines.append("")

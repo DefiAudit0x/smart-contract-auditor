@@ -240,3 +240,51 @@ def findings_to_text(findings: List[ExternalFinding], max_per_tool: int = 10) ->
             lines.append(f"  - ... and {len(items) - max_per_tool} more")
         lines.append("")
     return "\n".join(lines)
+
+
+# ─── P3: skipped tools must be reported, not silently omitted ───
+# run_external_analyzers returns [] both when no tool ran and when
+# tools ran and found nothing, and its old callers turned that [] into
+# an empty string — so a report with Slither/Mythril missing read
+# exactly like a report they had cleared.  These helpers keep the
+# distinction: a tool that ran and found nothing appears nowhere
+# here; a tool that never ran appears as SKIPPED with its reason.
+# Availability is probed through tool_available() (mock it in tests;
+# never assert the real installation state of this VM or CI).
+
+def skipped_external_tools(tools: Optional[List[str]] = None) -> List[tuple]:
+    """[(tool, reason)] for each requested tool that is not available."""
+    if tools is None:
+        tools = ["slither", "mythril"]
+    skipped = []
+    for tool in tools:
+        if tool in ("slither", "mythril") and not tool_available(tool):
+            # tool_available is False both when the binary is absent
+            # and when its --version probe fails/times out; the report
+            # wording says so rather than claiming certainty.
+            skipped.append((tool, "not installed (tool --version check failed)"))
+    return skipped
+
+
+def external_analysis_text(code: str, tools: Optional[List[str]] = None) -> str:
+    """Report-ready external-analysis section, findings + SKIPPED.
+
+    Returns "" only when every requested tool ran (findings or none);
+    when a tool did not run, its SKIPPED entry is present even if the
+    other tools found nothing.  Callers that used to render
+    findings_to_text(run_external_analyzers(code)) should use this
+    instead — the findings text alone cannot carry the SKIPPED fact.
+    """
+    if tools is None:
+        tools = ["slither", "mythril"]
+    findings = run_external_analyzers(code, tools=tools)
+    skipped = skipped_external_tools(tools)
+    parts = []
+    if findings:
+        parts.append(findings_to_text(findings))
+    if skipped:
+        # Import here to avoid a cycle: agents.truncation imports
+        # nothing from this module.
+        from agents.truncation import skipped_tools_section
+        parts.append(skipped_tools_section(skipped))
+    return "\n\n".join(parts)

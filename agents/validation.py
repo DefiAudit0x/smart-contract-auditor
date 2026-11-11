@@ -73,6 +73,15 @@ def validate_report(report: str, code: str, language: str = "english") -> str:
 
 
 def self_critique(report: str, code: str) -> str:
+    """Second reviewer pass. Fail CLOSED (remaining Priority 1): if the
+    LLM critique call raises, the original report is returned ONLY
+    with an explicit UNVERIFIED banner — never bare, as if it had
+    been critiqued.  Callers (AuditService.run_critique, the
+    orchestrator "autopoc" path) must treat a bannered result as
+    unvalidated, not as a cleaned report.  Previously this function
+    returned the original report unchanged on exception (fail open),
+    while its sibling validate_report() in this same file already
+    failed closed — the two now agree."""
     prompt = f"""You are a second reviewer focused on REMOVING false positives.
 
 Do NOT add new findings. Your ONLY job:
@@ -102,8 +111,18 @@ Output in English:
         critique = call_model_with_fallback(prompt)
         return critique
     except Exception as e:
+        # Fail-closed (cf. validate_report above and gate issue #27):
+        # an LLM critique failure must never be mistaken for a
+        # successful critique.  Return the original report only with
+        # an explicit UNVERIFIED banner; the pipeline detects this
+        # banner and returns it without further cleaning.
         logger.warning(f"Critique failed: {e}")
-        return report
+        return (
+            "### Validation Warning\n\n"
+            f"The validation gate failed to validate this run (self-critique error: {e}). The "
+            "original report is preserved below UNCHANGED for human review - "
+            "treat this run as UNVERIFIED, not as a clean audit.\n\n"
+        ) + report
 
 
 def cvss_score_report(report: str) -> dict:

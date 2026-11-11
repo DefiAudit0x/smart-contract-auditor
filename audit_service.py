@@ -168,9 +168,11 @@ Language: English"""
 
     @staticmethod
     def run_external_analyzers(code: str) -> str:
-        from external_analyzers import run_external_analyzers as _run_ext, findings_to_text
-        findings = _run_ext(code)
-        return findings_to_text(findings)
+        # P3: the old findings-only text rendered "" when no tool ran,
+        # indistinguishable from "tools ran, nothing found".  This
+        # version appends a SKIPPED entry per missing tool.
+        from external_analyzers import external_analysis_text
+        return external_analysis_text(code)
 
     @staticmethod
     def json_output(report: str, type_name: str, label: str) -> dict:

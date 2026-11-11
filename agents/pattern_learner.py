@@ -482,6 +482,18 @@ def confirm_pattern_poc(name: str, vulnerable_code: str, fixed_code: str,
     sample — returns (False, reason) and leaves the candidate
     inactive. This replaces the old rule, under which any >=10-char
     string confirmed a pattern with no proof at all.
+
+    Concurrency limit (fail-closed, documented not changed):
+    each fire check runs in the isolated-regex worker pool
+    (MAX_REGEX_WORKERS = 4, non-blocking). If the pool is
+    contended, _run_regex_isolated returns "timeout" without
+    spawning a worker, _pattern_fires treats that as "does not
+    fire", and confirmation fails — a timeout is never counted
+    as a pass, so contention can only delay a confirmation, not
+    falsely create one. Retry the confirmation when workers
+    free up. The pool is shared with live scans, so raising it
+    or queueing confirmations here would change scan behaviour
+    and is deliberately not done in this fix.
     """
     if not vulnerable_code or not fixed_code:
         return False, "vulnerable_code and fixed_code are both required"
@@ -610,7 +622,37 @@ def _run_learned(code: str, class_key: str, patterns: list) -> list:
 
 def learn_from_audit(code: str, llm_report: str, pre_scan_summary: str):
     """Call LLM to extract novel vulnerability patterns from this audit."""
-    prompt = f"""You are a security pattern miner. Given Solidity code and an AI audit report,
+    # P3: this prompt used to slice code to 2000 chars and the report to
+    # 3000 chars silently, so the miner could "learn" patterns from a
+    # partial view and present them as if drawn from the whole audit.
+    # The consumer of this prompt is the miner LLM itself, so the
+    # notice goes inside the prompt (with exact lengths); learning is
+    # not a client finding, so nothing is added to any audit report.
+    _learn_notices = []
+    if len(code) > 2000:
+        _learn_notices.append(
+            f"NOTE: the code below was truncated for this prompt: "
+            f"original {len(code)} chars, shown first 2000 chars "
+            f"({len(code) - 2000} chars omitted — do not infer patterns "
+            f"about code you cannot see)."
+        )
+        logger.warning(
+            "Pattern learning: code truncated %d -> 2000 chars", len(code)
+        )
+    if len(llm_report) > 3000:
+        _learn_notices.append(
+            f"NOTE: the audit report below was truncated for this prompt: "
+            f"original {len(llm_report)} chars, shown first 3000 chars "
+            f"({len(llm_report) - 3000} chars omitted)."
+        )
+        logger.warning(
+            "Pattern learning: report truncated %d -> 3000 chars",
+            len(llm_report),
+        )
+    _learn_notice_block = (
+        "\n".join(_learn_notices) + "\n\n" if _learn_notices else ""
+    )
+    prompt = f"""{_learn_notice_block}You are a security pattern miner. Given Solidity code and an AI audit report,
 extract NEW vulnerability patterns that a simple regex-based grep scanner would NOT catch.
 Return ONLY a JSON array of objects, each with:
 - "name": short vulnerability name

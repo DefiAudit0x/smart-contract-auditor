@@ -17,7 +17,11 @@ h1 span { color: var(--accent); }
 .form-row { display: flex; gap: 0.75rem; align-items: end; flex-wrap: wrap; }
 .form-group { display: flex; flex-direction: column; gap: 0.3rem; }
 .form-group label { font-size: 0.8rem; color: var(--text2); }
-.form-group input, .form-group select { padding: 0.5rem 0.75rem; border-radius: 6px; border: 1px solid var(--border); background: var(--bg3); color: var(--text); font-size: 0.85rem; }
+.form-group input, .form-group select, .form-group textarea { padding: 0.5rem 0.75rem; border-radius: 6px; border: 1px solid var(--border); background: var(--bg3); color: var(--text); font-size: 0.85rem; }
+.form-group textarea { font-family: monospace; width: 100%; min-height: 90px; resize: vertical; }
+.note { font-size: 0.8rem; color: var(--text2); line-height: 1.5; margin-bottom: 0.5rem; }
+.note strong { color: var(--text); }
+#learnedConfirmResult { display: none; margin-top: 1rem; padding: 0.75rem; border-radius: 6px; font-size: 0.85rem; }
 .btn { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.5rem 1rem; border-radius: 6px; border: none; font-size: 0.85rem; cursor: pointer; }
 .btn-primary { background: var(--accent); color: #fff; }
 .btn-danger { background: var(--red); color: #fff; }
@@ -71,6 +75,38 @@ th { color: var(--text2); font-weight: 500; }
       <tbody id="codesTable"></tbody>
     </table>
   </div>
+
+  <div class="card">
+    <h2>Learned Patterns &mdash; PoC Confirmation</h2>
+    <p class="note"><strong>PoC gate, not a text note:</strong> a candidate becomes an active detector only when <em>every</em> regex in it fires on the vulnerable sample below and <em>none</em> fires on the fixed sample. Text evidence alone never confirms a learned pattern.</p>
+    <p class="note"><strong>Not the KB confirm route:</strong> the separate API route <code>/api/admin/patterns/confirm</code> confirms knowledge-base patterns by integer id on text evidence only. Those are <strong>RAG context only</strong> &mdash; they are never executed as detectors and are never PoC confirmation. Do not present a KB confirmation as proof of a detector.</p>
+    <p class="note"><strong>Removal:</strong> deleting a confirmed pattern from <code>learned_patterns.json</code> takes effect at the next pre-scan &mdash; no process restart is needed. A pattern that is still listed here is a candidate and is inactive.</p>
+    <p class="note"><strong>Contention fails closed:</strong> PoC checks share a pool of 4 isolated regex workers. If the pool is busy, a confirmation may fail without confirming anything; retry it when workers free up rather than weakening the gate.</p>
+    <h2 style="margin-top:1rem;">Candidates (inactive until confirmed)</h2>
+    <table>
+      <thead><tr><th>Name</th><th>Severity</th><th>Description</th><th>Patterns</th><th>Action</th></tr></thead>
+      <tbody id="learnedTable"></tbody>
+    </table>
+    <h2 style="margin-top:1.5rem;">Confirm a candidate</h2>
+    <div class="form-group" style="margin-bottom:0.75rem;">
+      <label>Pattern name (click Confirm next to a candidate to fill this in)</label>
+      <input type="text" id="learnedName" placeholder="Candidate name, exactly as listed">
+    </div>
+    <div class="form-group" style="margin-bottom:0.75rem;">
+      <label>Vulnerable code (every regex must fire on this)</label>
+      <textarea id="learnedVulnerable" placeholder="Solidity sample the pattern must match"></textarea>
+    </div>
+    <div class="form-group" style="margin-bottom:0.75rem;">
+      <label>Fixed code (no regex may fire on this)</label>
+      <textarea id="learnedFixed" placeholder="Solidity sample the pattern must not match"></textarea>
+    </div>
+    <div class="form-group" style="margin-bottom:0.75rem;">
+      <label>Evidence (optional note)</label>
+      <input type="text" id="learnedEvidence" placeholder="Optional note; never a substitute for the samples above">
+    </div>
+    <button class="btn btn-primary" id="confirmLearnedBtn"><i class="fas fa-check"></i> Confirm with PoC samples</button>
+    <div id="learnedConfirmResult"></div>
+  </div>
 </div>
 
 <script nonce="{{ csp_nonce }}">
@@ -83,8 +119,15 @@ document.getElementById('adminLoginBtn').addEventListener('click', adminLogin);
 document.getElementById('adminPass').addEventListener('keydown', function(e) { if (e.key === 'Enter') adminLogin(); });
 document.getElementById('adminLogoutBtn').addEventListener('click', adminLogout);
 document.getElementById('generateCodeBtn').addEventListener('click', generateCode);
+document.getElementById('confirmLearnedBtn').addEventListener('click', confirmLearnedPattern);
 document.getElementById('codesTable').addEventListener('click', function(e) {
   if (e.target.classList.contains('deactivate-btn')) deactivateCode(e.target.dataset.code);
+});
+document.getElementById('learnedTable').addEventListener('click', function(e) {
+  if (e.target.classList.contains('learned-confirm-btn')) {
+    document.getElementById('learnedName').value = e.target.dataset.name;
+    document.getElementById('learnedVulnerable').focus();
+  }
 });
 
 function adminLogin() {
@@ -94,7 +137,7 @@ function adminLogin() {
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
     body: JSON.stringify({ password: pass })
   }).then(function(r) { if (!r.ok) throw new Error('Server error'); return r.json(); }).then(function(d) {
-    if (d.success) { adminAuthed = true; document.getElementById('loginSection').style.display = 'none'; document.getElementById('adminPanel').style.display = 'block'; loadCodes(); }
+    if (d.success) { adminAuthed = true; document.getElementById('loginSection').style.display = 'none'; document.getElementById('adminPanel').style.display = 'block'; loadCodes(); loadLearnedCandidates(); }
     else { document.getElementById('loginError').textContent = d.error || 'Wrong password'; document.getElementById('loginError').style.display = 'block'; }
   }).catch(function(err) {
     document.getElementById('loginError').textContent = 'Error: ' + err.message; document.getElementById('loginError').style.display = 'block';
@@ -127,6 +170,39 @@ function deactivateCode(code) {
   }).then(function(r) { if (r.ok) loadCodes(); });
 }
 
+function loadLearnedCandidates() {
+  fetch('/api/admin/patterns/learned').then(function(r) { if (!r.ok) throw new Error('Server error'); return r.json(); }).then(function(data) {
+    var tbody = document.getElementById('learnedTable');
+    var candidates = Array.isArray(data.candidates) ? data.candidates : [];
+    if (!candidates.length) { tbody.innerHTML = '<tr><td colspan="5" style="color:var(--text2);">No candidates awaiting confirmation.</td></tr>'; return; }
+    tbody.innerHTML = candidates.map(function(c) {
+      var pats = (Array.isArray(c.patterns) ? c.patterns : []).map(function(p) { return '<code>' + esc(p) + '</code>'; }).join('<br>');
+      return '<tr><td>' + esc(c.name || '') + '</td><td>' + esc(c.severity || '') + '</td><td>' + esc(c.description || '') + '</td><td>' + pats + '</td><td><button class="btn btn-primary learned-confirm-btn" data-name="' + esc(c.name || '') + '" style="padding:0.25rem 0.5rem;font-size:0.75rem;">Confirm</button></td></tr>';
+    }).join('');
+  }).catch(function(err) {
+    document.getElementById('learnedTable').innerHTML = '<tr><td colspan="5" style="color:var(--red);">Error loading candidates: ' + esc(err.message) + '</td></tr>';
+  });
+}
+
+function confirmLearnedPattern() {
+  if (!adminAuthed) return;
+  var result = document.getElementById('learnedConfirmResult');
+  result.style.display = 'none';
+  fetch('/api/admin/patterns/learned/confirm', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+    body: JSON.stringify({ name: document.getElementById('learnedName').value, vulnerable_code: document.getElementById('learnedVulnerable').value, fixed_code: document.getElementById('learnedFixed').value, evidence: document.getElementById('learnedEvidence').value })
+  }).then(function(r) { return r.json().then(function(d) { return { ok: r.ok, d: d }; }); }).then(function(res) {
+    result.style.display = 'block';
+    if (res.ok && res.d.success) {
+      result.style.border = '1px solid var(--green)'; result.textContent = 'Confirmed by PoC check: ' + res.d.name + '. It becomes active at the next pre-scan.';
+      loadLearnedCandidates();
+    } else {
+      result.style.border = '1px solid var(--red)'; result.textContent = 'Not confirmed: ' + (res.d.error || 'Server error') + ' (A failure under worker contention can simply be retried; the gate itself is unchanged.)';
+    }
+  }).catch(function(err) { result.style.display = 'block'; result.style.border = '1px solid var(--red)'; result.textContent = 'Error: ' + err.message; });
+}
+
 function loadCodes() {
   fetch('/api/admin/codes').then(function(r) { if (!r.ok) throw new Error('Server error'); return r.json(); }).then(function(data) {
     var tbody = document.getElementById('codesTable');
@@ -150,7 +226,7 @@ function adminLogout() {
 
 // Check if already authed via session
 fetch('/api/admin/check').then(function(r) { return r.json(); }).then(function(d) {
-  if (d.authenticated) { adminAuthed = true; document.getElementById('loginSection').style.display = 'none'; document.getElementById('adminPanel').style.display = 'block'; loadCodes(); }
+  if (d.authenticated) { adminAuthed = true; document.getElementById('loginSection').style.display = 'none'; document.getElementById('adminPanel').style.display = 'block'; loadCodes(); loadLearnedCandidates(); }
 });
 </script>
 </body>
